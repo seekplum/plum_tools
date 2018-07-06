@@ -12,6 +12,7 @@
 #       Create: 2018-07-06 18:39
 #=============================================================================
 """
+import os
 
 # =========================================== git 相关命令 ===========================================
 stash_list = "git stash list"  # 检查是否有文件在储藏区
@@ -22,4 +23,16 @@ pull_keyword = '"git pull"'  # 落后远程分支关键字
 push_keyword = '"git push"'  # 超前远程分支关键字
 
 # =========================================== 系统 相关命令 ===========================================
-find_command = 'find {} -name ".git"'  # 通过系统命令查找文件路径
+find_command = 'find %s -name ".git"'  # 通过系统命令查找文件路径
+
+# =========================================== ssh配置相关 ===========================================
+default_ssh_port = 22
+connect_timeout = 3
+
+# =========================================== 相关配置文件 ===========================================
+home = os.environ["HOME"]
+root = os.path.dirname(os.path.abspath(__file__))
+plum_yml_name = ".plum_tools.yaml"  # 项目需要的配置文件名
+plum_yml_path = os.path.join(home, plum_yml_name)  # 项目需要的配置文件路径
+ssh_config_name = ".ssh/config"  # ssh配置文件名
+ssh_config_path = os.path.join(home, ssh_config_name)  # ssh配置文件路径

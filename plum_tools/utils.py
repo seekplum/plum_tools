@@ -19,6 +19,8 @@ from plum_tools.exceptions import RunCmdError
 
 import yaml
 
+from functools32 import lru_cache
+
 
 class cd(object):
     """进入目录执行对应操作后回到目录
@@ -176,6 +178,17 @@ def run_cmd(cmd):
     err_msg = p.stderr.read()
     exit_code = p.wait()
     if exit_code != 0:
-        message = "run `{}` fail".format(cmd)
+        message = "run `%s` fail" % cmd
         raise RunCmdError(message, out_msg=out_msg, err_msg=err_msg)
     return out_msg
+
+
+@lru_cache(5)
+def parse_config_yml(yml_path):
+    """解析配置程序依赖的配置yml文件
+
+    :rtype dict
+    :return
+    """
+    with open(yml_path) as f:
+        return yaml.load(f.read())
