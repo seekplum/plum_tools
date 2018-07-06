@@ -10,3 +10,4 @@ dist
 *.mo
 .idea
 .DS_Store
+test.py

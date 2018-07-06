@@ -24,11 +24,11 @@ def sdist(ctx):
 
 @task
 def upload(ctx, py_name="private"):
-    ctx.run('python setup.py sdist upload -r {}'.format(py_name), echo=True)
+    ctx.run('python setup.py sdist upload -r %s' % py_name, echo=True)
 
 
 @task
 def check(ctx, j=4):
     ctx.run(
-        "pylint -j {} --output-format colorized   --disable=all --enable=E,F plum_tools".format(j)
+        "pylint -j %s --output-format colorized   --disable=all --enable=E,F plum_tools" % j
     )

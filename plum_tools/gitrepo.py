@@ -14,12 +14,12 @@
 import os
 import argparse
 
+from plum_tools import conf
+
 from plum_tools.utils import print_warn
 from plum_tools.utils import print_error
 from plum_tools.utils import run_cmd
 from plum_tools.utils import cd
-
-from plum_tools import conf
 
 
 def check_is_git_repository(path):
@@ -83,7 +83,7 @@ def find_git_project_for_shell(path):
 
 
     """
-    cmd = conf.find_command.format(path)
+    cmd = conf.find_command % path
     output = run_cmd(cmd)
     for git_path in output.splitlines():
         yield os.path.dirname(git_path)
@@ -174,9 +174,9 @@ def check_projects(projects, detail):
             if not detail:
                 continue
             if status_result:
-                print_error("[status] {}".format(status_out))
+                print_error("[status] %s" % status_out)
             if stash_result:
-                print_error("[stash] {}".format(stash_out))
+                print_error("[stash] %s" % stash_out)
 
 
 def main():
