@@ -17,6 +17,9 @@ import argparse
 from plum_tools.utils import print_warn
 from plum_tools.utils import print_error
 from plum_tools.utils import run_cmd
+from plum_tools.utils import cd
+
+from plum_tools import conf
 
 
 def check_is_git_repository(path):
@@ -80,7 +83,7 @@ def find_git_project_for_shell(path):
 
 
     """
-    cmd = 'find {} -name ".git"'.format(path)
+    cmd = conf.find_command.format(path)
     output = run_cmd(cmd)
     for git_path in output.splitlines():
         yield os.path.dirname(git_path)
@@ -104,16 +107,17 @@ def check_repository_status(repo_path):
     :rtype output str
     :return output 命令输出
     """
-    cmd = "cd {} && git status".format(repo_path)
-    output = run_cmd(cmd)
+    with cd(repo_path):
+        output = run_cmd(conf.status_default)
 
-    sort_cmd = "cd {} && git status -s".format(repo_path)
     result = False
 
     # 检查是否落后、超前远程分支
-    # 检查本地是否还有文件未提交
-    if '"git pull"' in output or '"git push"' in output or run_cmd(sort_cmd):
-        result = True
+    if conf.pull_keyword in output or conf.push_keyword in output:
+        with cd(repo_path):
+            # 检查本地是否还有文件未提交
+            if run_cmd(conf.status_short):
+                result = True
     return result, output
 
 
@@ -135,8 +139,8 @@ def check_repository_stash(repo_path):
     :rtype output str
     :return output 命令输出
     """
-    cmd = "cd {} && git stash list".format(repo_path)
-    output = run_cmd(cmd)
+    with cd(repo_path):
+        output = run_cmd(conf.stash_list)
     result = False
     if output:
         result = True

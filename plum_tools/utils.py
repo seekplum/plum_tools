@@ -12,9 +12,37 @@
 #       Create: 2018-07-05 22:02
 #=============================================================================
 """
+import os
 import subprocess
 
 from plum_tools.exceptions import RunCmdError
+
+import yaml
+
+
+class cd(object):
+    """进入目录执行对应操作后回到目录
+    """
+
+    def __init__(self, new_path):
+        """初始化
+
+        :param new_path: 目标目录
+        :type new_path str
+        :example new_path "/tmp"
+
+        >>> with cd("/tmp"):
+        ...     print run_cmd("pwd")
+        "/tmp"
+        """
+        self._new_path = new_path
+
+    def __enter__(self):
+        self._current_path = os.getcwd()
+        os.chdir(self._new_path)
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        os.chdir(self._current_path)
 
 
 def get_color(c, s):
