@@ -1,14 +1,9 @@
 #!/usr/bin/env python
 # -*- coding: utf-8 -*-
-import os
 
 from setuptools import setup, find_packages
 
-root = os.path.dirname(os.path.abspath(__file__))
-
-# 查询版本信息
-with open(os.path.join(root, "VERSION")) as f:
-    version = f.read().strip()
+version = '0.1.0'
 
 requirements = []
 
