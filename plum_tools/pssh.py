@@ -21,7 +21,7 @@ import sys
 from plum_tools import conf
 from plum_tools.utils import print_error
 from plum_tools.utils import parse_config_yml
-from plum_tools.utils import get_prefix_host_ip
+from plum_tools.utils import get_host_ip
 
 
 def get_ssh_alias_conf(host):
@@ -96,32 +96,6 @@ def get_login_ssh_cmd(hostname, user, port, identityfile):
           '-o  "ConnectTimeout=%s" ' \
           '%s@%s -p %d' % (identityfile, conf.connect_timeout, user, hostname, port)
     return cmd
-
-
-def get_host_ip(host, host_type):
-    """查询主机的ip
-
-    :param host: ip的简写
-    :type host str
-    :example host 1
-
-    :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
-    :example host_type default
-
-    :rtype str
-    :return 完整的主机ip
-    """
-    prefix_host = get_prefix_host_ip(host_type)
-    mark = "."
-    # 处理输入的前两位的情况
-    point_count = host.count(mark)
-    # 标准ip中点的数量
-    normal_point = 3
-    if point_count < normal_point:
-        prefix_host = mark.join(prefix_host.split(mark)[:(normal_point - point_count)])
-        host = "%s.%s" % (prefix_host, host)
-    return host
 
 
 class SSHConf(object):

@@ -28,3 +28,9 @@ class RunCmdError(Exception):
         super(RunCmdError, self).__init__(message)
         self.out_msg = out_msg
         self.err_msg = err_msg
+
+
+class SSHException(Exception):
+    """ssh异常
+    """
+    pass

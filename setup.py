@@ -38,6 +38,7 @@ def install():
                 "gitrepo = plum_tools.gitrepo:main",
                 "pssh = plum_tools.pssh:main",
                 "pping = plum_tools.pping:main",
+                "pipmi = plum_tools.pipmi:main",
             ],
         }
     )

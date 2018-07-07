@@ -4,4 +4,6 @@ default_ssh_conf:
     identityfile: ~/.ssh/id_rsa
 
 host_type_default: 10.10.100
-host_type2: 192.168.1
+host_type_2: 192.168.1
+
+ipmi_interval: 100
