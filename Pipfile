@@ -1,5 +1,5 @@
 [[source]]
-url = "https://pypi.python.org/simple"
+url = "https://pypi.douban.com/simple/"
 verify_ssl = true
 name = "pypi"
 
@@ -10,6 +10,9 @@ pytest = "*"
 pylint = "*"
 
 [packages]
+"functools32" = "==3.2.3.post2"
+pyyaml = "==3.12"
+schema = "==0.6.8"
 
 [requires]
 python_version = "2.7"
