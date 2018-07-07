@@ -39,7 +39,7 @@ def get_ssh_alias_conf(host):
     """
     begin = False
     # 查询默认的ssh信息
-    ssh_conf = get_default_ssh_conf(host)
+    ssh_conf = {}
     with open(conf.ssh_config_path) as f:
         for line in f:
             data = line.split()
@@ -59,37 +59,12 @@ def get_ssh_alias_conf(host):
                 else:
                     continue
 
-            if begin and key in ssh_conf:
+            if begin:
                 ssh_conf[key] = value
 
     if not begin:
         print_error("未在 %s 中配置主机 %s 的ssh登陆信息" % (conf.ssh_config_path, host))
         sys.exit(1)
-    return ssh_conf
-
-
-def get_default_ssh_conf(host):
-    """查询默认的ssh登陆信息
-
-    :param host: 主机ip
-    :type host str
-    :example host 10.10.100.1
-
-    :rtype ssh_conf dict
-    :return ssh_conf ssh主机信息
-    :example ssh_conf
-    {
-        'identityfile': '~/.ssh/seekplum',
-        'hostname': 'github.com',
-        'user': 'seekplum',
-        'port': 22
-    }
-    """
-    yml_config = parse_config_yml(conf.plum_yml_path)
-    ssh_conf = yml_config["default_ssh_conf"]
-    ssh_conf["port"] = getattr(conf, "ssh_port", ssh_conf["port"])
-    ssh_conf["identityfile"] = getattr(conf, "identityfile", ssh_conf["identityfile"])
-    ssh_conf["hostname"] = host
     return ssh_conf
 
 
@@ -131,8 +106,8 @@ def get_host_ip(host, host_type):
     :example host 1
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type int
-    :example host_type 1
+    :type host_type str
+    :example host_type default
 
     :rtype str
     :return 完整的主机ip
@@ -141,12 +116,83 @@ def get_host_ip(host, host_type):
     mark = "."
     # 处理输入的前两位的情况
     point_count = host.count(mark)
-    prefix_host = mark.join(prefix_host.split(mark)[:(3 - point_count)])
+    # 标准ip中点的数量
+    normal_point = 3
+    if point_count < normal_point:
+        prefix_host = mark.join(prefix_host.split(mark)[:(normal_point - point_count)])
+        host = "%s.%s" % (prefix_host, host)
+    return host
 
-    return "%s%s" % (prefix_host, host)
+
+class SSHConf(object):
+    def __init__(self, user, port, identityfile):
+        self._user = user
+        self._port = port
+        self._identityfile = identityfile
+
+    def get_ssh_conf(self, host):
+        """查询默认的ssh登陆信息
+
+        :param host: 主机ip
+        :type host str
+        :example host 10.10.100.1
+
+        :rtype ssh_conf dict
+        :return ssh_conf ssh主机信息
+        :example ssh_conf
+        {
+            'identityfile': '~/.ssh/seekplum',
+            'hostname': 'github.com',
+            'user': 'seekplum',
+            'port': 22
+        }
+        """
+        yml_config = parse_config_yml(conf.plum_yml_path)
+        ssh_conf = yml_config["default_ssh_conf"]
+        if self._user:
+            ssh_conf["user"] = self._user
+        if self._port:
+            ssh_conf["port"] = self._port
+        if self._identityfile:
+            ssh_conf["identityfile"] = self._identityfile
+        ssh_conf["hostname"] = host
+        return ssh_conf
+
+    def merge_ssh_conf(self, alias_conf):
+        """合并ssh配置信息
+
+        :param alias_conf 在./ssh/config配置文件中的ssh主机信息
+        :type alias_conf dict
+        :example alias_conf
+        {
+            'identityfile': '~/.ssh/seekplum',
+            'hostname': 'github.com',
+            'user': 'seekplum',
+            'port': 22
+        }
+
+        :rtype ssh_conf dict
+        :return ssh_conf 和输入信息合并后的ssh主机信息
+        :example ssh_conf
+        {
+            'identityfile': '~/.ssh/seekplum',
+            'hostname': 'github.com',
+            'user': 'seekplum',
+            'port': 22
+        }
+        """
+        yml_config = parse_config_yml(conf.plum_yml_path)
+        default_ssh_conf = yml_config["default_ssh_conf"]
+        ssh_conf = {
+            'identityfile': self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
+            'hostname': alias_conf["hostname"],
+            'user': self._user or alias_conf.get("user", default_ssh_conf["user"]),
+            'port': self._port or alias_conf.get("port", default_ssh_conf["port"])
+        }
+        return ssh_conf
 
 
-def login(host, host_type):
+def login(host, host_type, user, port, identityfile):
     """登陆主机
 
     :param host: ip的简写或者主机的别名
@@ -154,20 +200,35 @@ def login(host, host_type):
     :example host 1
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type int
-    :example host_type 1
+    :type host_type str
+    :example host_type default
 
-    :rtype str
-    :return 完整的主机ip
+    :param user ssh登陆用户名
+    :type user str
+    :example user root
+
+    :param port ssh登陆端口
+    :type port int
+    :example port 22
+
+    :param user ssh登陆用户名
+    :type user str
+    :example user root
+
+    :param identityfile ssh登陆私钥文件路径
+    :type identityfile str
+    :example identityfile ~/.ssh/id_rsa
     """
     pattern = re.compile(r'^(?:\d+\.){0,2}\d+$')
     match = pattern.match(host)
+    conf_obj = SSHConf(user, port, identityfile)
     # 传入的是ip的简写
     if match:
         host = get_host_ip(host, host_type)
-        ssh_conf = get_default_ssh_conf(host)
+        ssh_conf = conf_obj.get_ssh_conf(host)
     else:
-        ssh_conf = get_ssh_alias_conf(host)
+        alias_conf = get_ssh_alias_conf(host)
+        ssh_conf = conf_obj.merge_ssh_conf(alias_conf)
     cmd = get_login_ssh_cmd(**ssh_conf)
     # 不能使用run_cmd，因为会导致夯住，需要等待结果返回
     os.system(cmd)
@@ -175,7 +236,7 @@ def login(host, host_type):
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("server",
+    parser.add_argument(dest="host",
                         action="store",
                         help="specify server")
 
@@ -183,29 +244,29 @@ def main():
                         action="store",
                         required=False,
                         dest="type",
-                        type=int,
-                        default=1,
+                        default="default",
                         help="host type")
     parser.add_argument("-i" "--identityfile",
                         action="store",
                         required=False,
                         dest="identityfile",
                         default="",
-                        help="identityfile path")
+                        help="ssh login identityfile path")
+    parser.add_argument("-u" "--username",
+                        action="store",
+                        required=False,
+                        dest="user",
+                        default="",
+                        help="ssh login username")
     parser.add_argument("-p" "--port",
                         action="store",
                         required=False,
                         dest="port",
                         type=int,
                         default=0,
-                        help="ssh login number")
+                        help="ssh login port")
 
     args = parser.parse_args()
-
-    if args.port:
-        setattr(conf, "ssh_port", args.port)
-    if args.identityfile:
-        setattr(conf, "identityfile", args.identityfile)
-
+    host, host_type, user, port, identityfile = args.host, args.type, args.user, args.port, args.identityfile
     # 执行登陆操作
-    login(args.server, args.type)
+    login(host, host_type, user, port, identityfile)

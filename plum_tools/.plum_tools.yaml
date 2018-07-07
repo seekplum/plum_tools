@@ -3,5 +3,5 @@ default_ssh_conf:
     port: 22
     identityfile: ~/.ssh/id_rsa
 
-host_type1: 10.10.100
+host_type_default: 10.10.100
 host_type2: 192.168.1

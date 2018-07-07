@@ -43,12 +43,12 @@ def run(host_type):
     """打印IP段内所有能ping通的ip
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type int
-    :example host_type 1
+    :type host_type str
+    :example host_type default
     """
     prefix_host = get_prefix_host_ip(host_type)
     pool = Pool(processes=100)
-    targets = ["%s.%d" % (prefix_host, i) for i in range(1, 255)]
+    targets = ["%s%d" % (prefix_host, i) for i in range(1, 255)]
     result = pool.map(ping, targets)
     for ip in result:
         if ip:
@@ -61,8 +61,7 @@ def main():
                         action="store",
                         required=False,
                         dest="type",
-                        type=int,
-                        default=1,
+                        default="default",
                         help="host type")
 
     args = parser.parse_args()
