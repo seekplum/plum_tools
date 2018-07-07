@@ -21,6 +21,7 @@ import sys
 from plum_tools import conf
 from plum_tools.utils import print_error
 from plum_tools.utils import parse_config_yml
+from plum_tools.utils import get_prefix_host_ip
 
 
 def get_ssh_alias_conf(host):
@@ -136,25 +137,12 @@ def get_host_ip(host, host_type):
     :rtype str
     :return 完整的主机ip
     """
-    type_key = "host_type%d" % host_type
-    try:
-        yml_config = parse_config_yml(conf.plum_yml_path)
-        prefix_host = yml_config[type_key]
-    except IOError:
-        print_error("yml文件: %s 不存在" % conf.plum_yml_path)
-        sys.exit(1)
-    except KeyError:
-        print_error("yml文件: %s 中缺少key: %s" % (conf.plum_yml_path, type_key))
-        sys.exit(1)
-
+    prefix_host = get_prefix_host_ip(host_type)
     mark = "."
-
     # 处理输入的前两位的情况
     point_count = host.count(mark)
     prefix_host = mark.join(prefix_host.split(mark)[:(3 - point_count)])
 
-    if prefix_host and not prefix_host.endswith(mark):
-        prefix_host += mark
     return "%s%s" % (prefix_host, host)
 
 

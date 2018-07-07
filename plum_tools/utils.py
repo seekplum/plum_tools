@@ -13,8 +13,10 @@
 #=============================================================================
 """
 import os
+import sys
 import subprocess
 
+from plum_tools import conf
 from plum_tools.exceptions import RunCmdError
 
 import yaml
@@ -192,3 +194,32 @@ def parse_config_yml(yml_path):
     """
     with open(yml_path) as f:
         return yaml.load(f.read())
+
+
+def get_prefix_host_ip(host_type):
+    """查询不同类型的前三段IP
+
+    :param host_type ip类型,不同的ip类型，ip前缀不一样
+    :type host_type int
+    :example host_type 1
+
+    :rtype prefix_host str
+    :return prefix_host IP前三段值
+    :example prefix_host 10.10.100.
+    """
+    type_key = "host_type%d" % host_type
+    try:
+        yml_config = parse_config_yml(conf.plum_yml_path)
+        prefix_host = yml_config[type_key]
+    except IOError:
+        print_error("yml文件: %s 不存在" % conf.plum_yml_path)
+        sys.exit(1)
+    except KeyError:
+        print_error("yml文件: %s 中缺少key: %s" % (conf.plum_yml_path, type_key))
+        sys.exit(1)
+
+    mark = "."
+
+    if prefix_host and not prefix_host.endswith(mark):
+        prefix_host += mark
+    return prefix_host
