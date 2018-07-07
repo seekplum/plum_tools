@@ -40,6 +40,7 @@ def install():
                 "pssh = plum_tools.pssh:main",
                 "pping = plum_tools.pping:main",
                 "pipmi = plum_tools.pipmi:main",
+                "prn = plum_tools.prn:main",
             ],
         }
     )

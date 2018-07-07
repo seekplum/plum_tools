@@ -74,6 +74,8 @@ def check_repository_modify_status(repo_path):
 
     # 检查是否落后、超前远程分支
     if conf.pull_keyword in output or conf.push_keyword in output:
+        result = True
+    else:
         with cd(repo_path):
             # 检查本地是否还有文件未提交
             if run_cmd(conf.status_short):

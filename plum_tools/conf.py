@@ -21,7 +21,7 @@ status_short = "git status -s"  # 检查文件状态，简短输出，只能看�
 branch_abbrev = "git rev-parse --abbrev-ref HEAD"  # 查询当前分支名
 stash_save = 'git stash save "%s"'  # 保存修改的文件到储藏区
 stash_pop = "git stash pop --index %s"  # 把储藏的文件恢复
-git_checkout = 'git checkout "%s"'  # 切换分支
+git_checkout = 'git checkout %s'  # 切换分支
 
 pull_keyword = '"git pull"'  # 落后远程分支关键字
 push_keyword = '"git push"'  # 超前远程分支关键字

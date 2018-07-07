@@ -19,6 +19,7 @@ import sys
 import argparse
 
 from plum_tools import conf
+from plum_tools.utils import cd
 from plum_tools.utils import run_cmd
 from plum_tools.utils import print_warn
 from plum_tools.utils import check_repository_modify_status
@@ -42,7 +43,8 @@ class GitCheckoutStash(object):
         is_modify, _ = check_repository_modify_status(self._current_path)
         if is_modify:
             cmd = conf.stash_save % self._stash_uuid
-            run_cmd(cmd)
+            with cd(self._current_path):
+                run_cmd(cmd)
 
     def _check_branch(self):
         """检查分支是否一致
@@ -59,7 +61,8 @@ class GitCheckoutStash(object):
         """
         # 切换到新分支
         cmd = conf.git_checkout % self._new_branch
-        run_cmd(cmd)
+        with cd(self._current_path):
+            run_cmd(cmd)
 
     def _apply(self):
         """恢复储藏的文件
@@ -69,11 +72,12 @@ class GitCheckoutStash(object):
         if not is_stash:
             return
         for line in stash_out.splitlines():
-            stash_string, other = line.split(":", 1)
-            stash_save = "%s%s%s" % (self._new_branch, self._mark, self._stash_uuid)
+            stash_string, _ = line.split(":", 1)
+            stash_save = "%s%s%s" % (self._new_branch, self._mark, conf.stash_uuid)
             if stash_save.strip() in line:
                 cmd = conf.stash_pop % stash_string
-                run_cmd(cmd)
+                with cd(self._current_path):
+                    run_cmd(cmd)
 
     def checkout(self):
         """储藏文件切换分支
@@ -100,7 +104,3 @@ def main():
         sys.exit(1)
     stash = GitCheckoutStash(current_branch, new_branch)
     stash.checkout()
-
-
-if __name__ == "__main__":
-    main()
