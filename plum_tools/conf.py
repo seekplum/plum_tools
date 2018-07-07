@@ -30,7 +30,7 @@ push_keyword = '"git push"'  # 超前远程分支关键字
 find_command = 'find %s -name ".git"'  # 通过系统命令查找文件路径
 ping_command = "ping -W 1 -c1 %s"  # ping命令
 ipmi_command = "ipmitool -I lanplus -H %s -U %s -P %s %s"  # ipmi命令
-ls_command = "ls %s"
+stat_command = "stat %s"
 
 # =========================================== ssh配置相关 ===========================================
 default_ssh_port = 22

@@ -15,57 +15,9 @@
 """
 import argparse
 import os
-import re
-import sys
 
 from plum_tools import conf
-from plum_tools.utils import print_error
-from plum_tools.utils import parse_config_yml
-from plum_tools.utils import get_host_ip
-
-
-def get_ssh_alias_conf(host):
-    """解析~/.ssh/config配置信息
-
-    :rtype ssh_conf dict
-    :return ssh_conf ssh主机信息
-    :example ssh_conf
-    {
-        'identityfile': '~/.ssh/seekplum',
-        'hostname': 'github.com',
-        'user': 'seekplum',
-        'port': 22
-    }
-    """
-    begin = False
-    # 查询默认的ssh信息
-    ssh_conf = {}
-    with open(conf.ssh_config_path) as f:
-        for line in f:
-            data = line.split()
-            # config配置都是两列
-            if len(data) != 2:
-                continue
-
-            key = data[0].lower()
-            value = data[1]
-
-            # 多个主机信息已 Host 进行分隔
-            if key == "host":
-                if begin:
-                    break
-                elif value == host:
-                    begin = True
-                else:
-                    continue
-
-            if begin:
-                ssh_conf[key] = value
-
-    if not begin:
-        print_error("未在 %s 中配置主机 %s 的ssh登陆信息" % (conf.ssh_config_path, host))
-        sys.exit(1)
-    return ssh_conf
+from plum_tools.utils import merge_ssh_config
 
 
 def get_login_ssh_cmd(hostname, user, port, identityfile):
@@ -85,7 +37,7 @@ def get_login_ssh_cmd(hostname, user, port, identityfile):
 
     :param identityfile 主机ip
     :type identityfile str
-    :example identityfile ~/.ssh/id_rse
+    :example identityfile ~/.ssh/id_rsa
 
     :rtype cmd str
     :return cmd ssh登陆的命令
@@ -96,74 +48,6 @@ def get_login_ssh_cmd(hostname, user, port, identityfile):
           '-o  "ConnectTimeout=%s" ' \
           '%s@%s -p %d' % (identityfile, conf.connect_timeout, user, hostname, port)
     return cmd
-
-
-class SSHConf(object):
-    def __init__(self, user, port, identityfile):
-        self._user = user
-        self._port = port
-        self._identityfile = identityfile
-
-    def get_ssh_conf(self, host):
-        """查询默认的ssh登陆信息
-
-        :param host: 主机ip
-        :type host str
-        :example host 10.10.100.1
-
-        :rtype ssh_conf dict
-        :return ssh_conf ssh主机信息
-        :example ssh_conf
-        {
-            'identityfile': '~/.ssh/seekplum',
-            'hostname': 'github.com',
-            'user': 'seekplum',
-            'port': 22
-        }
-        """
-        yml_config = parse_config_yml(conf.plum_yml_path)
-        ssh_conf = yml_config["default_ssh_conf"]
-        if self._user:
-            ssh_conf["user"] = self._user
-        if self._port:
-            ssh_conf["port"] = self._port
-        if self._identityfile:
-            ssh_conf["identityfile"] = self._identityfile
-        ssh_conf["hostname"] = host
-        return ssh_conf
-
-    def merge_ssh_conf(self, alias_conf):
-        """合并ssh配置信息
-
-        :param alias_conf 在./ssh/config配置文件中的ssh主机信息
-        :type alias_conf dict
-        :example alias_conf
-        {
-            'identityfile': '~/.ssh/seekplum',
-            'hostname': 'github.com',
-            'user': 'seekplum',
-            'port': 22
-        }
-
-        :rtype ssh_conf dict
-        :return ssh_conf 和输入信息合并后的ssh主机信息
-        :example ssh_conf
-        {
-            'identityfile': '~/.ssh/seekplum',
-            'hostname': 'github.com',
-            'user': 'seekplum',
-            'port': 22
-        }
-        """
-        yml_config = parse_config_yml(conf.plum_yml_path)
-        default_ssh_conf = yml_config["default_ssh_conf"]
-        ssh_conf = {
-            'identityfile': self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
-            'hostname': alias_conf["hostname"],
-            'user': self._user or alias_conf.get("user", default_ssh_conf["user"]),
-            'port': self._port or alias_conf.get("port", default_ssh_conf["port"])
-        }
-        return ssh_conf
 
 
 def login(host, host_type, user, port, identityfile):
@@ -193,16 +77,7 @@ def login(host, host_type, user, port, identityfile):
     :type identityfile str
     :example identityfile ~/.ssh/id_rsa
     """
-    pattern = re.compile(r'^(?:\d+\.){0,2}\d+$')
-    match = pattern.match(host)
-    conf_obj = SSHConf(user, port, identityfile)
-    # 传入的是ip的简写
-    if match:
-        host = get_host_ip(host, host_type)
-        ssh_conf = conf_obj.get_ssh_conf(host)
-    else:
-        alias_conf = get_ssh_alias_conf(host)
-        ssh_conf = conf_obj.merge_ssh_conf(alias_conf)
+    ssh_conf = merge_ssh_config(host, host_type, user, port, identityfile)
     cmd = get_login_ssh_cmd(**ssh_conf)
     # 不能使用run_cmd，因为会导致夯住，需要等待结果返回
     os.system(cmd)

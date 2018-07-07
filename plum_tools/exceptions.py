@@ -34,3 +34,8 @@ class SSHException(Exception):
     """ssh异常
     """
     pass
+
+
+class SystemTypeError(Exception):
+    """系统类型异常
+    """

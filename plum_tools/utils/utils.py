@@ -13,11 +13,14 @@
 #=============================================================================
 """
 import os
+import re
+import platform
 import sys
 import subprocess
 
 from plum_tools import conf
 from plum_tools.exceptions import RunCmdError
+from plum_tools.exceptions import SystemTypeError
 
 import yaml
 
@@ -205,9 +208,9 @@ def parse_config_yml(yml_path):
             "port": int,
             "identityfile": str
         },
-        Optional("ipmi_interval"): int,
-        Optional(lambda x: x.startswith("host_type_")): str,
-        Optional("projects"): {
+        "ipmi_interval": int,
+        lambda x: x.startswith("host_type_"): str,
+        "projects": {
             str: {
                 "src": str,
                 "dest": str,
@@ -233,58 +236,6 @@ def parse_config_yml(yml_path):
         sys.exit(1)
 
 
-def get_prefix_host_ip(host_type):
-    """查询不同类型的前三段IP
-
-    :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
-    :example host_type default
-
-    :rtype prefix_host str
-    :return prefix_host IP前三段值
-    :example prefix_host 10.10.100.
-    """
-    type_key = "host_type_%s" % host_type
-    try:
-        yml_config = parse_config_yml(conf.plum_yml_path)
-        prefix_host = yml_config[type_key]
-    except KeyError:
-        print_error("yml文件: %s 中缺少key: %s" % (conf.plum_yml_path, type_key))
-        sys.exit(1)
-
-    mark = "."
-
-    if prefix_host and not prefix_host.endswith(mark):
-        prefix_host += mark
-    return prefix_host
-
-
-def get_host_ip(host, host_type):
-    """查询主机的ip
-
-    :param host: ip的简写
-    :type host str
-    :example host 1
-
-    :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
-    :example host_type default
-
-    :rtype str
-    :return 完整的主机ip
-    """
-    prefix_host = get_prefix_host_ip(host_type)
-    mark = "."
-    # 处理输入的前两位的情况
-    point_count = host.count(mark)
-    # 标准ip中点的数量
-    normal_point = 3
-    if point_count < normal_point:
-        prefix_host = mark.join(prefix_host.split(mark)[:(normal_point - point_count)])
-        host = "%s.%s" % (prefix_host, host)
-    return host
-
-
 def get_file_abspath(path):
     """文件的相对路径
 
@@ -296,94 +247,30 @@ def get_file_abspath(path):
     :return abs_path 文件绝对路径
     :example abs_path /home/seekplum/.ssh/id_rsa
     """
-    cmd = conf.ls_command % path
-    abs_path = run_cmd(cmd).strip()
+
+    def replace_path(old_path):
+        """替换路径中的空格
+        """
+        return old_path.replace(" ", "\ ")
+
+    # 系统直接可以找到
+    if os.path.exists(path):
+        return path
+
+    # 通过系统命令stat查找真实路径
+    path = replace_path(path)
+    cmd = conf.stat_command % path
+    output = run_cmd(cmd)
+
+    # 获取操作系统类型
+    system_type = platform.system()
+    if system_type == "Linux":
+        pattern = re.compile('File: "(.*)"')
+    # mac系统
+    elif system_type == "Darwin":
+        pattern = re.compile('"\s+\d+\s+\d+\s+\d+(.*)$')
+    else:
+        raise SystemTypeError("此项功能仅支持 Linux / Darwin(mac)")
+    match = pattern.search(output)
+    abs_path = replace_path(match.group(1).strip())
     return abs_path
-
-
-def get_current_branch_name():
-    """查询当前分支名
-
-    :rtype str
-    :return 当前分支名
-    """
-    return run_cmd(conf.branch_abbrev).strip()
-
-
-def check_is_git_repository(path):
-    """检查目录是否为git 仓库
-
-    :param path 要被检查的目录
-    :type path str
-    :example path /tmp/git/
-
-    >>> check_is_git_repository("/tmp")
-    False
-
-    :rtype bool
-    :return
-        True `path`目录是一个git仓库
-        False `path`目录不是一个git仓库
-    """
-    git_path = os.path.join(path, ".git")
-    if os.path.exists(git_path) and os.path.isdir(git_path):
-        return True
-    return False
-
-
-def check_repository_modify_status(repo_path):
-    """检查仓库是否有文件修改
-
-    :param repo_path 仓库路径
-    :type repo_path str
-    :example repo_path /tmp/git
-
-    :rtype result bool
-    :return result 检查结果
-        True 仓库有文件进行了修改未提交
-        False 仓库没有文件进行了修改
-
-    >>> check_repository_modify_status("`pwd`")#doctest: +ELLIPSIS
-    (True, '...')
-
-    :rtype output str
-    :return output 命令输出
-    """
-    with cd(repo_path):
-        output = run_cmd(conf.status_default)
-
-    result = False
-
-    # 检查是否落后、超前远程分支
-    if conf.pull_keyword in output or conf.push_keyword in output:
-        with cd(repo_path):
-            # 检查本地是否还有文件未提交
-            if run_cmd(conf.status_short):
-                result = True
-    return result, output
-
-
-def check_repository_stash(repo_path):
-    """检查仓库是否在储藏区
-
-    :param repo_path 仓库路径
-    :type repo_path str
-    :example repo_path /tmp/git
-
-    :rtype result bool
-    :return result 检查结果
-        True 仓库有文件在储藏区
-        False 仓库中储藏区是干净的
-
-    >>> check_repository_stash("`pwd`")
-    (False, '')
-
-    :rtype output str
-    :return output 命令输出
-    """
-    with cd(repo_path):
-        output = run_cmd(conf.stash_list)
-    result = False
-    if output:
-        result = True
-    return result, output
