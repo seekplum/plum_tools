@@ -299,3 +299,91 @@ def get_file_abspath(path):
     cmd = conf.ls_command % path
     abs_path = run_cmd(cmd).strip()
     return abs_path
+
+
+def get_current_branch_name():
+    """查询当前分支名
+
+    :rtype str
+    :return 当前分支名
+    """
+    return run_cmd(conf.branch_abbrev).strip()
+
+
+def check_is_git_repository(path):
+    """检查目录是否为git 仓库
+
+    :param path 要被检查的目录
+    :type path str
+    :example path /tmp/git/
+
+    >>> check_is_git_repository("/tmp")
+    False
+
+    :rtype bool
+    :return
+        True `path`目录是一个git仓库
+        False `path`目录不是一个git仓库
+    """
+    git_path = os.path.join(path, ".git")
+    if os.path.exists(git_path) and os.path.isdir(git_path):
+        return True
+    return False
+
+
+def check_repository_modify_status(repo_path):
+    """检查仓库是否有文件修改
+
+    :param repo_path 仓库路径
+    :type repo_path str
+    :example repo_path /tmp/git
+
+    :rtype result bool
+    :return result 检查结果
+        True 仓库有文件进行了修改未提交
+        False 仓库没有文件进行了修改
+
+    >>> check_repository_modify_status("`pwd`")#doctest: +ELLIPSIS
+    (True, '...')
+
+    :rtype output str
+    :return output 命令输出
+    """
+    with cd(repo_path):
+        output = run_cmd(conf.status_default)
+
+    result = False
+
+    # 检查是否落后、超前远程分支
+    if conf.pull_keyword in output or conf.push_keyword in output:
+        with cd(repo_path):
+            # 检查本地是否还有文件未提交
+            if run_cmd(conf.status_short):
+                result = True
+    return result, output
+
+
+def check_repository_stash(repo_path):
+    """检查仓库是否在储藏区
+
+    :param repo_path 仓库路径
+    :type repo_path str
+    :example repo_path /tmp/git
+
+    :rtype result bool
+    :return result 检查结果
+        True 仓库有文件在储藏区
+        False 仓库中储藏区是干净的
+
+    >>> check_repository_stash("`pwd`")
+    (False, '')
+
+    :rtype output str
+    :return output 命令输出
+    """
+    with cd(repo_path):
+        output = run_cmd(conf.stash_list)
+    result = False
+    if output:
+        result = True
+    return result, output
