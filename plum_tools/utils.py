@@ -22,6 +22,9 @@ from plum_tools.exceptions import RunCmdError
 import yaml
 
 from functools32 import lru_cache
+from schema import Schema
+from schema import SchemaError
+from schema import Optional
 
 
 class cd(object):
@@ -189,11 +192,44 @@ def run_cmd(cmd):
 def parse_config_yml(yml_path):
     """解析配置程序依赖的配置yml文件
 
+    :param yml_path 项目依赖的yml配置文件路径
+    :type yml_path str
+    :example yml_path ~/.plum_tools.yml
+
     :rtype dict
     :return
     """
-    with open(yml_path) as f:
-        return yaml.load(f.read())
+    yml_schema = Schema({
+        "default_ssh_conf": {
+            "user": str,
+            "port": int,
+            "identityfile": str
+        },
+        Optional(lambda x: x.startswith("host_type")): str,
+        Optional("projects"): {
+            str: {
+                "src": str,
+                "dest": str,
+                Optional("exclude"): list,
+                Optional("delete"): int,
+            }
+        }
+    })
+    try:
+        with open(yml_path) as f:
+            try:
+                data = yml_schema.validate(yaml.load(f.read()))
+            except SchemaError as e:
+                print_error("yml文件: %s 格式错误, %s, 请参照以下格式进行修改" % (conf.plum_yml_path, e.message))
+                with open(os.path.join(conf.root, conf.plum_yml_name)) as fp:
+                    text = fp.read()
+                print_text(text)
+                sys.exit(1)
+            else:
+                return data
+    except IOError:
+        print_error("yml文件: %s 不存在" % conf.plum_yml_path)
+        sys.exit(1)
 
 
 def get_prefix_host_ip(host_type):

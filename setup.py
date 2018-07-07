@@ -21,7 +21,8 @@ def install():
         description="linux下常用的工具包",
         install_requires=[
             "functools32",
-            "pyyaml"
+            "pyyaml",
+            "schema"
         ],
         # scripts=[
         #     "bin/gitrepo"
