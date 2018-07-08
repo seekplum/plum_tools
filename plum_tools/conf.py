@@ -28,7 +28,7 @@ push_keyword = '"git push"'  # 超前远程分支关键字
 
 # =========================================== 系统 相关命令 ===========================================
 find_command = 'find %s -name ".git"'  # 通过系统命令查找文件路径
-ping_command = "ping -W 1 -c1 %s"  # ping命令
+ping_command = "ping -W 3 -c 1 %s"  # ping命令 -W 超时时间 -c 次数
 ipmi_command = "ipmitool -I lanplus -H %s -U %s -P %s %s"  # ipmi命令
 stat_command = "stat %s"
 
