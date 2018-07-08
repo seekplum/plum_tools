@@ -8,6 +8,7 @@ invoke = "*"
 bumpversion = "*"
 pytest = "*"
 pylint = "*"
+twine = "*"
 
 [packages]
 "functools32" = "==3.2.3.post2"
