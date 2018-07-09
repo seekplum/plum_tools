@@ -85,7 +85,7 @@ class SSHConf(object):
             'identityfile': self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
             'hostname': alias_conf["hostname"],
             'user': self._user or alias_conf.get("user", default_ssh_conf["user"]),
-            'port': self._port or alias_conf.get("port", default_ssh_conf["port"])
+            'port': int(self._port or alias_conf.get("port", default_ssh_conf["port"]))
         }
         return ssh_conf
 
