@@ -8,7 +8,7 @@ from setuptools import setup, find_packages
 
 from plum_tools import conf
 
-version = '0.1.3.dev0'
+version = '0.1.4.dev0'
 
 
 def install():
