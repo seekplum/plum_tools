@@ -14,11 +14,8 @@
 import os
 import argparse
 
-from plum_tools import conf
-
 from plum_tools.utils import print_warn
 from plum_tools.utils import print_error
-from plum_tools.utils import run_cmd
 from plum_tools.utils import check_is_git_repository
 from plum_tools.utils import check_repository_modify_status
 from plum_tools.utils import check_repository_stash
@@ -36,38 +33,9 @@ def find_git_project_for_python(path):
 
 
     """
-    # 当前路径非目录
-    if not os.path.isdir(path):
-        return
-    if check_is_git_repository(path):
-        yield path
-    else:
-        for file_name in os.listdir(path):
-            # 忽略隐藏文件
-            if file_name.startswith("."):
-                continue
-
-            # 文件名需要拼接上当前路径
-            for repository in find_git_project_for_python(os.path.join(path, file_name)):
-                yield repository
-
-
-def find_git_project_for_shell(path):
-    """查找目录下所有的 git仓库
-
-    :param path 要被检查的目录
-    :type path str
-    :example path "/tmp/git"
-
-    >>> for path in find_git_project_for_shell("/tmp"):
-    ...    print path
-
-
-    """
-    cmd = conf.find_command % path
-    output = run_cmd(cmd)
-    for git_path in output.splitlines():
-        yield os.path.dirname(git_path)
+    for root, dirs, file_names in os.walk(path):
+        if check_is_git_repository(root):
+            yield root
 
 
 def check_projects(projects, detail):
@@ -84,7 +52,7 @@ def check_projects(projects, detail):
     :example False
     """
     for project_path in projects:
-        for path in find_git_project_for_shell(project_path):
+        for path in find_git_project_for_python(project_path):
             stash_result, stash_out = check_repository_stash(path)
             status_result, status_out = check_repository_modify_status(path)
 
