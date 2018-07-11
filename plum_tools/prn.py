@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -22,9 +21,9 @@ from plum_tools import conf
 from plum_tools.utils import print_error
 from plum_tools.utils import print_ok
 from plum_tools.utils import run_cmd
-from plum_tools.utils import parse_config_yml
 from plum_tools.utils import merge_ssh_config
 from plum_tools.utils import get_file_abspath
+from plum_tools.utils import YmlConfig
 from plum_tools.exceptions import RunCmdError
 
 
@@ -66,7 +65,7 @@ def get_project_conf(project, src, dest, delete, exclude):
         "delete": 0
     }
     """
-    yml_data = parse_config_yml(conf.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(conf.plum_yml_path)
     data = {}
     try:
         data = yml_data["projects"][project]
@@ -142,7 +141,7 @@ class Upload(object):
     def _get_sync_option(self):
         """组合出同步文件的命令
         """
-        option = ["/usr/bin/rsync -rtv"]
+        option = ["rsync -rtv"]
         known_host = "UserKnownHostsFile=/dev/null"
         host_key = "StrictHostKeyChecking no"
         timeout = "ConnectTimeout=2"

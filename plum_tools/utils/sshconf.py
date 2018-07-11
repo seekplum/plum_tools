@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -18,7 +17,7 @@ import sys
 
 from plum_tools import conf
 from plum_tools.utils.utils import print_error
-from plum_tools.utils.utils import parse_config_yml
+from plum_tools.utils.utils import YmlConfig
 
 
 class SSHConf(object):
@@ -45,7 +44,7 @@ class SSHConf(object):
             'port': 22
         }
         """
-        yml_config = parse_config_yml(conf.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(conf.plum_yml_path)
         ssh_conf = yml_config["default_ssh_conf"]
         if self._user:
             ssh_conf["user"] = self._user
@@ -79,7 +78,7 @@ class SSHConf(object):
             'port': 22
         }
         """
-        yml_config = parse_config_yml(conf.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(conf.plum_yml_path)
         default_ssh_conf = yml_config["default_ssh_conf"]
         ssh_conf = {
             'identityfile': self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
@@ -103,7 +102,7 @@ def get_prefix_host_ip(host_type):
     """
     type_key = "host_type_%s" % host_type
     try:
-        yml_config = parse_config_yml(conf.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(conf.plum_yml_path)
         prefix_host = yml_config[type_key]
     except KeyError:
         print_error("yml文件: %s 中缺少key: %s" % (conf.plum_yml_path, type_key))

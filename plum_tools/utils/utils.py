@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -24,7 +23,6 @@ from plum_tools.exceptions import SystemTypeError
 
 import yaml
 
-from functools32 import lru_cache
 from schema import Schema
 from schema import SchemaError
 from schema import Optional
@@ -53,6 +51,57 @@ class cd(object):
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         os.chdir(self._current_path)
+
+
+class YmlConfig(object):
+    _yml_data = None
+
+    @classmethod
+    def parse_config_yml(cls, yml_path):
+        """解析配置程序依赖的配置yml文件
+
+        :param yml_path 项目依赖的yml配置文件路径
+        :type yml_path str
+        :example yml_path ~/.plum_tools.yml
+
+        :rtype dict
+        :return yml配置文件内容
+        """
+        if cls._yml_data:
+            return cls._yml_data
+        yml_schema = Schema({
+            "default_ssh_conf": {
+                "user": str,
+                "port": int,
+                "identityfile": str
+            },
+            "ipmi_interval": int,
+            lambda x: x.startswith("host_type_"): str,
+            "projects": {
+                str: {
+                    "src": str,
+                    "dest": str,
+                    Optional("exclude"): list,
+                    Optional("delete"): int,
+                }
+            }
+        })
+        try:
+            with open(yml_path) as f:
+                try:
+                    data = yml_schema.validate(yaml.load(f.read()))
+                except SchemaError as e:
+                    print_error("yml文件: %s 格式错误, %s, 请参照以下格式进行修改" % (conf.plum_yml_path, e.message))
+                    with open(os.path.join(conf.root, conf.plum_yml_name)) as fp:
+                        text = fp.read()
+                    print_text(text)
+                    sys.exit(1)
+                else:
+                    cls._yml_data = data
+                    return cls._yml_data
+        except IOError:
+            print_error("yml文件: %s 不存在" % conf.plum_yml_path)
+            sys.exit(1)
 
 
 def get_color(c, s):
@@ -118,7 +167,7 @@ def print_text(text):
     :type text basestring
     :example text "ok"
     """
-    print text
+    print(text)
 
 
 def print_ok(text):
@@ -129,7 +178,7 @@ def print_ok(text):
     :example text "ok"
     """
     fmt = get_green(text)
-    print fmt
+    print_text(fmt)
 
 
 def print_warn(text):
@@ -140,7 +189,7 @@ def print_warn(text):
     :example text "warn"
     """
     fmt = get_yellow(text)
-    print fmt
+    print_text(fmt)
 
 
 def print_error(text):
@@ -151,7 +200,7 @@ def print_error(text):
     :example text "error"
     """
     fmt = get_red(text)
-    print fmt
+    print_text(fmt)
 
 
 def run_cmd(cmd):
@@ -189,51 +238,6 @@ def run_cmd(cmd):
         message = "run `%s` fail" % cmd
         raise RunCmdError(message, out_msg=out_msg, err_msg=err_msg)
     return out_msg
-
-
-@lru_cache(5)
-def parse_config_yml(yml_path):
-    """解析配置程序依赖的配置yml文件
-
-    :param yml_path 项目依赖的yml配置文件路径
-    :type yml_path str
-    :example yml_path ~/.plum_tools.yml
-
-    :rtype dict
-    :return
-    """
-    yml_schema = Schema({
-        "default_ssh_conf": {
-            "user": str,
-            "port": int,
-            "identityfile": str
-        },
-        "ipmi_interval": int,
-        lambda x: x.startswith("host_type_"): str,
-        "projects": {
-            str: {
-                "src": str,
-                "dest": str,
-                Optional("exclude"): list,
-                Optional("delete"): int,
-            }
-        }
-    })
-    try:
-        with open(yml_path) as f:
-            try:
-                data = yml_schema.validate(yaml.load(f.read()))
-            except SchemaError as e:
-                print_error("yml文件: %s 格式错误, %s, 请参照以下格式进行修改" % (conf.plum_yml_path, e.message))
-                with open(os.path.join(conf.root, conf.plum_yml_name)) as fp:
-                    text = fp.read()
-                print_text(text)
-                sys.exit(1)
-            else:
-                return data
-    except IOError:
-        print_error("yml文件: %s 不存在" % conf.plum_yml_path)
-        sys.exit(1)
 
 
 def get_file_abspath(path):

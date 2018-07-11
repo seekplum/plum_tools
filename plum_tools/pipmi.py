@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -25,9 +24,9 @@ import paramiko
 from plum_tools import conf
 from plum_tools.utils import print_text
 from plum_tools.utils import print_error
-from plum_tools.utils import parse_config_yml
 from plum_tools.utils import get_host_ip
 from plum_tools.utils import get_file_abspath
+from plum_tools.utils import YmlConfig
 from plum_tools.exceptions import RunCmdError
 from plum_tools.exceptions import SSHException
 
@@ -207,7 +206,7 @@ def get_ssh_config(hostname, username, port, identityfile, password):
         'port': 22
     }
     """
-    yml_data = parse_config_yml(conf.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(conf.plum_yml_path)
     default_ssh_conf = yml_data["default_ssh_conf"]
     ssh_conf = {
         "hostname": hostname,
@@ -234,7 +233,7 @@ def get_ipmi_ip(host, host_type):
     :return ipmi_ip 带外ip
     :example ipmi_ip 10.10.10.101
     """
-    yml_data = parse_config_yml(conf.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(conf.plum_yml_path)
     hostname = get_host_ip(host, host_type)
     item = hostname.split(".")
     item[-1] = str(int(item[-1]) + yml_data["ipmi_interval"])
