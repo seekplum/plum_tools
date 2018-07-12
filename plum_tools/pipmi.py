@@ -325,8 +325,10 @@ def main():
                 cmd = conf.ipmi_command % (ipmi_ip, ipmi_username, ipmi_password, ipmi_command)
                 print_text("cmd: %s" % cmd)
                 try:
-                    output = ssh.run_cmd(cmd, timeout=3)
+                    output = ssh.run_cmd(cmd, timeout=conf.command_timeout)
                     print_text("output: %s\n" % output)
+                except socket.timeout:
+                    print_error("执行命令: %s 超时，超时时间为: %s秒" % (cmd, conf.command_timeout))
                 except RunCmdError as e:
                     print_error(e.err_msg)
     except SSHException as e:

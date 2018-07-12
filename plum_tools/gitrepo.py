@@ -13,6 +13,9 @@
 import os
 import argparse
 
+from multiprocessing import Pool
+
+from plum_tools import conf
 from plum_tools.utils import print_warn
 from plum_tools.utils import print_error
 from plum_tools.utils import check_is_git_repository
@@ -37,6 +40,46 @@ def find_git_project_for_python(path):
             yield root
 
 
+def check_project(path):
+    """检查git项目
+
+    :param path 仓库路径
+    :type path str
+    :example path /tmp/git
+
+    :rtype result dict
+    :return result {
+        path: 仓库路径
+        output: 检查输出信息
+        status:
+            True 仓库有文件进行了修改或有储藏文件
+            False 仓库没有和远程一致。且没有储藏文件
+    }
+    :example result {
+        "path": "/tmp/git",
+        "status": False,
+        "output": ""
+    }
+    """
+    result = {
+        "path": path,
+        "status": False,
+    }
+    # 检查文件是否改动
+    status_result, status_out = check_repository_modify_status(path)
+    if status_result:
+        result["status"] = True
+        result["output"] = status_out
+        return result
+
+    # 检查是否有文件储藏
+    stash_result, stash_out = check_repository_stash(path)
+    if stash_result:
+        result["status"] = True
+        result["output"] = stash_out
+    return result
+
+
 def check_projects(projects, detail):
     """检查指导目录下所有的仓库是否有修改
 
@@ -50,23 +93,19 @@ def check_projects(projects, detail):
     :type detail bool
     :example False
     """
-    for project_path in projects:
-        for path in find_git_project_for_python(project_path):
-            stash_result, stash_out = check_repository_stash(path)
-            status_result, status_out = check_repository_modify_status(path)
+    targets = [path for project_path in projects for path in find_git_project_for_python(project_path)]
+    pool = Pool(processes=conf.processes_number)
+    result = pool.map(check_project, targets)
+    for item in result:
+        # 仓库中文件没有被改动而且没有文件被储藏了
+        if not item["status"]:
+            continue
+        print_warn(item["path"])
 
-            # 仓库中文件没有被改动而且没有文件被储藏了
-            if not (stash_result or status_result):
-                continue
-            print_warn(path)
-
-            # 打印详细错误信息
-            if not detail:
-                continue
-            if status_result:
-                print_error("[status] %s" % status_out)
-            if stash_result:
-                print_error("[stash] %s" % stash_out)
+        # 打印详细错误信息
+        if not detail:
+            continue
+        print_error(item["output"])
 
 
 def main():

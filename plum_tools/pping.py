@@ -46,7 +46,7 @@ def run(host_type):
     :example host_type default
     """
     prefix_host = get_prefix_host_ip(host_type)
-    pool = Pool(processes=100)
+    pool = Pool(processes=conf.processes_number)
     targets = ["%s%d" % (prefix_host, i) for i in range(1, 255)]
     result = pool.map(ping, targets)
     for ip in result:
