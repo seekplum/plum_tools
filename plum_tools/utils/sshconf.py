@@ -222,7 +222,7 @@ def merge_ssh_config(host, host_type, user, port, identityfile):
         'port': 22
     }
     """
-    pattern = re.compile(r'^(?:\d+\.){0,2}\d+$')
+    pattern = re.compile(r'^(?:\d+\.){0,3}\d+$')
     match = pattern.match(host)
     conf_obj = SSHConf(user, port, identityfile)
     # 传入的是ip的简写

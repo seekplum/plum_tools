@@ -300,7 +300,3 @@ def main():
 
     pro_conf = get_project_conf(project, src, dest, delete, exclude)
     upload_file(host_list, host_type, user, port, identityfile, pro_conf)
-
-
-if __name__ == "__main__":
-    main()
