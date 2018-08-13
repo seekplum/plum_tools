@@ -29,6 +29,12 @@ class RunCmdError(Exception):
         self.err_msg = err_msg
 
 
+class RunCmdTimeout(Exception):
+    """执行系统命令超时
+    """
+    pass
+
+
 class SSHException(Exception):
     """ssh异常
     """
