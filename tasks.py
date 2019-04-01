@@ -21,23 +21,21 @@ def sdist(ctx):
     ctx.run('python setup.py sdist', echo=True)
 
 
-@task
+@task(clean)
 def upload(ctx, r="private"):
     ctx.run('python setup.py sdist upload -r %s' % r, echo=True)
 
 
-@task
+@task(clean)
 def register(ctx, n, r="private"):
     ctx.run('twine register %s -r %s' % (n, r), echo=True, warn=True)
 
 
-@task
+@task(clean)
 def tupload(ctx, n, r="private"):
     ctx.run('twine upload %s -r %s' % (n, r), echo=True)
 
 
-@task
+@task(clean)
 def check(ctx, j=4):
-    ctx.run(
-        "pylint -j %s --output-format colorized   --disable=all --enable=E,F plum_tools" % j
-    )
+    ctx.run("pylint -j %s --output-format colorized   --disable=all --enable=E,F plum_tools" % j)
