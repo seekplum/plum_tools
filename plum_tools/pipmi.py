@@ -4,7 +4,7 @@
 #=============================================================================
 #  ProjectName: plum_tools
 #     FileName: pipmi
-#         Desc: 对指定机器进行开机操作
+#         Desc: 对指定机器进行远程执行ipmitool相关操作
 #               命令: pipmi -l 1 -s 2 3
 #               描述: ssh登录1机器,对2,3进行开机操作
 #       Author: seekplum
