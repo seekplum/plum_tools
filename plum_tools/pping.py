@@ -15,11 +15,12 @@ import argparse
 
 from multiprocessing import Pool
 
-from plum_tools import conf
-from plum_tools.exceptions import RunCmdError
-from plum_tools.utils import print_text
-from plum_tools.utils import run_cmd
-from plum_tools.utils import get_prefix_host_ip
+from .conf import OsCommand
+from .conf import Constant
+from .exceptions import RunCmdError
+from .utils import print_text
+from .utils import run_cmd
+from .utils import get_prefix_host_ip
 
 
 def ping(ip):
@@ -29,7 +30,7 @@ def ping(ip):
     :type ip str
     :example ip 10.10.100.1
     """
-    cmd = conf.ping_command % ip
+    cmd = OsCommand.ping_command % ip
     try:
         run_cmd(cmd)
     except RunCmdError:
@@ -46,7 +47,7 @@ def run(host_type):
     :example host_type default
     """
     prefix_host = get_prefix_host_ip(host_type)
-    pool = Pool(processes=conf.processes_number)
+    pool = Pool(processes=Constant.processes_number)
     targets = ["%s%d" % (prefix_host, i) for i in range(1, 255)]
     result = pool.map(ping, targets)
     for ip in result:

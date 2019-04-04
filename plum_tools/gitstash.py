@@ -17,14 +17,15 @@ import os
 import sys
 import argparse
 
-from plum_tools import conf
-from plum_tools.utils import cd
-from plum_tools.utils import run_cmd
-from plum_tools.utils import print_warn
-from plum_tools.utils import check_repository_modify_status
-from plum_tools.utils import check_repository_stash
-from plum_tools.utils import get_current_branch_name
-from plum_tools.exceptions import RunCmdError
+from .conf import GitCommand
+from .conf import Constant
+from .utils import cd
+from .utils import run_cmd
+from .utils import check_repository_modify_status
+from .utils import check_repository_stash
+from .utils import get_current_branch_name
+from .utils.printer import print_warn
+from .exceptions import RunCmdError
 
 
 class GitCheckoutStash(object):
@@ -33,7 +34,7 @@ class GitCheckoutStash(object):
         self._current_path = os.getcwd()  # 当前执行命令的路径
         self._new_branch = new_branch
         self._mark = "-"
-        self._stash_uuid = "%s%s%s" % (self._current_branch, self._mark, conf.stash_uuid)
+        self._stash_uuid = "%s%s%s" % (self._current_branch, self._mark, Constant.stash_uuid)
 
     def _stash(self):
         """储藏文件
@@ -41,7 +42,7 @@ class GitCheckoutStash(object):
         # 分支有修改,先进行stash储藏
         is_modify, _ = check_repository_modify_status(self._current_path)
         if is_modify:
-            cmd = conf.stash_save % self._stash_uuid
+            cmd = GitCommand.stash_save % self._stash_uuid
             with cd(self._current_path):
                 run_cmd(cmd)
 
@@ -59,7 +60,7 @@ class GitCheckoutStash(object):
         """切换分支
         """
         # 切换到新分支
-        cmd = conf.git_checkout % self._new_branch
+        cmd = GitCommand.git_checkout % self._new_branch
         with cd(self._current_path):
             run_cmd(cmd)
 
@@ -72,9 +73,9 @@ class GitCheckoutStash(object):
             return
         for line in stash_out.splitlines():
             stash_string, _ = line.split(":", 1)
-            stash_save = "%s%s%s" % (self._new_branch, self._mark, conf.stash_uuid)
+            stash_save = "%s%s%s" % (self._new_branch, self._mark, Constant.stash_uuid)
             if stash_save.strip() in line:
-                cmd = conf.stash_pop % stash_string
+                cmd = GitCommand.stash_pop % stash_string
                 with cd(self._current_path):
                     run_cmd(cmd)
 

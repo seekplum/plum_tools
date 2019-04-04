@@ -6,7 +6,7 @@
 #     FileName: prn
 #         Desc: 上传文件到服务器
 #               命令: prn -s plum -p plum
-#               描述: 上传 ~/.plum_tools.yml 中指定项目的文件到ssh_config中配置的服务器
+#               描述: 上传 ~/..yml 中指定项目的文件到ssh_config中配置的服务器
 #       Author: seekplum
 #        Email: 1131909224m@sina.cn
 #     HomePage: seekplum.github.io
@@ -17,14 +17,14 @@
 import argparse
 import sys
 
-from plum_tools import conf
-from plum_tools.utils import print_error
-from plum_tools.utils import print_ok
-from plum_tools.utils import run_cmd
-from plum_tools.utils import merge_ssh_config
-from plum_tools.utils import get_file_abspath
-from plum_tools.utils import YmlConfig
-from plum_tools.exceptions import RunCmdError
+from .conf import PathConfig
+from .utils import print_error
+from .utils import run_cmd
+from .utils import merge_ssh_config
+from .utils import get_file_abspath
+from .utils import YmlConfig
+from .utils.printer import print_ok
+from .exceptions import RunCmdError
 
 
 def get_project_conf(project, src, dest, delete, exclude):
@@ -65,13 +65,13 @@ def get_project_conf(project, src, dest, delete, exclude):
         "delete": 0
     }
     """
-    yml_data = YmlConfig.parse_config_yml(conf.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
     data = {}
     try:
         data = yml_data["projects"][project]
     except KeyError:
         if not (src and dest):
-            print_error("yml文件: %s 中没有配置项目: %s 的信息" % (conf.plum_yml_path, project))
+            print_error("yml文件: %s 中没有配置项目: %s 的信息" % (PathConfig.plum_yml_path, project))
             sys.exit(1)
 
     # 设置默认值

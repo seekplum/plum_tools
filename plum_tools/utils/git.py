@@ -13,9 +13,9 @@
 """
 import os
 
-from plum_tools import conf
-from plum_tools.utils import cd
-from plum_tools.utils import run_cmd
+from ..conf import GitCommand
+from ..utils import cd
+from ..utils import run_cmd
 
 
 def get_current_branch_name():
@@ -24,7 +24,7 @@ def get_current_branch_name():
     :rtype str
     :return 当前分支名
     """
-    return run_cmd(conf.branch_abbrev).strip()
+    return run_cmd(GitCommand.branch_abbrev).strip()
 
 
 def check_is_git_repository(path):
@@ -67,17 +67,17 @@ def check_repository_modify_status(repo_path):
     :return output 命令输出
     """
     with cd(repo_path):
-        output = run_cmd(conf.status_default)
+        output = run_cmd(GitCommand.status_default)
 
     result = False
 
     # 检查是否落后、超前远程分支
-    if conf.pull_keyword in output or conf.push_keyword in output:
+    if GitCommand.pull_keyword in output or GitCommand.push_keyword in output:
         result = True
     else:
         with cd(repo_path):
             # 检查本地是否还有文件未提交
-            if run_cmd(conf.status_short):
+            if run_cmd(GitCommand.status_short):
                 result = True
     return result, output
 
@@ -101,7 +101,7 @@ def check_repository_stash(repo_path):
     :return output 命令输出
     """
     with cd(repo_path):
-        output = run_cmd(conf.stash_list)
+        output = run_cmd(GitCommand.stash_list)
     result = False
     if output:
         result = True

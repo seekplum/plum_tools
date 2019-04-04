@@ -15,9 +15,9 @@
 import re
 import sys
 
-from plum_tools import conf
-from plum_tools.utils.utils import print_error
-from plum_tools.utils.utils import YmlConfig
+from ..conf import PathConfig
+from .utils import print_error
+from .utils import YmlConfig
 
 
 class SSHConf(object):
@@ -44,7 +44,7 @@ class SSHConf(object):
             'port': 22
         }
         """
-        yml_config = YmlConfig.parse_config_yml(conf.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
         ssh_conf = yml_config["default_ssh_conf"]
         if self._user:
             ssh_conf["user"] = self._user
@@ -78,7 +78,7 @@ class SSHConf(object):
             'port': 22
         }
         """
-        yml_config = YmlConfig.parse_config_yml(conf.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
         default_ssh_conf = yml_config["default_ssh_conf"]
         ssh_conf = {
             'identityfile': self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
@@ -102,10 +102,10 @@ def get_prefix_host_ip(host_type):
     """
     type_key = "host_type_%s" % host_type
     try:
-        yml_config = YmlConfig.parse_config_yml(conf.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
         prefix_host = yml_config[type_key]
     except KeyError:
-        print_error("yml文件: %s 中缺少key: %s" % (conf.plum_yml_path, type_key))
+        print_error("yml文件: %s 中缺少key: %s" % (PathConfig.plum_yml_path, type_key))
         sys.exit(1)
 
     mark = "."
@@ -157,7 +157,7 @@ def get_ssh_alias_conf(host):
     begin = False
     # 查询默认的ssh信息
     ssh_conf = {}
-    with open(conf.ssh_config_path) as f:
+    with open(PathConfig.ssh_config_path, "r") as f:
         for line in f:
             data = line.split()
             # config配置都是两列
@@ -180,7 +180,7 @@ def get_ssh_alias_conf(host):
                 ssh_conf[key] = value
 
     if not begin:
-        print_error("未在 %s 中配置主机 %s 的ssh登陆信息" % (conf.ssh_config_path, host))
+        print_error("未在 %s 中配置主机 %s 的ssh登陆信息" % (PathConfig.ssh_config_path, host))
         sys.exit(1)
     return ssh_conf
 

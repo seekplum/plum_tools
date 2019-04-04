@@ -15,8 +15,8 @@
 import argparse
 import os
 
-from plum_tools import conf
-from plum_tools.utils import merge_ssh_config
+from .conf import SSHConfig
+from .utils import merge_ssh_config
 
 
 def get_login_ssh_cmd(hostname, user, port, identityfile):
@@ -45,7 +45,7 @@ def get_login_ssh_cmd(hostname, user, port, identityfile):
           '-o "UserKnownHostsFile=/dev/null" ' \
           '-o "StrictHostKeyChecking no" ' \
           '-o  "ConnectTimeout=%s" ' \
-          '%s@%s -p %d' % (identityfile, conf.connect_timeout, user, hostname, port)
+          '%s@%s -p %d' % (identityfile, SSHConfig.connect_timeout, user, hostname, port)
     return cmd
 
 

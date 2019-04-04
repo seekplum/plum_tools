@@ -15,12 +15,12 @@ import argparse
 
 from multiprocessing import Pool
 
-from plum_tools import conf
-from plum_tools.utils import print_warn
-from plum_tools.utils import print_error
-from plum_tools.utils import check_is_git_repository
-from plum_tools.utils import check_repository_modify_status
-from plum_tools.utils import check_repository_stash
+from .conf import Constant
+from .utils.printer import print_warn
+from .utils import print_error
+from .utils import check_is_git_repository
+from .utils import check_repository_modify_status
+from .utils import check_repository_stash
 
 
 def find_git_project_for_python(path):
@@ -94,7 +94,7 @@ def check_projects(projects, detail):
     :example False
     """
     targets = [path for project_path in projects for path in find_git_project_for_python(project_path)]
-    pool = Pool(processes=conf.processes_number)
+    pool = Pool(processes=Constant.processes_number)
     result = pool.map(check_project, targets)
     for item in result:
         # 仓库中文件没有被改动而且没有文件被储藏了

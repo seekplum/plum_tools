@@ -5,7 +5,7 @@ import shutil
 
 from setuptools import setup, find_packages
 
-from plum_tools import conf
+from plum_tools.conf import PathConfig
 
 version = '0.1.7.dev0'
 
@@ -54,8 +54,8 @@ def install():
 
 
 def init():
-    if not os.path.exists(conf.plum_yml_path):
-        shutil.copy(os.path.join(conf.root, conf.plum_yml_name), conf.home)
+    if not os.path.exists(PathConfig.plum_yml_path):
+        shutil.copy(os.path.join(PathConfig.root, PathConfig.plum_yml_name), PathConfig.home)
 
 
 if __name__ == '__main__':

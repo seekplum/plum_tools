@@ -21,14 +21,16 @@ from contextlib import contextmanager
 
 import paramiko
 
-from plum_tools import conf
-from plum_tools.utils import print_text
-from plum_tools.utils import print_error
-from plum_tools.utils import get_host_ip
-from plum_tools.utils import get_file_abspath
-from plum_tools.utils import YmlConfig
-from plum_tools.exceptions import RunCmdError
-from plum_tools.exceptions import SSHException
+from .conf import PathConfig
+from .conf import OsCommand
+from .conf import Constant
+from .utils import print_text
+from .utils import print_error
+from .utils import get_host_ip
+from .utils import get_file_abspath
+from .utils import YmlConfig
+from .exceptions import RunCmdError
+from .exceptions import SSHException
 
 
 class PSSHClient(paramiko.SSHClient):
@@ -206,7 +208,7 @@ def get_ssh_config(hostname, username, port, identityfile, password):
         'port': 22
     }
     """
-    yml_data = YmlConfig.parse_config_yml(conf.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
     default_ssh_conf = yml_data["default_ssh_conf"]
     ssh_conf = {
         "hostname": hostname,
@@ -233,7 +235,7 @@ def get_ipmi_ip(host, host_type):
     :return ipmi_ip 带外ip
     :example ipmi_ip 10.10.10.101
     """
-    yml_data = YmlConfig.parse_config_yml(conf.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
     hostname = get_host_ip(host, host_type)
     item = hostname.split(".")
     item[-1] = str(int(item[-1]) + yml_data["ipmi_interval"])
@@ -322,13 +324,13 @@ def main():
             for short_ip in ip_list:
                 ipmi_ip = get_ipmi_ip(short_ip, host_type)
 
-                cmd = conf.ipmi_command % (ipmi_ip, ipmi_username, ipmi_password, ipmi_command)
+                cmd = OsCommand.ipmi_command % (ipmi_ip, ipmi_username, ipmi_password, ipmi_command)
                 print_text("cmd: %s" % cmd)
                 try:
-                    output = ssh.run_cmd(cmd, timeout=conf.command_timeout)
+                    output = ssh.run_cmd(cmd, timeout=Constant.command_timeout)
                     print_text("output: %s\n" % output)
                 except socket.timeout:
-                    print_error("执行命令: %s 超时，超时时间为: %s秒" % (cmd, conf.command_timeout))
+                    print_error("执行命令: %s 超时，超时时间为: %s秒" % (cmd, Constant.command_timeout))
                 except RunCmdError as e:
                     print_error(e.err_msg)
     except SSHException as e:
