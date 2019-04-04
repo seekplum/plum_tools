@@ -14,8 +14,8 @@
 import os
 
 from ..conf import GitCommand
-from ..utils import cd
-from ..utils import run_cmd
+from .utils import cd
+from .utils import run_cmd
 
 
 def get_current_branch_name():

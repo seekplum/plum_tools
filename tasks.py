@@ -38,10 +38,14 @@ def tupload(ctx, name="private"):
 
 
 @task(clean)
-def check(ctx, j=4):
+def check(ctx, job=4):
     """检查代码规范
     """
-    ctx.run("pylint -j %s --output-format colorized  --disable=all --enable=E,F plum_tools" % j)
+    ctx.run("pylint --rcfile=.pylintrc -j %s --output-format parseable plum_tools" % job,
+            echo=True)
+    ctx.run("pylint --rcfile=.pylintrc -j %s --output-format parseable tests --ignore=test.py "
+            "--disable=C0111,W0201,R0201" % job,
+            echo=True)
 
 
 @task(clean)

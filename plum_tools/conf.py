@@ -19,12 +19,27 @@ import six
 
 
 class ClsReadOnlyClass(type):
-    def __setattr__(self, key, value):
+    """类属性只读
+    """
+
+    def __setattr__(cls, key, value):
+        """修改属性式抛出异常
+        """
         raise ValueError("%s is read-only" % key)
 
 
 class ReadOnlyClass(six.with_metaclass(ClsReadOnlyClass)):
+    """所有属性只读
+    """
+
+    def __init__(self):
+        """初始化
+        """
+        pass
+
     def __setattr__(self, key, value):
+        """修改属性式抛出异常
+        """
         raise ValueError("%s is read-only" % key)
 
 
@@ -48,7 +63,7 @@ class OsCommand(ReadOnlyClass):
     """
     find_command = 'find %s -name ".git"'  # 通过系统命令查找文件路径
     ping_command = "ping -W 3 -c 1 %s"  # ping命令 -W 超时时间 -c 次数
-    ipmi_command = "ipmitool -I lanplus -H %s -U %s -P %s %s"  # ipmi命令
+    ipmi_command = "ipmitool -I lanplus -H %(ip)s -U %(user)s -P %(password)s %(command)s"  # ipmi命令
     stat_command = "stat %s"
 
 

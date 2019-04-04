@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -16,7 +15,7 @@ import os
 import mock
 import pytest
 
-from plum_tools.utils import cd
+from plum_tools.utils.utils import cd
 from plum_tools.utils.git import get_current_branch_name
 from plum_tools.utils.git import check_is_git_repository
 from plum_tools.utils.git import check_repository_modify_status

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -51,15 +50,14 @@ def test_get_project_conf(project, src, dest, delete, exclude):
         g.assert_called_with(src)
 
 
-class TestUpload(object):
-    def test_translate(self, capsys):
-        hostname, user, port, identityfile, src, dest, exclude, delete = \
-            "1.1.1.1", "user", 22, "", "/tmp", "/tmp", [], 0
-        u = Upload(hostname, user, port, identityfile, src, dest, exclude, delete)
-        with mock.patch("plum_tools.prn.run_cmd") as m:
-            u.translate()
-            m.call_args('rsync -rtv -e \'ssh -p 22 -i  -o "UserKnownHostsFile=/dev/null" '
-                        '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\' /tmp user@1.1.1.:/tmp')
-            captured = capsys.readouterr()
-            output = captured.out
-            assert output == u'[32m上传目录 /tmp 到 user@1.1.1.1 服务器(端口: 22) /tmp 目录成功[0m\n'
+def test_translate(capsys):
+    hostname, user, port, identityfile, src, dest, exclude, delete = \
+        "1.1.1.1", "user", 22, "", "/tmp", "/tmp", [], 0
+    u = Upload(hostname, user, port, identityfile, src, dest, exclude, delete)
+    with mock.patch("plum_tools.prn.run_cmd") as m:
+        u.translate()
+        m.call_args('rsync -rtv -e \'ssh -p 22 -i  -o "UserKnownHostsFile=/dev/null" '
+                    '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\' /tmp user@1.1.1.:/tmp')
+        captured = capsys.readouterr()
+        output = captured.out
+        assert output == u'[32m上传目录 /tmp 到 user@1.1.1.1 服务器(端口: 22) /tmp 目录成功[0m\n'

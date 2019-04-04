@@ -21,8 +21,24 @@ from .utils import YmlConfig
 
 
 class SSHConf(object):
+    """SSH相关配置
+    """
 
     def __init__(self, user, port, identityfile):
+        """初始
+
+        :param user ssh登陆使用的用户名
+        :type user str
+        :example user 10.10.100.1
+
+        :param port ssh登陆使用的端口号
+        :type port int
+        :example port 22
+
+        :param identityfile 主机ip
+        :type identityfile str
+        :example identityfile ~/.ssh/id_rsa
+        """
         self._user = user
         self._port = port
         self._identityfile = identityfile

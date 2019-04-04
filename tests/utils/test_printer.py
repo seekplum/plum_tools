@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -23,7 +22,6 @@ from plum_tools.utils.printer import print_ok
 from plum_tools.utils.printer import print_warn
 from plum_tools.utils.printer import print_text
 
-from plum_tools.compat import PY2
 from plum_tools.compat import implements_to_unicode
 
 

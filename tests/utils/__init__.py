@@ -1,11 +1,9 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
 #=============================================================================
 #  ProjectName: plum-tools
 #     FileName: __init__.py
-#         Desc: 
 #       Author: seekplum
 #        Email: 1131909224m@sina.cn
 #     HomePage: seekplum.github.io

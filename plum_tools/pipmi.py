@@ -24,33 +24,42 @@ import paramiko
 from .conf import PathConfig
 from .conf import OsCommand
 from .conf import Constant
-from .utils import print_text
-from .utils import print_error
-from .utils import get_host_ip
-from .utils import get_file_abspath
-from .utils import YmlConfig
+from .utils.printer import print_text
+from .utils.printer import print_error
+from .utils.sshconf import get_host_ip
+from .utils.utils import get_file_abspath
+from .utils.utils import YmlConfig
 from .exceptions import RunCmdError
 from .exceptions import SSHException
 
 
 class PSSHClient(paramiko.SSHClient):
+    """SSH连接客户端
+    """
+
     def __init__(self, host):
+        """初始化
+
+        :param host 主机ip
+        :type host str
+        :example host 10.10.100.1
+        """
         super(PSSHClient, self).__init__()
         self.host = host
 
     def run_cmd(self, cmd, is_raise_exception=True, **kwargs):
         """执行系统命令
-        
+
         :param cmd 要执行的命令
         :type cmd str
         :example cmd hostname
-        
+
         :param is_raise_exception 执行命令有错误信息是否抛出异常，默认值为True
-        :type is_raise_exception bool 
+        :type is_raise_exception bool
         :example is_raise_exception False
-        
+
         :raise RunCmdError
-        
+
         :rtype out_msg str
         :return out_msg 命令执行结果
         """
@@ -66,6 +75,8 @@ class PSSHClient(paramiko.SSHClient):
 
 
 class SSHTool(object):
+    """SSH连接工具类
+    """
 
     def __init__(self, hostname, username, port, conn_timeout=3, password=None, identityfile=None):
         """初始化
@@ -243,7 +254,12 @@ def get_ipmi_ip(host, host_type):
     return ipmi_ip
 
 
-def main():
+def get_args():
+    """获取程序参数
+
+    :rtype argparse.Namespace
+    :return 命令行参数
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("-l", "--login",
                         required=True,
@@ -307,24 +323,75 @@ def main():
                         help="specify ipmi password")
 
     args = parser.parse_args()
-    host, host_type, ip_list = args.host, args.type, args.servers
-    username, port, identityfile, password = args.user, args.port, args.identityfile, args.password
+    return args
 
-    ipmi_username, ipmi_password, ipmi_command = args.Username, args.Password, args.command
 
-    # 查询需要登陆的主机ip
-    hostname = get_host_ip(host, host_type)
+class Parser(object):
+    """解析命令行参数
+    """
 
-    # 查询登陆需要的ssh配置信息
-    ssh_conf = get_ssh_config(hostname, username, port, identityfile, password)
+    def __init__(self, args):
+        """初始化
+
+        :param args 命令行参数
+        :type args argparse.Namespace
+        """
+        self._args = args
+
+    def _parser_login_ip(self):
+        """解析登陆主机需要的ip
+
+        :return 主机ip
+        :rtype str
+        """
+        return get_host_ip(self._args.host, self._args.type)
+
+    def parser_ssh_conf(self):
+        """解析登陆需要的ssh配置信息
+
+        :rtype dict
+        :return ssh配置信息
+        """
+        return get_ssh_config(self._parser_login_ip(), self._args.user, self._args.port, self._args.identityfile,
+                              self._args.password)
+
+    def parser_ip_list(self):
+        """解析带外IP集合
+
+        :rtype list
+        :return 带外IP集合
+        """
+        return self._args.servers
+
+    def parser_ipmi_auth(self, short_ip):
+        """解析带外认证信息
+
+        :param short_ip 简写IP
+        :type short_ip str
+        :example short_ip 1
+
+        :return 带外认证信息
+        :rtype dict
+        """
+        return {
+            "ip": get_ipmi_ip(short_ip, self._args.type),
+            "user": self._args.Username,
+            "password": self._args.Password,
+            "command": self._args.command
+        }
+
+
+def main():
+    """程序主入口
+    """
+    args = get_args()
+    p = Parser(args)
 
     try:
-        with get_ssh(**ssh_conf) as ssh:
+        with get_ssh(**p.parser_ssh_conf()) as ssh:
             # 对每台机器执行 ipmi 命令
-            for short_ip in ip_list:
-                ipmi_ip = get_ipmi_ip(short_ip, host_type)
-
-                cmd = OsCommand.ipmi_command % (ipmi_ip, ipmi_username, ipmi_password, ipmi_command)
+            for short_ip in p.parser_ip_list():
+                cmd = OsCommand.ipmi_command % p.parser_ipmi_auth(short_ip)
                 print_text("cmd: %s" % cmd)
                 try:
                     output = ssh.run_cmd(cmd, timeout=Constant.command_timeout)

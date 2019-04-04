@@ -18,11 +18,11 @@ import argparse
 import sys
 
 from .conf import PathConfig
-from .utils import print_error
-from .utils import run_cmd
-from .utils import merge_ssh_config
-from .utils import get_file_abspath
-from .utils import YmlConfig
+from .utils.printer import print_error
+from .utils.sshconf import merge_ssh_config
+from .utils.utils import run_cmd
+from .utils.utils import get_file_abspath
+from .utils.utils import YmlConfig
 from .utils.printer import print_ok
 from .exceptions import RunCmdError
 
@@ -94,6 +94,9 @@ def get_project_conf(project, src, dest, delete, exclude):
 
 
 class Upload(object):
+    """上传文件到服务器
+    """
+
     def __init__(self, hostname, user, port, identityfile, src, dest, exclude, delete):
         """文件上传功能
 
@@ -221,7 +224,7 @@ def upload_file(host_list, host_type, user, port, identityfile, pro_conf):
 
 
 def main():
-    """主函数
+    """程序主入口
     """
     parser = argparse.ArgumentParser()
     parser.add_argument("-s", "--servers",

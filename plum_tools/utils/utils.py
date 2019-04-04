@@ -52,6 +52,7 @@ class cd(object):
         "/tmp"
         """
         self._new_path = new_path
+        self._current_path = None
 
     def __enter__(self):
         self._current_path = os.getcwd()
@@ -62,6 +63,8 @@ class cd(object):
 
 
 class YmlConfig(object):
+    """解析yml配置
+    """
     _yml_data = {}
 
     @classmethod
@@ -149,7 +152,9 @@ def run_cmd(cmd, is_raise_exception=True, timeout=None):
     :raise RunCmdTimeout 命令执行超时
     """
 
-    def raise_timeout_exception(signum, frame):
+    def raise_timeout_exception(*_):
+        """通过抛出异常达到超时效果
+        """
         raise RunCmdTimeout("run `%s` timeout, timeout is %s" % (cmd, timeout))
 
     # 设置指定时间后出发handler
@@ -187,7 +192,7 @@ def get_file_abspath(path):
     def replace_path(old_path):
         """替换路径中的空格
         """
-        return old_path.replace(" ", "\ ")
+        return old_path.replace(r" ", r"\ ")
 
     # 系统直接可以找到
     if os.path.exists(path):
@@ -201,10 +206,10 @@ def get_file_abspath(path):
     # 获取操作系统类型
     system_type = platform.system()
     if system_type == "Linux":
-        pattern = re.compile('File: "(.*)"')
+        pattern = re.compile(r'File: "(.*)"')
     # mac系统
     elif system_type == "Darwin":
-        pattern = re.compile('"\s+\d+\s+\d+\s+\d+(.*)$')
+        pattern = re.compile(r'"\s+\d+\s+\d+\s+\d+(.*)$')
     else:
         raise SystemTypeError("此项功能仅支持 Linux / Darwin(mac)")
     match = pattern.search(output)

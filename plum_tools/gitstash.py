@@ -19,17 +19,30 @@ import argparse
 
 from .conf import GitCommand
 from .conf import Constant
-from .utils import cd
-from .utils import run_cmd
-from .utils import check_repository_modify_status
-from .utils import check_repository_stash
-from .utils import get_current_branch_name
+from .utils.utils import cd
+from .utils.utils import run_cmd
+from .utils.git import check_repository_modify_status
+from .utils.git import check_repository_stash
+from .utils.git import get_current_branch_name
 from .utils.printer import print_warn
 from .exceptions import RunCmdError
 
 
 class GitCheckoutStash(object):
+    """切换分支前储藏文件
+    """
+
     def __init__(self, current_branch, new_branch):
+        """初始化信息
+
+        :param current_branch: 当前分支名
+        :type current_branch str
+        :example current_branch master
+
+        :param new_branch: 新的分支名
+        :type new_branch str
+        :example new_branch release-1.0.0
+        """
         self._current_branch = current_branch
         self._current_path = os.getcwd()  # 当前执行命令的路径
         self._new_branch = new_branch
@@ -91,6 +104,8 @@ class GitCheckoutStash(object):
 
 
 def main():
+    """程序主入口
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="branch",
                         action="store",

@@ -18,9 +18,9 @@ from multiprocessing import Pool
 from .conf import OsCommand
 from .conf import Constant
 from .exceptions import RunCmdError
-from .utils import print_text
-from .utils import run_cmd
-from .utils import get_prefix_host_ip
+from .utils.printer import print_text
+from .utils.utils import run_cmd
+from .utils.sshconf import get_prefix_host_ip
 
 
 def ping(ip):
@@ -56,6 +56,8 @@ def run(host_type):
 
 
 def main():
+    """程序主入口
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument("-t" "--type",
                         action="store",

@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -18,21 +17,7 @@ import sys
 PY2 = sys.version_info[0] == 2
 
 if PY2:
-    text_type = unicode
-
-
-    def implements_to_string(cls):
-        if isinstance(cls, str):
-            return cls
-
-        if isinstance(cls, unicode):
-            cls = cls.encode('utf-8')
-        else:
-            cls = implements_to_unicode("%s" % cls)
-        return cls
-
-
-    def implements_to_unicode(cls):
+    exec("""def implements_to_unicode(cls):
         if isinstance(cls, unicode):
             return cls
 
@@ -40,15 +25,10 @@ if PY2:
             cls = cls.decode('utf-8')
         else:
             cls = implements_to_unicode("%s" % cls)
-        return cls
+        return cls""")
 
 else:
-    text_type = str
-
-
-    def implements_to_string(x):
-        return "%s" % x
-
-
-    def implements_to_unicode(x):
-        return "%s" % x
+    def implements_to_unicode(cls):
+        """转换编码为unicode
+        """
+        return "%s" % cls

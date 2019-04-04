@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 # -*- coding: utf-8 -*-
 
 """
@@ -35,6 +34,9 @@ class TestClsReadOnlyClass(object):
         class MyClass(six.with_metaclass(ClsReadOnlyClass)):
             name = "test"
             value = "test"
+
+            def __init__(self):
+                self.name = None
 
         m = MyClass()
         m.name = "test2"
@@ -119,7 +121,7 @@ class TestOsCommand(object):
         assert self.o.find_command == 'find %s -name ".git"'
 
     def test_ipmi_command(self):
-        assert self.o.ipmi_command == 'ipmitool -I lanplus -H %s -U %s -P %s %s'
+        assert self.o.ipmi_command == 'ipmitool -I lanplus -H %(ip)s -U %(user)s -P %(password)s %(command)s'
 
     def test_ping_command(self):
         assert self.o.ping_command == 'ping -W 3 -c 1 %s'

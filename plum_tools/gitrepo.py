@@ -17,10 +17,10 @@ from multiprocessing import Pool
 
 from .conf import Constant
 from .utils.printer import print_warn
-from .utils import print_error
-from .utils import check_is_git_repository
-from .utils import check_repository_modify_status
-from .utils import check_repository_stash
+from .utils.printer import print_error
+from .utils.git import check_is_git_repository
+from .utils.git import check_repository_modify_status
+from .utils.git import check_repository_stash
 
 
 def find_git_project_for_python(path):
@@ -35,7 +35,7 @@ def find_git_project_for_python(path):
 
 
     """
-    for root, dirs, file_names in os.walk(path):
+    for root, _, _ in os.walk(path):
         if check_is_git_repository(root):
             yield root
 
@@ -109,7 +109,7 @@ def check_projects(projects, detail):
 
 
 def main():
-    """主函数
+    """程序主入口
     """
     parser = argparse.ArgumentParser()
 

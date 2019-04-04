@@ -16,7 +16,7 @@ import argparse
 import os
 
 from .conf import SSHConfig
-from .utils import merge_ssh_config
+from .utils.sshconf import merge_ssh_config
 
 
 def get_login_ssh_cmd(hostname, user, port, identityfile):
@@ -83,6 +83,8 @@ def login(host, host_type, user, port, identityfile):
 
 
 def main():
+    """程序主入口
+    """
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="host",
                         action="store",
