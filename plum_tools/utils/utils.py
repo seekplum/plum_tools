@@ -62,7 +62,7 @@ class cd(object):
 
 
 class YmlConfig(object):
-    _yml_data = None
+    _yml_data = {}
 
     @classmethod
     def parse_config_yml(cls, yml_path):
@@ -99,7 +99,7 @@ class YmlConfig(object):
                 try:
                     data = yml_schema.validate(yaml.load(f.read()))
                 except SchemaError as e:
-                    print_error("yml文件: %s 格式错误, %s, 请参照以下格式进行修改" % (PathConfig.plum_yml_path, e.message))
+                    print_error("yml文件: %s 格式错误, %s, 请参照以下格式进行修改" % (PathConfig.plum_yml_path, e.args[0]))
                     with open(os.path.join(PathConfig.root, PathConfig.plum_yml_name)) as fp:
                         text = fp.read()
                     print_text(text)

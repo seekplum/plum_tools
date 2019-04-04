@@ -7,13 +7,13 @@ name = "pypi"
 invoke = "*"
 bumpversion = "*"
 pytest = "*"
-pylint = "*"
+pylint = "==1.9.3"
+mock = "*"
 twine = "*"
 
 [packages]
-"functools32" = "==3.2.3.post2"
 pyyaml = "==3.12"
 schema = "==0.6.8"
+paramiko = "==2.4.2"
 
 [requires]
-python_version = "2.7"

@@ -29,7 +29,8 @@ def install():
         install_requires=[
             "argparse",
             "pyyaml",
-            "schema"
+            "schema",
+            "paramiko",
         ],
         # scripts=[
         #     "bin/gitrepo"

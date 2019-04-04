@@ -59,3 +59,9 @@ def unittest(ctx):
     """运行单元测试和计算测试覆盖率
     """
     ctx.run("export PYTHONPATH=`pwd` && pytest --cov=plum_tools tests", echo=True)
+
+
+@task
+def lock(ctx):
+    ctx.run("if [ $(ls -l Pipfile.lock | wc -l) -gt 0 ];then "
+            "pipenv lock -v --keep-outdated ; else pipenv lock ; fi", echo=True)

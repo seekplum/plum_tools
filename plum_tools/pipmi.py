@@ -334,5 +334,5 @@ def main():
                 except RunCmdError as e:
                     print_error(e.err_msg)
     except SSHException as e:
-        print_error(e.message)
+        print_error(e.args[0])
         sys.exit(1)

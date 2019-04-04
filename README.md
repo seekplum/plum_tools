@@ -1,5 +1,7 @@
 # linux 小工具
 
+[![travis-ci](https://travis-ci.org/seekplum/plum_tools.svg?branch=master)](https://travis-ci.org/seekplum/plum_tools)
+
 ## gitrepo
 
 查找指定路径下所有被改动的git仓库

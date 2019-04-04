@@ -1,0 +1,16 @@
+os: linux
+sudo: false
+language: python
+python:
+  - 2.7
+#  - 3.3
+#  - 3.4
+#  - 3.5
+  - 3.6
+install:
+  - pip install pipenv
+  - pipenv install --dev --skip-lock
+script:
+  - inv check
+after_success:
+  - inv unittest
