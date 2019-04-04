@@ -1,11 +1,6 @@
 # -*- coding: utf-8 -*-
 
-import os
-
 from invoke import task
-
-root = os.path.dirname(os.path.abspath(__file__))
-name = 'plum_tools'
 
 
 @task
@@ -28,23 +23,18 @@ def sdist(ctx):
     ctx.run('python setup.py sdist', echo=True)
 
 
-@task(sdist)
-def upload(ctx, r="private"):
+@task(clean)
+def upload(ctx, name="private"):
     """上传包到指定pip源
     """
-    ctx.run('python setup.py sdist upload -r %s' % r, echo=True)
+    ctx.run('python setup.py sdist upload -r %s' % name, echo=True)
 
 
 @task(sdist)
-def register(ctx, n, r="private"):
-    ctx.run('twine register %s -r %s' % (n, r), echo=True, warn=True)
-
-
-@task(register)
-def tupload(ctx, n, r="private"):
+def tupload(ctx, name="private"):
     """上传包到指定pip源
     """
-    ctx.run('twine upload %s -r %s' % (n, r), echo=True)
+    ctx.run('twine upload dist/* -r %s' % name, echo=True)
 
 
 @task(clean)
