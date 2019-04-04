@@ -15,6 +15,8 @@
 
 from __future__ import print_function
 
+from ..compat import implements_to_unicode
+
 
 def get_color(c, s):
     """获取带背景色的字符串
@@ -30,7 +32,7 @@ def get_color(c, s):
     :rtype str
     :return: 带颜色的字符串
     """
-    return "\033[3%sm%s\033[0m" % (c, s)
+    return "\033[3%sm%s\033[0m" % (c, implements_to_unicode(s))
 
 
 def get_red(s):

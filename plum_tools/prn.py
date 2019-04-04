@@ -122,7 +122,7 @@ class Upload(object):
         :example dest /tmp
 
         :param exclude 需要过滤的目录
-        :type exclude str
+        :type exclude list
         :example exclude [".git"]
 
         :param delete 是否删除远程机器目录下非本次上传的文件

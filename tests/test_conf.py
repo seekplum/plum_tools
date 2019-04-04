@@ -42,7 +42,7 @@ class TestClsReadOnlyClass(object):
 
         with pytest.raises(ValueError) as err:
             MyClass.name = "tes2"
-        assert err.value.message == "name is read-only"
+        assert err.value.args[0] == "name is read-only"
 
 
 class TestReadOnlyClass(object):
@@ -57,16 +57,16 @@ class TestReadOnlyClass(object):
         with pytest.raises(ValueError) as err:
             m = MyClass()
             m.name = "test2"
-        assert err.value.message == "name is read-only"
+        assert err.value.args[0] == "name is read-only"
 
         with pytest.raises(ValueError) as err:
             m = MyClass()
             m.new_name = "test2"
-        assert err.value.message == "new_name is read-only"
+        assert err.value.args[0] == "new_name is read-only"
 
         with pytest.raises(ValueError) as err:
             MyClass.name = "tes2"
-        assert err.value.message == "name is read-only"
+        assert err.value.args[0] == "name is read-only"
 
 
 class TestGitCommand(object):
