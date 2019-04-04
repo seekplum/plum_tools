@@ -1,6 +1,6 @@
 # linux 小工具
 
-[![travis-ci](https://travis-ci.org/seekplum/plum_tools.svg?branch=master)](https://travis-ci.org/seekplum/plum_tools)
+[![LICENSE](https://img.shields.io/github/license/seekplum/plum_tools.svg)](https://github.com/seekplum/plum_tools/blob/master/LICENSE)[![travis-ci](https://travis-ci.org/seekplum/plum_tools.svg?branch=master)](https://travis-ci.org/seekplum/plum_tools)[![coveralls](https://coveralls.io/repos/github/seekplum/plum_tools/badge.svg?branch=master)](https://coveralls.io/github/seekplum/plum_tools?branch=master) [![pypi version](https://img.shields.io/pypi/v/plum_tools.svg)](https://pypi.python.org/pypi/plum_tools) [![pyversions](https://img.shields.io/pypi/pyversions/plum_tools.svg)](https://pypi.python.org/pypi/plum_tools)
 
 ## gitrepo
 

@@ -11,7 +11,7 @@ from tests.common import curr_path
 
 
 def main():
-    print("测试目录: {}".format(curr_path))
+    print("测试目录: %s" % curr_path)
 
     file_path = os.path.join(curr_path, "", "test_prn.py::test_get_project_conf")
     if len(sys.argv) > 1:

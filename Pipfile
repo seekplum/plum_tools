@@ -7,13 +7,17 @@ name = "pypi"
 invoke = "*"
 bumpversion = "*"
 pytest = "*"
+pytest-cov = "*"
+pytest-benchmark = "*"
 pylint = "==1.9.3"
 mock = "*"
 twine = "*"
+coverage = "*"
+coveralls = "*"
 
 [packages]
-pyyaml = "==3.12"
-schema = "==0.6.8"
-paramiko = "==2.4.2"
+pyyaml = "*"
+schema = "*"
+paramiko = "*"
 
 [requires]

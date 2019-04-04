@@ -51,7 +51,7 @@ def tupload(ctx, n, r="private"):
 def check(ctx, j=4):
     """检查代码规范
     """
-    ctx.run("pylint -j %s --output-format colorized   --disable=all --enable=E,F plum_tools" % j)
+    ctx.run("pylint -j %s --output-format colorized  --disable=all --enable=E,F plum_tools" % j)
 
 
 @task(clean)
@@ -61,7 +61,14 @@ def unittest(ctx):
     ctx.run("export PYTHONPATH=`pwd` && pytest --cov=plum_tools tests", echo=True)
 
 
+@task(clean)
+def coverage(ctx):
+    """运行单元测试和计算测试覆盖率
+    """
+    ctx.run("export PYTHONPATH=`pwd` && coverage run --source=plum_tools -m pytest tests && coverage report -m",
+            echo=True)
+
+
 @task
 def lock(ctx):
-    ctx.run("if [ $(ls -l Pipfile.lock | wc -l) -gt 0 ];then "
-            "pipenv lock -v --keep-outdated ; else pipenv lock ; fi", echo=True)
+    ctx.run('if [ -f "Pipfile.lock" ]; then pipenv lock -v --keep-outdated ; else pipenv lock ; fi', echo=False)

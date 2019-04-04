@@ -23,7 +23,6 @@ from plum_tools.utils.git import check_repository_modify_status
 from plum_tools.utils.git import check_repository_stash
 
 from tests.common import make_temp_dir
-from tests.common import make_temp_file
 
 
 @pytest.mark.parametrize("mock_data, data", [
