@@ -1,0 +1,53 @@
+#!/usr/bin/env bash
+exit_code=0
+current_path=`pwd`
+file_path=$(dirname $0)
+
+
+print_error () {
+    echo -e "\033[31m$1\033[0m"
+}
+
+print_ok () {
+    echo -e "\033[32m$1\033[0m"
+}
+
+print_warn () {
+    echo -e "\033[33m$1\033[0m"
+}
+
+run_unittest() {
+    desc="Run UnitTest"
+    echo ${desc}
+    inv unittest
+    exit_code=$?
+    check ${desc}
+}
+
+check_code_style() {
+    desc="Check code style"
+    echo ${desc}
+    inv check
+    exit_code=$?
+    check ${desc}
+}
+
+
+check (){
+    if [ ${exit_code} -ne 0 ]; then
+        print_error "$* failed."
+        exit ${exit_code}
+    else
+        print_ok "$* success"
+    fi
+}
+
+main() {
+    check_code_style
+    run_unittest
+}
+
+main
+
+exit ${exit_code}
+

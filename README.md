@@ -2,6 +2,14 @@
 
 [![LICENSE](https://img.shields.io/github/license/seekplum/plum_tools.svg)](https://github.com/seekplum/plum_tools/blob/master/LICENSE)[![travis-ci](https://travis-ci.org/seekplum/plum_tools.svg?branch=master)](https://travis-ci.org/seekplum/plum_tools)[![coveralls](https://coveralls.io/repos/github/seekplum/plum_tools/badge.svg?branch=master)](https://coveralls.io/github/seekplum/plum_tools?branch=master) [![pypi version](https://img.shields.io/pypi/v/plum_tools.svg)](https://pypi.python.org/pypi/plum_tools) [![pyversions](https://img.shields.io/pypi/pyversions/plum_tools.svg)](https://pypi.python.org/pypi/plum_tools)
 
+## 项目的git hooks
+
+由于钩子文件无法提交到 `.git` 中，所以在第一次clone项目中需要执行以下命令，把钩子放到指定位置
+
+```bash
+cp -r hooks/* .git/hooks/
+```
+
 ## gitrepo
 
 查找指定路径下所有被改动的git仓库
