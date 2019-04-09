@@ -52,7 +52,7 @@ def check(ctx, job=4):
 def unittest(ctx):
     """运行单元测试和计算测试覆盖率
     """
-    ctx.run("export PYTHONPATH=`pwd` && pytest --cov=plum_tools tests", echo=True)
+    ctx.run("export PYTHONPATH=`pwd` && pytest --cov=plum_tools tests", encoding="utf-8", pty=True, echo=True)
 
 
 @task(clean)
@@ -60,7 +60,7 @@ def coverage(ctx):
     """运行单元测试和计算测试覆盖率
     """
     ctx.run("export PYTHONPATH=`pwd` && coverage run --source=plum_tools -m pytest tests && coverage report -m",
-            echo=True)
+            encoding="utf-8", pty=True, echo=True)
 
 
 @task

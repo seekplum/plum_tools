@@ -48,7 +48,7 @@ class cd(object):
         :example new_path "/tmp"
 
         >>> with cd("/tmp"):
-        ...     print run_cmd("pwd")
+        ...     print(run_cmd("pwd"))
         "/tmp"
         """
         self._new_path = new_path
@@ -100,7 +100,7 @@ class YmlConfig(object):
         try:
             with open(yml_path) as f:
                 try:
-                    data = yml_schema.validate(yaml.load(f.read()))
+                    data = yml_schema.validate(yaml.safe_load(f.read()))
                 except SchemaError as e:
                     print_error("yml文件: %s 格式错误, %s, 请参照以下格式进行修改" % (PathConfig.plum_yml_path, e.args[0]))
                     with open(os.path.join(PathConfig.root, PathConfig.plum_yml_name)) as fp:
