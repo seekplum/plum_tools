@@ -39,14 +39,24 @@ def ping(ip):
         return ip
 
 
-def run(host_type):
+def run(host_type, prefix_host):
     """打印IP段内所有能ping通的ip
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
     :type host_type str
     :example host_type default
+
+    :param prefix_host: 主机前缀
+    :type prefix_host str
+    :example prefix_host 1.1.1
     """
-    prefix_host = get_prefix_host_ip(host_type)
+    if not prefix_host:
+        prefix_host = get_prefix_host_ip(host_type)
+
+    mark = "."
+    if not prefix_host.endswith(mark):
+        prefix_host += mark
+
     pool = Pool(processes=Constant.processes_number)
     targets = ["%s%d" % (prefix_host, i) for i in range(1, 255)]
     result = pool.map(ping, targets)
@@ -65,6 +75,12 @@ def main():
                         dest="type",
                         default="default",
                         help="host type")
+    parser.add_argument("-p" "--prefix-host",
+                        action="store",
+                        required=False,
+                        dest="prefix_host",
+                        default=None,
+                        help="host prefix")
 
     args = parser.parse_args()
-    run(args.type)
+    run(args.type, args.prefix_host)

@@ -148,9 +148,9 @@ class TestSSHConf(object):
 
 
 @pytest.mark.parametrize("host_type, result", [
-    (1, "1.1.1."),
+    (1, "1.1.1"),
     (2, "2.2.2."),
-    ("test", "3.3.3.")
+    ("test", "3.3.3")
 ])
 def test_get_prefix_host_ip(host_type, result):
     with mock.patch("plum_tools.utils.utils.YmlConfig.parse_config_yml", return_value={

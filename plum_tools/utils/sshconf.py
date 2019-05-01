@@ -114,7 +114,7 @@ def get_prefix_host_ip(host_type):
 
     :rtype prefix_host str
     :return prefix_host IP前三段值
-    :example prefix_host 10.10.100.
+    :example prefix_host 10.10.100
     """
     type_key = "host_type_%s" % host_type
     try:
@@ -123,11 +123,6 @@ def get_prefix_host_ip(host_type):
     except KeyError:
         print_error("yml文件: %s 中缺少key: %s" % (PathConfig.plum_yml_path, type_key))
         sys.exit(1)
-
-    mark = "."
-
-    if prefix_host and not prefix_host.endswith(mark):
-        prefix_host += mark
     return prefix_host
 
 
