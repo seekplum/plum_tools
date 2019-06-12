@@ -112,7 +112,7 @@ class Upload(object):
         :type port int
         :example port 22
 
-        :param identityfile 主机ip
+        :param identityfile 私钥文件路径
         :type identityfile str
         :example identityfile ~/.ssh/id_rsa
 
@@ -135,7 +135,7 @@ class Upload(object):
         self._hostname = hostname
         self._user = user
         self._port = port
-        self._identityfile = identityfile
+        self._identity_file = identityfile
         self._src = src
         self._dest = dest
         self._exclude = exclude
@@ -154,7 +154,7 @@ class Upload(object):
         else:
             ssh_cmd = "ssh"
         option.append("-e '%s -i %s -o \"%s\" -o \"%s\" -o \"%s\"'" % (
-            ssh_cmd, self._identityfile, known_host, host_key, timeout))
+            ssh_cmd, self._identity_file, known_host, host_key, timeout))
         if self._delete:
             option.append(" --delete")
         for item in set(self._exclude):
@@ -178,7 +178,7 @@ class Upload(object):
                 self._src, self._user, self._hostname, self._port, self._dest, e.err_msg))
 
 
-def upload_file(host_list, host_type, user, port, identityfile, pro_conf):
+def upload_file(host_list, host_type, user, port, identity_file, projects_conf):
     """上传文件到服务器上
 
     :param host_list 服务器列表
@@ -201,26 +201,25 @@ def upload_file(host_list, host_type, user, port, identityfile, pro_conf):
     :type user str
     :example user root
 
-    :param identityfile ssh登陆私钥文件路径
-    :type identityfile str
-    :example identityfile ~/.ssh/id_rsa
+    :param identity_file ssh登陆私钥文件路径
+    :type identity_file str
+    :example identity_file ~/.ssh/id_rsa
 
-    :param pro_conf 需要上传的项目
-    :type pro_conf dict
-    :example pro_conf {
+    :param projects_conf 需要上传的项目配置列表
+    :type projects_conf list(dict)
+    :example pro_conf [{
         "src": "/tmp",
         "dest": "/tmp",
         "exclude": [".git"],
         "delete": 0
-    }
+    }]
     """
     for host in host_list:
-        upload_conf = {}
-        ssh_conf = merge_ssh_config(host, host_type, user, port, identityfile)
-        upload_conf.update(ssh_conf)
-        upload_conf.update(pro_conf)
-        upload = Upload(**upload_conf)
-        upload.translate()
+        ssh_conf = merge_ssh_config(host, host_type, user, port, identity_file)
+        for pro_conf in projects_conf:
+            pro_conf.update(ssh_conf)
+            upload = Upload(**pro_conf)
+            upload.translate()
 
 
 def main():
@@ -233,10 +232,11 @@ def main():
                         dest="servers",
                         nargs="+",
                         help="specify server")
-    parser.add_argument("-p", "--project",
+    parser.add_argument("-p", "--projects",
                         required=False,
                         action="store",
-                        dest="project",
+                        dest="projects",
+                        nargs="+",
                         default="default",
                         help="specify project")
 
@@ -249,7 +249,7 @@ def main():
     parser.add_argument("-i" "--identityfile",
                         action="store",
                         required=False,
-                        dest="identityfile",
+                        dest="identity_file",
                         default="",
                         help="ssh login identityfile path")
     parser.add_argument("-u" "--username",
@@ -258,7 +258,7 @@ def main():
                         dest="user",
                         default="",
                         help="ssh login username")
-    parser.add_argument("-p" "--port",
+    parser.add_argument("--port",
                         action="store",
                         required=False,
                         dest="port",
@@ -295,11 +295,11 @@ def main():
     args = parser.parse_args()
     host_list = args.servers
     host_type = args.type
-    project = args.project
+    projects = args.projects
 
-    user, port, identityfile = args.user, args.port, args.identityfile
+    user, port, identity_file = args.user, args.port, args.identity_file
 
     src, dest, delete, exclude = args.local, args.remote, args.delete, args.exclude
 
-    pro_conf = get_project_conf(project, src, dest, delete, exclude)
-    upload_file(host_list, host_type, user, port, identityfile, pro_conf)
+    projects_conf = [get_project_conf(project, src, dest, delete, exclude) for project in projects]
+    upload_file(host_list, host_type, user, port, identity_file, projects_conf)
