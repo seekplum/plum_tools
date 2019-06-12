@@ -93,11 +93,11 @@ def get_project_conf(project, src, dest, delete, exclude):
     return data
 
 
-class Upload(object):
+class SyncFiles(object):
     """上传文件到服务器
     """
 
-    def __init__(self, hostname, user, port, identityfile, src, dest, exclude, delete):
+    def __init__(self, hostname, user, port, identityfile, src, dest, exclude, delete, is_download):
         """文件上传功能
 
         :param hostname 主机ip
@@ -131,6 +131,10 @@ class Upload(object):
         :param delete 是否删除远程机器目录下非本次上传的文件
         :type delete int
         :example delete 0 0|1  0: 不删除 1: 删除
+
+        :param is_download 是否是下载文件，默认是上传
+        :type is_download bool
+        :example is_download False
         """
         self._hostname = hostname
         self._user = user
@@ -140,6 +144,7 @@ class Upload(object):
         self._dest = dest
         self._exclude = exclude
         self._delete = delete
+        self._is_download = is_download
 
     def _get_sync_option(self):
         """组合出同步文件的命令
@@ -168,17 +173,39 @@ class Upload(object):
         rsync = self._get_sync_option()
         # pv = "|pv -lep -s 117 >/dev/null"
         pv = ""
-        cmd = "%s %s %s@%s:%s%s" % (rsync, self._src, self._user, self._hostname, self._dest, pv)
+
+        if self._is_download:
+            self._src, self._dest = self._dest, self._src
+
+        # 本地端目录结尾需要有 /
+        if not self._src.endswith("/"):
+            self._src += "/"
+        # 目标端目录结尾不能有 /
+        if self._dest.endswith("/"):
+            self._dest = self._dest[:-1]
+
+        # 从远端下载文件到本地
+        if self._is_download:
+            src = "%s@%s:%s%s" % (self._user, self._hostname, self._src, pv)
+            dest = self._dest
+            text = "从 %s@%s 服务器(端口: %s) 下载目录 %s 到本地 %s" % (
+                self._user, self._hostname, self._port, self._src, self._dest)
+        # 从本地上传文件到远端
+        else:
+            src = self._src
+            dest = "%s@%s:%s%s" % (self._user, self._hostname, self._dest, pv)
+            text = "上传目录 %s 到 %s@%s 服务器(端口: %s) %s 目录" % (
+                self._src, self._user, self._hostname, self._port, self._dest)
+
+        cmd = "%s %s %s" % (rsync, src, dest)
         try:
             run_cmd(cmd)
-            print_ok("上传目录 %s 到 %s@%s 服务器(端口: %s) %s 目录成功" % (
-                self._src, self._user, self._hostname, self._port, self._dest))
+            print_ok("%s成功" % text)
         except RunCmdError as e:
-            print_error("上传目录 %s 到 %s@%s 服务器(端口: %s) %s 目录失败, 失败原因: %s" % (
-                self._src, self._user, self._hostname, self._port, self._dest, e.err_msg))
+            print_error("%s失败, 失败原因: %s" % (text, e.err_msg))
 
 
-def upload_file(host_list, host_type, user, port, identity_file, projects_conf):
+def sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download):
     """上传文件到服务器上
 
     :param host_list 服务器列表
@@ -213,13 +240,18 @@ def upload_file(host_list, host_type, user, port, identity_file, projects_conf):
         "exclude": [".git"],
         "delete": 0
     }]
+
+    :param is_download 是否是下载文件，默认是上传
+    :type is_download bool
+    :example is_download False
     """
     for host in host_list:
         ssh_conf = merge_ssh_config(host, host_type, user, port, identity_file)
+        ssh_conf.update({"is_download": is_download})
         for pro_conf in projects_conf:
             pro_conf.update(ssh_conf)
-            upload = Upload(**pro_conf)
-            upload.translate()
+            sync = SyncFiles(**pro_conf)
+            sync.translate()
 
 
 def main():
@@ -240,19 +272,25 @@ def main():
                         default="default",
                         help="specify project")
 
-    parser.add_argument("-t" "--type",
+    parser.add_argument("-t", "--type",
                         action="store",
                         required=False,
                         dest="type",
                         default="default",
                         help="host type")
-    parser.add_argument("-i" "--identityfile",
+    parser.add_argument("--download",
+                        action="store_true",
+                        required=False,
+                        dest="download",
+                        default=False,
+                        help="Download the file locally")
+    parser.add_argument("-i", "--identityfile",
                         action="store",
                         required=False,
                         dest="identity_file",
                         default="",
                         help="ssh login identityfile path")
-    parser.add_argument("-u" "--username",
+    parser.add_argument("-u", "--username",
                         action="store",
                         required=False,
                         dest="user",
@@ -265,26 +303,26 @@ def main():
                         type=int,
                         default=0,
                         help="ssh login port")
-    parser.add_argument("-l" "--local",
+    parser.add_argument("-l", "--local",
                         action="store",
                         required=False,
                         dest="local",
                         default="",
                         help="local path")
-    parser.add_argument("-r" "--remote",
+    parser.add_argument("-r", "--remote",
                         action="store",
                         required=False,
                         dest="remote",
                         default="",
                         help="remote path")
-    parser.add_argument("-d" "--delete",
+    parser.add_argument("-d", "--delete",
                         action="store",
                         required=False,
                         dest="delete",
                         type=int,
                         default=None,
                         help="delete remote path other file")
-    parser.add_argument("-e" "--exclude",
+    parser.add_argument("-e", "--exclude",
                         action="store",
                         nargs="+",
                         required=False,
@@ -293,13 +331,11 @@ def main():
                         help="exclude file")
 
     args = parser.parse_args()
-    host_list = args.servers
-    host_type = args.type
-    projects = args.projects
+    host_list, host_type, projects, is_download = args.servers, args.type, args.projects, args.download
 
     user, port, identity_file = args.user, args.port, args.identity_file
 
     src, dest, delete, exclude = args.local, args.remote, args.delete, args.exclude
 
     projects_conf = [get_project_conf(project, src, dest, delete, exclude) for project in projects]
-    upload_file(host_list, host_type, user, port, identity_file, projects_conf)
+    sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download)
