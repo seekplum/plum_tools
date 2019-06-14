@@ -269,7 +269,7 @@ def main():
                         action="store",
                         dest="projects",
                         nargs="+",
-                        default="default",
+                        default=["default"],
                         help="specify project")
 
     parser.add_argument("-t", "--type",
