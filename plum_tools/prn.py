@@ -13,7 +13,7 @@
 #       Create: 2018-07-07 17:26
 #=============================================================================
 """
-
+import os
 import argparse
 import sys
 
@@ -158,19 +158,18 @@ class SyncFiles(object):
             ssh_cmd = "ssh -p %d" % self._port
         else:
             ssh_cmd = "ssh"
+        option.append("'--rsync-path=mkdir -p %s && rsync'" % os.path.dirname(self._dest))
         option.append("-e '%s -i %s -o \"%s\" -o \"%s\" -o \"%s\"'" % (
             ssh_cmd, self._identity_file, known_host, host_key, timeout))
         if self._delete:
             option.append(" --delete")
         for item in set(self._exclude):
             option.append("--exclude %s" % item)
-        option_string = " ".join(option)
-        return option_string
+        return " ".join(option)
 
     def translate(self):
         """文件上传功能
         """
-        rsync = self._get_sync_option()
         # pv = "|pv -lep -s 117 >/dev/null"
         pv = ""
 
@@ -197,6 +196,7 @@ class SyncFiles(object):
             text = "上传目录 %s 到 %s@%s 服务器(端口: %s) %s 目录" % (
                 self._src, self._user, self._hostname, self._port, self._dest)
 
+        rsync = self._get_sync_option()
         cmd = "%s %s %s" % (rsync, src, dest)
         try:
             run_cmd(cmd)
