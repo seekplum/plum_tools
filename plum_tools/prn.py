@@ -16,13 +16,15 @@
 import os
 import argparse
 import sys
+import subprocess
 
 from .conf import PathConfig
-from .utils.printer import print_error
 from .utils.sshconf import merge_ssh_config
 from .utils.utils import run_cmd
 from .utils.utils import get_file_abspath
 from .utils.utils import YmlConfig
+from .utils.printer import print_error
+from .utils.printer import print_text
 from .utils.printer import print_ok
 from .exceptions import RunCmdError
 
@@ -97,7 +99,8 @@ class SyncFiles(object):
     """上传文件到服务器
     """
 
-    def __init__(self, hostname, user, port, identityfile, src, dest, exclude, delete, is_download):
+    def __init__(self, hostname, user, port, identityfile, src, dest, exclude, delete, is_download=False,
+                 is_debug=False):
         """文件上传功能
 
         :param hostname 主机ip
@@ -135,6 +138,10 @@ class SyncFiles(object):
         :param is_download 是否是下载文件，默认是上传
         :type is_download bool
         :example is_download False
+
+        :param is_debug 是否打印详细信息
+        :type is_debug bool
+        :example is_debug False
         """
         self._hostname = hostname
         self._user = user
@@ -145,6 +152,7 @@ class SyncFiles(object):
         self._exclude = exclude
         self._delete = delete
         self._is_download = is_download
+        self._is_debug = is_debug
 
     def _get_sync_option(self):
         """组合出同步文件的命令
@@ -164,7 +172,7 @@ class SyncFiles(object):
         if self._delete:
             option.append(" --delete")
         for item in set(self._exclude):
-            option.append("--exclude %s" % item)
+            option.append("--exclude '%s'" % item)
         return " ".join(option)
 
     def translate(self):
@@ -199,13 +207,17 @@ class SyncFiles(object):
         rsync = self._get_sync_option()
         cmd = "%s %s %s" % (rsync, src, dest)
         try:
-            run_cmd(cmd)
+            if self._is_debug:
+                print_text(cmd)
+                subprocess.call(cmd, shell=True)
+            else:
+                run_cmd(cmd)
             print_ok("%s成功" % text)
         except RunCmdError as e:
             print_error("%s失败, 失败原因: %s" % (text, e.err_msg))
 
 
-def sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download):
+def sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download=False, is_debug=False):
     """上传文件到服务器上
 
     :param host_list 服务器列表
@@ -244,10 +256,14 @@ def sync_files(host_list, host_type, user, port, identity_file, projects_conf, i
     :param is_download 是否是下载文件，默认是上传
     :type is_download bool
     :example is_download False
+
+    :param is_debug 是否打印详细信息
+    :type is_debug bool
+    :example is_debug False
     """
     for host in host_list:
         ssh_conf = merge_ssh_config(host, host_type, user, port, identity_file)
-        ssh_conf.update({"is_download": is_download})
+        ssh_conf.update({"is_download": is_download, "is_debug": is_debug})
         for pro_conf in projects_conf:
             pro_conf.update(ssh_conf)
             sync = SyncFiles(**pro_conf)
@@ -329,13 +345,21 @@ def main():
                         dest="exclude",
                         default=[],
                         help="exclude file")
+    parser.add_argument("--debug",
+                        action="store_true",
+                        required=False,
+                        dest="debug",
+                        default=False,
+                        help="debug output from parser")
 
     args = parser.parse_args()
-    host_list, host_type, projects, is_download = args.servers, args.type, args.projects, args.download
+    host_list, host_type, projects = args.servers, args.type, args.projects
 
     user, port, identity_file = args.user, args.port, args.identity_file
 
     src, dest, delete, exclude = args.local, args.remote, args.delete, args.exclude
 
+    is_download, is_debug = args.download, args.debug
+
     projects_conf = [get_project_conf(project, src, dest, delete, exclude) for project in projects]
-    sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download)
+    sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download, is_debug)
