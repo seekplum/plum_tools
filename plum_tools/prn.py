@@ -90,8 +90,6 @@ def get_project_conf(project, src, dest, delete, exclude):
     if exclude:
         data["exclude"] = exclude
 
-    # 对本地路径取绝对路径
-    data["src"] = get_file_abspath(data["src"])
     return data
 
 
@@ -185,7 +183,7 @@ class SyncFiles(object):
             self._src, self._dest = self._dest, self._src
 
         # 本地端目录结尾需要有 /
-        if not self._src.endswith("/"):
+        if not self._src.endswith("/") and os.path.isdir(self._src):
             self._src += "/"
         # 目标端目录结尾不能有 /
         if self._dest.endswith("/"):
@@ -195,7 +193,7 @@ class SyncFiles(object):
         if self._is_download:
             src = "%s@%s:%s%s" % (self._user, self._hostname, self._src, pv)
             dest = self._dest
-            text = "从 %s@%s 服务器(端口: %s) 下载目录 %s 到本地 %s" % (
+            text = "从 %s@%s 服务器(端口: %s) 下载目录 %s 到本地 %s " % (
                 self._user, self._hostname, self._port, self._src, self._dest)
         # 从本地上传文件到远端
         else:
@@ -360,6 +358,17 @@ def main():
     src, dest, delete, exclude = args.local, args.remote, args.delete, args.exclude
 
     is_download, is_debug = args.download, args.debug
+
+    # 上传时对本地路径取绝对路径
+    if not is_download:
+        try:
+            src = get_file_abspath(src)
+        except RunCmdError:
+            print_error("%s 文件/目录不存在" % src)
+            return
+        except Exception as e:
+            print_error(str(e))
+            return
 
     projects_conf = [get_project_conf(project, src, dest, delete, exclude) for project in projects]
     sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download, is_debug)
