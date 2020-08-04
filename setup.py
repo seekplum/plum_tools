@@ -7,7 +7,7 @@ from setuptools import setup, find_packages
 
 from plum_tools.conf import PathConfig
 
-version = '0.1.8.dev6'
+version = '0.1.8.dev7'
 
 
 def install():
