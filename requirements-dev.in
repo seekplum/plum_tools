@@ -1,0 +1,13 @@
+-i https://mirrors.aliyun.com/pypi/simple
+-c requirements.in
+
+invoke
+bumpversion
+pytest
+pytest-cov
+pytest-benchmark
+pylint
+mock
+twine
+coverage
+coveralls

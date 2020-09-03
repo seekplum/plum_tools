@@ -180,7 +180,7 @@ def get_ssh_alias_conf(host):
 
             # 多个主机信息已 Host 进行分隔
             if key == "host":
-                if begin:
+                if begin:  # pylint: disable=R1723
                     break
                 elif value == host:
                     begin = True

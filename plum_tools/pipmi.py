@@ -44,7 +44,7 @@ class PSSHClient(paramiko.SSHClient):
         :type host str
         :example host 10.10.100.1
         """
-        super(PSSHClient, self).__init__()
+        super(PSSHClient, self).__init__()  # pylint: disable=R1725
         self.host = host
 
     def run_cmd(self, cmd, is_raise_exception=True, **kwargs):

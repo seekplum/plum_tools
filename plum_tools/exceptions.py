@@ -24,7 +24,7 @@ class RunCmdError(Exception):
         :param out_msg: 执行命令输出结果
         :param err_msg: 执行命令错误信息
         """
-        super(RunCmdError, self).__init__(message)
+        super(RunCmdError, self).__init__(message)  # pylint: disable=R1725
         self.out_msg = out_msg
         self.err_msg = err_msg
 

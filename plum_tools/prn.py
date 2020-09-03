@@ -26,7 +26,7 @@ from .utils.utils import YmlConfig
 from .utils.printer import print_error
 from .utils.printer import print_text
 from .utils.printer import print_ok
-from .exceptions import RunCmdError
+from .exceptions import RunCmdError, SystemTypeError
 
 
 def get_project_conf(project, src, dest, delete, exclude):
@@ -97,6 +97,7 @@ class SyncFiles(object):
     """上传文件到服务器
     """
 
+    # pylint: disable=R0913
     def __init__(self, hostname, user, port, identityfile, src, dest, exclude, delete, is_download=False,
                  is_debug=False):
         """文件上传功能
@@ -268,7 +269,7 @@ def sync_files(host_list, host_type, user, port, identity_file, projects_conf, i
             sync.translate()
 
 
-def main():
+def main():  # pylint: disable=R0914
     """程序主入口
     """
     parser = argparse.ArgumentParser()
@@ -366,7 +367,7 @@ def main():
         except RunCmdError:
             print_error("%s 文件/目录不存在" % src)
             return
-        except Exception as e:
+        except SystemTypeError as e:
             print_error(str(e))
             return
 

@@ -22,6 +22,7 @@ import signal
 import subprocess
 
 import yaml
+import six
 
 from schema import Schema
 from schema import SchemaError
@@ -174,7 +175,7 @@ def run_cmd(cmd, is_raise_exception=True, timeout=None):
     if is_raise_exception and exit_code != 0:
         message = "run `%s` fail" % cmd
         raise RunCmdError(message, out_msg=out_msg, err_msg=err_msg)
-    return out_msg
+    return six.ensure_str(out_msg)
 
 
 def get_file_abspath(path):

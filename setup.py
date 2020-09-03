@@ -28,6 +28,7 @@ def install():
         install_requires=[
             "argparse",
             "pyyaml",
+            "six",
             "schema",
             "paramiko",
         ],
