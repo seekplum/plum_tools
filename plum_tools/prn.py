@@ -29,7 +29,7 @@ from .utils.printer import print_ok
 from .exceptions import RunCmdError, SystemTypeError
 
 
-def get_project_conf(project, src, dest, delete, exclude):
+def get_project_conf(project, src, dest, delete, exclude, is_download=False):
     """查询项目信息
 
     :param project 指定的项目名
@@ -51,6 +51,10 @@ def get_project_conf(project, src, dest, delete, exclude):
     :param delete 是否删除远程机器目录下非本次上传的文件
     :type delete int
     :example delete 0 0|1  0: 不删除 1: 删除
+
+    :param is_download 是否下载文件
+    :type is_download bool
+    :example is_download True True|False
 
     :rtype data dict
     :return data 项目的配置信息
@@ -83,6 +87,17 @@ def get_project_conf(project, src, dest, delete, exclude):
     # 从命令行中更新对应值
     if src:
         data["src"] = src
+
+    # 上传时对本地路径取绝对路径
+    if not is_download:
+        try:
+            data["src"] = get_file_abspath(data["src"])
+        except RunCmdError:
+            print_error("%s 文件/目录不存在" % src)
+            sys.exit(1)
+        except SystemTypeError as e:
+            print_error(str(e))
+            sys.exit(1)
     if dest:
         data["dest"] = dest
     if delete is not None:  # 默认值为None
@@ -360,16 +375,5 @@ def main():  # pylint: disable=R0914
 
     is_download, is_debug = args.download, args.debug
 
-    # 上传时对本地路径取绝对路径
-    if not is_download:
-        try:
-            src = get_file_abspath(src)
-        except RunCmdError:
-            print_error("%s 文件/目录不存在" % src)
-            return
-        except SystemTypeError as e:
-            print_error(str(e))
-            return
-
-    projects_conf = [get_project_conf(project, src, dest, delete, exclude) for project in projects]
+    projects_conf = [get_project_conf(project, src, dest, delete, exclude, is_download) for project in projects]
     sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download, is_debug)
