@@ -1,0 +1,26 @@
+# See https://pre-commit.com/ for usage and config
+repos:
+- repo: local
+  hooks:
+  - id: check
+    name: check
+    stages: [commit]
+    language: system
+    entry: inv check
+    types: [python]
+
+  - id: unittest
+    name: unittest
+    stages: [commit]
+    language: system
+    entry: inv unittest
+    types: [python]
+    pass_filenames: false
+
+  - id: coverage
+    name: coverage
+    stages: [push]
+    language: system
+    entry: inv coverage
+    types: [python]
+    pass_filenames: false
