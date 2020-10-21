@@ -17,7 +17,8 @@ import sys
 PY2 = sys.version_info[0] == 2
 
 if PY2:
-    exec("""def implements_to_unicode(cls):
+    exec(
+        """def implements_to_unicode(cls):
         if isinstance(cls, unicode):
             return cls
 
@@ -25,10 +26,11 @@ if PY2:
             cls = cls.decode('utf-8')
         else:
             cls = implements_to_unicode("%s" % cls)
-        return cls""")
+        return cls"""
+    )
 
 else:
+
     def implements_to_unicode(cls):
-        """转换编码为unicode
-        """
+        """转换编码为unicode"""
         return "%s" % cls

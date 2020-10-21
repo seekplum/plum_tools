@@ -16,26 +16,24 @@
 import argparse
 import socket
 import sys
-
 from contextlib import contextmanager
 
 import paramiko
 
-from .conf import PathConfig
-from .conf import OsCommand
 from .conf import Constant
-from .utils.printer import print_text
-from .utils.printer import print_error
-from .utils.sshconf import get_host_ip
-from .utils.utils import get_file_abspath
-from .utils.utils import YmlConfig
+from .conf import OsCommand
+from .conf import PathConfig
 from .exceptions import RunCmdError
 from .exceptions import SSHException
+from .utils.printer import print_error
+from .utils.printer import print_text
+from .utils.sshconf import get_host_ip
+from .utils.utils import YmlConfig
+from .utils.utils import get_file_abspath
 
 
 class PSSHClient(paramiko.SSHClient):
-    """SSH连接客户端
-    """
+    """SSH连接客户端"""
 
     def __init__(self, host):
         """初始化
@@ -75,10 +73,11 @@ class PSSHClient(paramiko.SSHClient):
 
 
 class SSHTool(object):
-    """SSH连接工具类
-    """
+    """SSH连接工具类"""
 
-    def __init__(self, hostname, username, port, conn_timeout=3, password=None, identityfile=None):
+    def __init__(
+        self, hostname, username, port, conn_timeout=3, password=None, identityfile=None
+    ):
         """初始化
 
         :param hostname 主机ip
@@ -121,12 +120,14 @@ class SSHTool(object):
         try:
             ssh = PSSHClient(host=self.host)
             ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
-            ssh.connect(hostname=self.host,
-                        username=self.username,
-                        password=self.password,
-                        key_filename=self.key_filename,
-                        port=self.port,
-                        timeout=self.conn_timeout)
+            ssh.connect(
+                hostname=self.host,
+                username=self.username,
+                password=self.password,
+                key_filename=self.key_filename,
+                port=self.port,
+                timeout=self.conn_timeout,
+            )
             return ssh
         except socket.timeout:
             msg = "连接超时(%s@%s:%s)." % (self.username, self.host, self.port)
@@ -174,12 +175,14 @@ def get_ssh(hostname, username, port, conn_timeout=3, password=None, identityfil
     :rtype ssh paramiko.SSHClient
     :return: ssh ssh连接对象
     """
-    ssh_tool = SSHTool(hostname=hostname,
-                       username=username,
-                       port=port,
-                       conn_timeout=conn_timeout,
-                       password=password,
-                       identityfile=get_file_abspath(identityfile))
+    ssh_tool = SSHTool(
+        hostname=hostname,
+        username=username,
+        port=port,
+        conn_timeout=conn_timeout,
+        password=password,
+        identityfile=get_file_abspath(identityfile),
+    )
     ssh = ssh_tool.get_ssh()
     yield ssh
     ssh.close()
@@ -226,7 +229,7 @@ def get_ssh_config(hostname, username, port, identityfile, password):
         "username": username or default_ssh_conf["username"],
         "port": port or default_ssh_conf["port"],
         "identityfile": identityfile or default_ssh_conf["identityfile"],
-        "password": password
+        "password": password,
     }
     return ssh_conf
 
@@ -261,74 +264,100 @@ def get_args():
     :return 命令行参数
     """
     parser = argparse.ArgumentParser()
-    parser.add_argument("-l", "--login",
-                        required=True,
-                        action="store",
-                        dest="host",
-                        help="specify login ip")
-    parser.add_argument("-s", "--servers",
-                        required=True,
-                        action="store",
-                        dest="servers",
-                        nargs="+",
-                        help="specify server")
-    parser.add_argument("-u", "--username",
-                        required=False,
-                        action="store",
-                        dest="user",
-                        default="root",
-                        help="specify username")
-    parser.add_argument("-pass", "--password",
-                        required=False,
-                        action="store",
-                        dest="password",
-                        default="",
-                        help="specify password")
-    parser.add_argument("-p" "--port",
-                        action="store",
-                        required=False,
-                        dest="port",
-                        type=int,
-                        default=0,
-                        help="ssh login port")
-    parser.add_argument("-i" "--identityfile",
-                        action="store",
-                        required=False,
-                        dest="identityfile",
-                        default="",
-                        help="ssh login identityfile path")
-    parser.add_argument("-t" "--type",
-                        action="store",
-                        required=False,
-                        dest="type",
-                        default="default",
-                        help="host type")
-    parser.add_argument("-U", "--Username",
-                        required=False,
-                        action="store",
-                        dest="Username",
-                        default="ADMIN",
-                        help="specify ipmi username")
-    parser.add_argument("-c", "--command",
-                        required=False,
-                        action="store",
-                        dest="command",
-                        default="power on",
-                        help="specify ipmi command")
-    parser.add_argument("-P", "--Password",
-                        required=False,
-                        action="store",
-                        dest="Password",
-                        default="12345678",
-                        help="specify ipmi password")
+    parser.add_argument(
+        "-l",
+        "--login",
+        required=True,
+        action="store",
+        dest="host",
+        help="specify login ip",
+    )
+    parser.add_argument(
+        "-s",
+        "--servers",
+        required=True,
+        action="store",
+        dest="servers",
+        nargs="+",
+        help="specify server",
+    )
+    parser.add_argument(
+        "-u",
+        "--username",
+        required=False,
+        action="store",
+        dest="user",
+        default="root",
+        help="specify username",
+    )
+    parser.add_argument(
+        "-pass",
+        "--password",
+        required=False,
+        action="store",
+        dest="password",
+        default="",
+        help="specify password",
+    )
+    parser.add_argument(
+        "-p" "--port",
+        action="store",
+        required=False,
+        dest="port",
+        type=int,
+        default=0,
+        help="ssh login port",
+    )
+    parser.add_argument(
+        "-i" "--identityfile",
+        action="store",
+        required=False,
+        dest="identityfile",
+        default="",
+        help="ssh login identityfile path",
+    )
+    parser.add_argument(
+        "-t" "--type",
+        action="store",
+        required=False,
+        dest="type",
+        default="default",
+        help="host type",
+    )
+    parser.add_argument(
+        "-U",
+        "--Username",
+        required=False,
+        action="store",
+        dest="Username",
+        default="ADMIN",
+        help="specify ipmi username",
+    )
+    parser.add_argument(
+        "-c",
+        "--command",
+        required=False,
+        action="store",
+        dest="command",
+        default="power on",
+        help="specify ipmi command",
+    )
+    parser.add_argument(
+        "-P",
+        "--Password",
+        required=False,
+        action="store",
+        dest="Password",
+        default="12345678",
+        help="specify ipmi password",
+    )
 
     args = parser.parse_args()
     return args
 
 
 class Parser(object):
-    """解析命令行参数
-    """
+    """解析命令行参数"""
 
     def __init__(self, args):
         """初始化
@@ -352,8 +381,13 @@ class Parser(object):
         :rtype dict
         :return ssh配置信息
         """
-        return get_ssh_config(self._parser_login_ip(), self._args.user, self._args.port, self._args.identityfile,
-                              self._args.password)
+        return get_ssh_config(
+            self._parser_login_ip(),
+            self._args.user,
+            self._args.port,
+            self._args.identityfile,
+            self._args.password,
+        )
 
     def parser_ip_list(self):
         """解析带外IP集合
@@ -377,13 +411,12 @@ class Parser(object):
             "ip": get_ipmi_ip(short_ip, self._args.type),
             "user": self._args.Username,
             "password": self._args.Password,
-            "command": self._args.command
+            "command": self._args.command,
         }
 
 
 def main():
-    """程序主入口
-    """
+    """程序主入口"""
     args = get_args()
     p = Parser(args)
 
@@ -397,7 +430,9 @@ def main():
                     output = ssh.run_cmd(cmd, timeout=Constant.command_timeout)
                     print_text("output: %s\n" % output)
                 except socket.timeout:
-                    print_error("执行命令: %s 超时，超时时间为: %s秒" % (cmd, Constant.command_timeout))
+                    print_error(
+                        "执行命令: %s 超时，超时时间为: %s秒" % (cmd, Constant.command_timeout)
+                    )
                 except RunCmdError as e:
                     print_error(e.err_msg)
     except SSHException as e:

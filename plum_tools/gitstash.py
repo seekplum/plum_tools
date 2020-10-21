@@ -13,24 +13,23 @@
 #       Create: 2018-07-07 16:29
 #=============================================================================
 """
+import argparse
 import os
 import sys
-import argparse
 
-from .conf import GitCommand
 from .conf import Constant
-from .utils.utils import cd
-from .utils.utils import run_cmd
+from .conf import GitCommand
+from .exceptions import RunCmdError
 from .utils.git import check_repository_modify_status
 from .utils.git import check_repository_stash
 from .utils.git import get_current_branch_name
 from .utils.printer import print_warn
-from .exceptions import RunCmdError
+from .utils.utils import cd
+from .utils.utils import run_cmd
 
 
 class GitCheckoutStash(object):
-    """切换分支前储藏文件
-    """
+    """切换分支前储藏文件"""
 
     def __init__(self, current_branch, new_branch):
         """初始化信息
@@ -47,11 +46,14 @@ class GitCheckoutStash(object):
         self._current_path = os.getcwd()  # 当前执行命令的路径
         self._new_branch = new_branch
         self._mark = "-"
-        self._stash_uuid = "%s%s%s" % (self._current_branch, self._mark, Constant.stash_uuid)
+        self._stash_uuid = "%s%s%s" % (
+            self._current_branch,
+            self._mark,
+            Constant.stash_uuid,
+        )
 
     def _stash(self):
-        """储藏文件
-        """
+        """储藏文件"""
         # 分支有修改,先进行stash储藏
         is_modify, _ = check_repository_modify_status(self._current_path)
         if is_modify:
@@ -70,16 +72,14 @@ class GitCheckoutStash(object):
         return self._current_branch == self._new_branch
 
     def _checkout(self):
-        """切换分支
-        """
+        """切换分支"""
         # 切换到新分支
         cmd = GitCommand.git_checkout % self._new_branch
         with cd(self._current_path):
             run_cmd(cmd)
 
     def _apply(self):
-        """恢复储藏的文件
-        """
+        """恢复储藏的文件"""
         # 检查切换后的分支是否有储藏文件
         is_stash, stash_out = check_repository_stash(self._current_path)
         if not is_stash:
@@ -93,8 +93,7 @@ class GitCheckoutStash(object):
                     run_cmd(cmd)
 
     def checkout(self):
-        """储藏文件切换分支
-        """
+        """储藏文件切换分支"""
         # 不需要切换
         if self._check_branch():
             return
@@ -104,12 +103,9 @@ class GitCheckoutStash(object):
 
 
 def main():
-    """程序主入口
-    """
+    """程序主入口"""
     parser = argparse.ArgumentParser()
-    parser.add_argument(dest="branch",
-                        action="store",
-                        help="specify branch")
+    parser.add_argument(dest="branch", action="store", help="specify branch")
     args = parser.parse_args()
     new_branch = args.branch
     try:

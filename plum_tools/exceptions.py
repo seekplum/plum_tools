@@ -14,8 +14,7 @@
 
 
 class RunCmdError(Exception):
-    """执行命令异常
-    """
+    """执行命令异常"""
 
     def __init__(self, message, out_msg, err_msg):
         """初始化参数
@@ -30,17 +29,12 @@ class RunCmdError(Exception):
 
 
 class RunCmdTimeout(Exception):
-    """执行系统命令超时
-    """
-    pass
+    """执行系统命令超时"""
 
 
 class SSHException(Exception):
-    """ssh异常
-    """
-    pass
+    """ssh异常"""
 
 
 class SystemTypeError(Exception):
-    """系统类型异常
-    """
+    """系统类型异常"""

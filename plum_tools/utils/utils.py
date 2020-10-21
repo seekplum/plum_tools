@@ -15,31 +15,29 @@
 from __future__ import print_function
 
 import os
-import re
 import platform
-import sys
+import re
 import signal
 import subprocess
+import sys
 
-import yaml
 import six
-
+import yaml
+from schema import Optional
 from schema import Schema
 from schema import SchemaError
-from schema import Optional
 
-from ..conf import PathConfig
 from ..conf import OsCommand
-from .printer import print_text
-from .printer import print_error
+from ..conf import PathConfig
 from ..exceptions import RunCmdError
 from ..exceptions import RunCmdTimeout
 from ..exceptions import SystemTypeError
+from .printer import print_error
+from .printer import print_text
 
 
 class cd(object):
-    """进入目录执行对应操作后回到目录
-    """
+    """进入目录执行对应操作后回到目录"""
 
     def __init__(self, new_path):
         """初始化
@@ -64,9 +62,9 @@ class cd(object):
 
 
 class YmlConfig(object):
-    """解析yml配置
-    """
-    _yml_data = {}
+    """解析yml配置"""
+
+    _yml_data = {}  # type: ignore
 
     @classmethod
     def parse_config_yml(cls, yml_path):
@@ -81,30 +79,33 @@ class YmlConfig(object):
         """
         if cls._yml_data:
             return cls._yml_data
-        yml_schema = Schema({
-            "default_ssh_conf": {
-                "user": str,
-                "port": int,
-                "identityfile": str
-            },
-            "ipmi_interval": int,
-            lambda x: x.startswith("host_type_"): str,
-            "projects": {
-                str: {
-                    "src": str,
-                    "dest": str,
-                    Optional("exclude"): list,
-                    Optional("delete"): int,
-                }
+        yml_schema = Schema(
+            {
+                "default_ssh_conf": {"user": str, "port": int, "identityfile": str},
+                "ipmi_interval": int,
+                lambda x: x.startswith("host_type_"): str,
+                "projects": {
+                    str: {
+                        "src": str,
+                        "dest": str,
+                        Optional("exclude"): list,
+                        Optional("delete"): int,
+                    }
+                },
             }
-        })
+        )
         try:
             with open(yml_path) as f:
                 try:
                     data = yml_schema.validate(yaml.safe_load(f.read()))
                 except SchemaError as e:
-                    print_error("yml文件: %s 格式错误, %s, 请参照以下格式进行修改" % (PathConfig.plum_yml_path, e.args[0]))
-                    with open(os.path.join(PathConfig.root, PathConfig.plum_yml_name)) as fp:
+                    print_error(
+                        "yml文件: %s 格式错误, %s, 请参照以下格式进行修改"
+                        % (PathConfig.plum_yml_path, e.args[0])
+                    )
+                    with open(
+                        os.path.join(PathConfig.root, PathConfig.plum_yml_name)
+                    ) as fp:
                         text = fp.read()
                     print_text(text)
                     sys.exit(1)
@@ -154,8 +155,7 @@ def run_cmd(cmd, is_raise_exception=True, timeout=None):
     """
 
     def raise_timeout_exception(*_):
-        """通过抛出异常达到超时效果
-        """
+        """通过抛出异常达到超时效果"""
         raise RunCmdTimeout("run `%s` timeout, timeout is %s" % (cmd, timeout))
 
     # 设置指定时间后出发handler
@@ -163,7 +163,9 @@ def run_cmd(cmd, is_raise_exception=True, timeout=None):
         signal.signal(signal.SIGALRM, raise_timeout_exception)
         signal.alarm(timeout)
 
-    p = subprocess.Popen(cmd, shell=True, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    p = subprocess.Popen(
+        cmd, shell=True, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE
+    )
     out_msg = p.stdout.read()
     err_msg = p.stderr.read()
     exit_code = p.wait()
@@ -191,8 +193,7 @@ def get_file_abspath(path):
     """
 
     def replace_path(old_path):
-        """替换路径中的空格
-        """
+        """替换路径中的空格"""
         return old_path.replace(r" ", r"\ ")
 
     # 系统直接可以找到

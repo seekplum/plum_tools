@@ -16,13 +16,12 @@ import re
 import sys
 
 from ..conf import PathConfig
-from .utils import print_error
 from .utils import YmlConfig
+from .utils import print_error
 
 
 class SSHConf(object):
-    """SSH相关配置
-    """
+    """SSH相关配置"""
 
     def __init__(self, user, port, identityfile):
         """初始
@@ -97,10 +96,11 @@ class SSHConf(object):
         yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
         default_ssh_conf = yml_config["default_ssh_conf"]
         ssh_conf = {
-            'identityfile': self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
-            'hostname': alias_conf["hostname"],
-            'user': self._user or alias_conf.get("user", default_ssh_conf["user"]),
-            'port': int(self._port or alias_conf.get("port", default_ssh_conf["port"]))
+            "identityfile": self._identityfile
+            or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
+            "hostname": alias_conf["hostname"],
+            "user": self._user or alias_conf.get("user", default_ssh_conf["user"]),
+            "port": int(self._port or alias_conf.get("port", default_ssh_conf["port"])),
         }
         return ssh_conf
 
@@ -147,7 +147,7 @@ def get_host_ip(host, host_type):
     # 标准ip中点的数量
     normal_point = 3
     if point_count < normal_point:
-        prefix_host = mark.join(prefix_host.split(mark)[:(normal_point - point_count)])
+        prefix_host = mark.join(prefix_host.split(mark)[: (normal_point - point_count)])
         host = "%s.%s" % (prefix_host, host)
     return host
 
@@ -233,7 +233,7 @@ def merge_ssh_config(host, host_type, user, port, identityfile):
         'port': 22
     }
     """
-    pattern = re.compile(r'^(?:\d+\.){0,3}\d+$')
+    pattern = re.compile(r"^(?:\d+\.){0,3}\d+$")
     match = pattern.match(host)
     conf_obj = SSHConf(user, port, identityfile)
     # 传入的是ip的简写

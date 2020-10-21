@@ -10,13 +10,11 @@ ipmi_interval: 100
 
 projects:
     default:
-        src:  ~/PythonProjects/qdata-mgr/src/
-        dest: /home/sendoh/qdatamgr
+        src:  ~/PythonProjects/plum_tools
+        dest: /home/seekplum/plum_tools
         exclude:
-            - .git
             - .idea
             - .vscode
             - '*.pyc'
             - '*.log'
-
         delete: 0

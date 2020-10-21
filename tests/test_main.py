@@ -6,17 +6,11 @@ import sys
 
 import pytest
 
-from tests.common import curr_path
-
 
 def main():
-    print("测试目录: %s" % curr_path)
-
-    file_path = os.path.join(curr_path, "utils", "test_printer.py")
+    curr_path = os.path.dirname(os.path.abspath(__file__))
     if len(sys.argv) > 1:
-        args = [sys.argv[1:]]
-    elif (file_path.endswith(".py") and os.path.exists(file_path)) or (not file_path.endswith(".py")):
-        args = [file_path]
+        args = sys.argv[1:]
     else:
         args = [curr_path]
     print("*" * 100)

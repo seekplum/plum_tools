@@ -41,11 +41,13 @@ def get_login_ssh_cmd(hostname, user, port, identityfile):
     :rtype cmd str
     :return cmd ssh登陆的命令
     """
-    cmd = 'ssh  -i %s ' \
-          '-o "UserKnownHostsFile=/dev/null" ' \
-          '-o "StrictHostKeyChecking no" ' \
-          '-o  "ConnectTimeout=%s" ' \
-          '%s@%s -p %d' % (identityfile, SSHConfig.connect_timeout, user, hostname, port)
+    cmd = (
+        "ssh  -i %s "
+        '-o "UserKnownHostsFile=/dev/null" '
+        '-o "StrictHostKeyChecking no" '
+        '-o  "ConnectTimeout=%s" '
+        "%s@%s -p %d" % (identityfile, SSHConfig.connect_timeout, user, hostname, port)
+    )
     return cmd
 
 
@@ -83,40 +85,51 @@ def login(host, host_type, user, port, identityfile):
 
 
 def main():
-    """程序主入口
-    """
+    """程序主入口"""
     parser = argparse.ArgumentParser()
-    parser.add_argument(dest="host",
-                        action="store",
-                        help="specify server")
+    parser.add_argument(dest="host", action="store", help="specify server")
 
-    parser.add_argument("-t" "--type",
-                        action="store",
-                        required=False,
-                        dest="type",
-                        default="default",
-                        help="host type")
-    parser.add_argument("-i" "--identityfile",
-                        action="store",
-                        required=False,
-                        dest="identityfile",
-                        default="",
-                        help="ssh login identityfile path")
-    parser.add_argument("-u" "--username",
-                        action="store",
-                        required=False,
-                        dest="user",
-                        default="",
-                        help="ssh login username")
-    parser.add_argument("-p" "--port",
-                        action="store",
-                        required=False,
-                        dest="port",
-                        type=int,
-                        default=0,
-                        help="ssh login port")
+    parser.add_argument(
+        "-t" "--type",
+        action="store",
+        required=False,
+        dest="type",
+        default="default",
+        help="host type",
+    )
+    parser.add_argument(
+        "-i" "--identityfile",
+        action="store",
+        required=False,
+        dest="identityfile",
+        default="",
+        help="ssh login identityfile path",
+    )
+    parser.add_argument(
+        "-u" "--username",
+        action="store",
+        required=False,
+        dest="user",
+        default="",
+        help="ssh login username",
+    )
+    parser.add_argument(
+        "-p" "--port",
+        action="store",
+        required=False,
+        dest="port",
+        type=int,
+        default=0,
+        help="ssh login port",
+    )
 
     args = parser.parse_args()
-    host, host_type, user, port, identityfile = args.host, args.type, args.user, args.port, args.identityfile
+    host, host_type, user, port, identityfile = (
+        args.host,
+        args.type,
+        args.user,
+        args.port,
+        args.identityfile,
+    )
     # 执行登陆操作
     login(host, host_type, user, port, identityfile)

@@ -13,20 +13,21 @@
 #       Create: 2018-07-07 17:26
 #=============================================================================
 """
-import os
 import argparse
-import sys
+import os
 import subprocess
+import sys
 
 from .conf import PathConfig
-from .utils.sshconf import merge_ssh_config
-from .utils.utils import run_cmd
-from .utils.utils import get_file_abspath
-from .utils.utils import YmlConfig
+from .exceptions import RunCmdError
+from .exceptions import SystemTypeError
 from .utils.printer import print_error
-from .utils.printer import print_text
 from .utils.printer import print_ok
-from .exceptions import RunCmdError, SystemTypeError
+from .utils.printer import print_text
+from .utils.sshconf import merge_ssh_config
+from .utils.utils import YmlConfig
+from .utils.utils import get_file_abspath
+from .utils.utils import run_cmd
 
 
 def get_project_conf(project, src, dest, delete, exclude, is_download=False):
@@ -77,7 +78,9 @@ def get_project_conf(project, src, dest, delete, exclude, is_download=False):
         data = yml_data["projects"][project]
     except KeyError:
         if not (src and dest):
-            print_error("yml文件: %s 中没有配置项目: %s 的信息" % (PathConfig.plum_yml_path, project))
+            print_error(
+                "yml文件: %s 中没有配置项目: %s 的信息" % (PathConfig.plum_yml_path, project)
+            )
             sys.exit(1)
 
     # 设置默认值
@@ -109,12 +112,22 @@ def get_project_conf(project, src, dest, delete, exclude, is_download=False):
 
 
 class SyncFiles(object):
-    """上传文件到服务器
-    """
+    """上传文件到服务器"""
 
     # pylint: disable=R0913
-    def __init__(self, hostname, user, port, identityfile, src, dest, exclude, delete, is_download=False,
-                 is_debug=False):
+    def __init__(
+        self,
+        hostname,
+        user,
+        port,
+        identityfile,
+        src,
+        dest,
+        exclude,
+        delete,
+        is_download=False,
+        is_debug=False,
+    ):
         """文件上传功能
 
         :param hostname 主机ip
@@ -169,8 +182,7 @@ class SyncFiles(object):
         self._is_debug = is_debug
 
     def _get_sync_option(self):
-        """组合出同步文件的命令
-        """
+        """组合出同步文件的命令"""
         option = ["rsync -rtv"]
         known_host = "UserKnownHostsFile=/dev/null"
         host_key = "StrictHostKeyChecking no"
@@ -180,9 +192,13 @@ class SyncFiles(object):
             ssh_cmd = "ssh -p %d" % self._port
         else:
             ssh_cmd = "ssh"
-        option.append("'--rsync-path=mkdir -p %s && rsync'" % os.path.dirname(self._dest))
-        option.append("-e '%s -i %s -o \"%s\" -o \"%s\" -o \"%s\"'" % (
-            ssh_cmd, self._identity_file, known_host, host_key, timeout))
+        option.append(
+            "'--rsync-path=mkdir -p %s && rsync'" % os.path.dirname(self._dest)
+        )
+        option.append(
+            '-e \'%s -i %s -o "%s" -o "%s" -o "%s"\''
+            % (ssh_cmd, self._identity_file, known_host, host_key, timeout)
+        )
         if self._delete:
             option.append(" --delete")
         for item in set(self._exclude):
@@ -190,8 +206,7 @@ class SyncFiles(object):
         return " ".join(option)
 
     def translate(self):
-        """文件上传功能
-        """
+        """文件上传功能"""
         # pv = "|pv -lep -s 117 >/dev/null"
         pv = ""
 
@@ -210,13 +225,23 @@ class SyncFiles(object):
             src = "%s@%s:%s%s" % (self._user, self._hostname, self._src, pv)
             dest = self._dest
             text = "从 %s@%s 服务器(端口: %s) 下载目录 %s 到本地 %s " % (
-                self._user, self._hostname, self._port, self._src, self._dest)
+                self._user,
+                self._hostname,
+                self._port,
+                self._src,
+                self._dest,
+            )
         # 从本地上传文件到远端
         else:
             src = self._src
             dest = "%s@%s:%s%s" % (self._user, self._hostname, self._dest, pv)
             text = "上传目录 %s 到 %s@%s 服务器(端口: %s) %s 目录" % (
-                self._src, self._user, self._hostname, self._port, self._dest)
+                self._src,
+                self._user,
+                self._hostname,
+                self._port,
+                self._dest,
+            )
 
         rsync = self._get_sync_option()
         cmd = "%s %s %s" % (rsync, src, dest)
@@ -231,7 +256,16 @@ class SyncFiles(object):
             print_error("%s失败, 失败原因: %s" % (text, e.err_msg))
 
 
-def sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download=False, is_debug=False):
+def sync_files(
+    host_list,
+    host_type,
+    user,
+    port,
+    identity_file,
+    projects_conf,
+    is_download=False,
+    is_debug=False,
+):
     """上传文件到服务器上
 
     :param host_list 服务器列表
@@ -285,86 +319,118 @@ def sync_files(host_list, host_type, user, port, identity_file, projects_conf, i
 
 
 def main():  # pylint: disable=R0914
-    """程序主入口
-    """
+    """程序主入口"""
     parser = argparse.ArgumentParser()
-    parser.add_argument("-s", "--servers",
-                        required=True,
-                        action="store",
-                        dest="servers",
-                        nargs="+",
-                        help="specify server")
-    parser.add_argument("-p", "--projects",
-                        required=False,
-                        action="store",
-                        dest="projects",
-                        nargs="+",
-                        default=["default"],
-                        help="specify project")
+    parser.add_argument(
+        "-s",
+        "--servers",
+        required=True,
+        action="store",
+        dest="servers",
+        nargs="+",
+        help="specify server",
+    )
+    parser.add_argument(
+        "-p",
+        "--projects",
+        required=False,
+        action="store",
+        dest="projects",
+        nargs="+",
+        default=["default"],
+        help="specify project",
+    )
 
-    parser.add_argument("-t", "--type",
-                        action="store",
-                        required=False,
-                        dest="type",
-                        default="default",
-                        help="host type")
-    parser.add_argument("--download",
-                        action="store_true",
-                        required=False,
-                        dest="download",
-                        default=False,
-                        help="Download the file locally")
-    parser.add_argument("-i", "--identityfile",
-                        action="store",
-                        required=False,
-                        dest="identity_file",
-                        default="",
-                        help="ssh login identityfile path")
-    parser.add_argument("-u", "--username",
-                        action="store",
-                        required=False,
-                        dest="user",
-                        default="",
-                        help="ssh login username")
-    parser.add_argument("--port",
-                        action="store",
-                        required=False,
-                        dest="port",
-                        type=int,
-                        default=0,
-                        help="ssh login port")
-    parser.add_argument("-l", "--local",
-                        action="store",
-                        required=False,
-                        dest="local",
-                        default="",
-                        help="local path")
-    parser.add_argument("-r", "--remote",
-                        action="store",
-                        required=False,
-                        dest="remote",
-                        default="",
-                        help="remote path")
-    parser.add_argument("-d", "--delete",
-                        action="store",
-                        required=False,
-                        dest="delete",
-                        type=int,
-                        default=None,
-                        help="delete remote path other file")
-    parser.add_argument("-e", "--exclude",
-                        action="store",
-                        nargs="+",
-                        required=False,
-                        dest="exclude",
-                        default=[],
-                        help="exclude file")
-    parser.add_argument("--debug",
-                        action="store_true",
-                        required=False,
-                        dest="debug",
-                        default=False,
-                        help="debug output from parser")
+    parser.add_argument(
+        "-t",
+        "--type",
+        action="store",
+        required=False,
+        dest="type",
+        default="default",
+        help="host type",
+    )
+    parser.add_argument(
+        "--download",
+        action="store_true",
+        required=False,
+        dest="download",
+        default=False,
+        help="Download the file locally",
+    )
+    parser.add_argument(
+        "-i",
+        "--identityfile",
+        action="store",
+        required=False,
+        dest="identity_file",
+        default="",
+        help="ssh login identityfile path",
+    )
+    parser.add_argument(
+        "-u",
+        "--username",
+        action="store",
+        required=False,
+        dest="user",
+        default="",
+        help="ssh login username",
+    )
+    parser.add_argument(
+        "--port",
+        action="store",
+        required=False,
+        dest="port",
+        type=int,
+        default=0,
+        help="ssh login port",
+    )
+    parser.add_argument(
+        "-l",
+        "--local",
+        action="store",
+        required=False,
+        dest="local",
+        default="",
+        help="local path",
+    )
+    parser.add_argument(
+        "-r",
+        "--remote",
+        action="store",
+        required=False,
+        dest="remote",
+        default="",
+        help="remote path",
+    )
+    parser.add_argument(
+        "-d",
+        "--delete",
+        action="store",
+        required=False,
+        dest="delete",
+        type=int,
+        default=None,
+        help="delete remote path other file",
+    )
+    parser.add_argument(
+        "-e",
+        "--exclude",
+        action="store",
+        nargs="+",
+        required=False,
+        dest="exclude",
+        default=[],
+        help="exclude file",
+    )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        required=False,
+        dest="debug",
+        default=False,
+        help="debug output from parser",
+    )
 
     args = parser.parse_args()
     host_list, host_type, projects = args.servers, args.type, args.projects
@@ -375,5 +441,17 @@ def main():  # pylint: disable=R0914
 
     is_download, is_debug = args.download, args.debug
 
-    projects_conf = [get_project_conf(project, src, dest, delete, exclude, is_download) for project in projects]
-    sync_files(host_list, host_type, user, port, identity_file, projects_conf, is_download, is_debug)
+    projects_conf = [
+        get_project_conf(project, src, dest, delete, exclude, is_download)
+        for project in projects
+    ]
+    sync_files(
+        host_list,
+        host_type,
+        user,
+        port,
+        identity_file,
+        projects_conf,
+        is_download,
+        is_debug,
+    )

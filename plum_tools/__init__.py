@@ -8,4 +8,4 @@
 #       Create: 2019-04-04 22:01
 #=============================================================================
 """
-__import__('pkg_resources').declare_namespace(__name__)
+__import__("pkg_resources").declare_namespace(__name__)

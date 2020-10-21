@@ -10,17 +10,16 @@
 #       Create: 2018-07-05 22:02
 #=============================================================================
 """
-import os
 import argparse
-
+import os
 from multiprocessing import Pool
 
 from .conf import Constant
-from .utils.printer import print_warn
-from .utils.printer import print_error
 from .utils.git import check_is_git_repository
 from .utils.git import check_repository_modify_status
 from .utils.git import check_repository_stash
+from .utils.printer import print_error
+from .utils.printer import print_warn
 
 
 def find_git_project_for_python(path):
@@ -93,7 +92,11 @@ def check_projects(projects, detail):
     :type detail bool
     :example False
     """
-    targets = [path for project_path in projects for path in find_git_project_for_python(project_path)]
+    targets = [
+        path
+        for project_path in projects
+        for path in find_git_project_for_python(project_path)
+    ]
     pool = Pool(processes=Constant.processes_number)
     result = pool.map(check_project, targets)
     for item in result:
@@ -109,28 +112,33 @@ def check_projects(projects, detail):
 
 
 def main():
-    """程序主入口
-    """
+    """程序主入口"""
     parser = argparse.ArgumentParser()
 
-    parser.add_argument("-p" "--path",
-                        action="store",
-                        required=False,
-                        dest="path",
-                        nargs="+",
-                        default=[os.environ["HOME"]],
-                        help="The directory path to check")
-    parser.add_argument("-d" "--detail",
-                        action="store_true",
-                        required=False,
-                        dest="detail",
-                        default=False,
-                        help="display error details")
-    parser.add_argument("-t" "--test",
-                        action="store_true",
-                        required=False,
-                        dest="test",
-                        default=False,
-                        help="run the test function")
+    parser.add_argument(
+        "-p" "--path",
+        action="store",
+        required=False,
+        dest="path",
+        nargs="+",
+        default=[os.environ["HOME"]],
+        help="The directory path to check",
+    )
+    parser.add_argument(
+        "-d" "--detail",
+        action="store_true",
+        required=False,
+        dest="detail",
+        default=False,
+        help="display error details",
+    )
+    parser.add_argument(
+        "-t" "--test",
+        action="store_true",
+        required=False,
+        dest="test",
+        default=False,
+        help="run the test function",
+    )
     args = parser.parse_args()
     check_projects(args.path, args.detail)

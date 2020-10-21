@@ -12,15 +12,14 @@
 #=============================================================================
 """
 import argparse
-
 from multiprocessing import Pool
 
-from .conf import OsCommand
 from .conf import Constant
+from .conf import OsCommand
 from .exceptions import RunCmdError
 from .utils.printer import print_text
-from .utils.utils import run_cmd
 from .utils.sshconf import get_prefix_host_ip
+from .utils.utils import run_cmd
 
 
 def ping(ip):
@@ -66,21 +65,24 @@ def run(host_type, prefix_host):
 
 
 def main():
-    """程序主入口
-    """
+    """程序主入口"""
     parser = argparse.ArgumentParser()
-    parser.add_argument("-t" "--type",
-                        action="store",
-                        required=False,
-                        dest="type",
-                        default="default",
-                        help="host type")
-    parser.add_argument("-p" "--prefix-host",
-                        action="store",
-                        required=False,
-                        dest="prefix_host",
-                        default=None,
-                        help="host prefix")
+    parser.add_argument(
+        "-t" "--type",
+        action="store",
+        required=False,
+        dest="type",
+        default="default",
+        help="host type",
+    )
+    parser.add_argument(
+        "-p" "--prefix-host",
+        action="store",
+        required=False,
+        dest="prefix_host",
+        default=None,
+        help="host prefix",
+    )
 
     args = parser.parse_args()
     run(args.type, args.prefix_host)
