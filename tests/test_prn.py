@@ -38,7 +38,7 @@ def test_get_project_conf(project, src, dest, delete, exclude):
                 "exclude": [],
             }
         }
-    }) as p:
+    }) as p, mock.patch("plum_tools.prn.get_file_abspath", side_effect=lambda x: x):
         data = get_project_conf(project, src, dest, delete, exclude)
         assert data == {
             "exclude": exclude,
