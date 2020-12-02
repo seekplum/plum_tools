@@ -15,8 +15,7 @@
 import sys
 
 PY2 = sys.version_info[0] == 2
-
-if PY2:
+if PY2:  # pragma: no cover
     exec(
         """def implements_to_unicode(cls):
         if isinstance(cls, unicode):
