@@ -1,9 +1,8 @@
 # -*- coding: utf-8 -*-
 
 import os
-import tempfile
 import shutil
-
+import tempfile
 from contextlib import contextmanager
 
 curr_path = os.path.dirname(os.path.abspath(__file__))

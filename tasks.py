@@ -121,11 +121,11 @@ def format(ctx):
         "--exclude=__init__.py",
     ]
     ctx.run(
-        "autoflake {args} plum_tools".format(args=" ".join(autoflake_args)),
+        "autoflake {args} plum_tools tests".format(args=" ".join(autoflake_args)),
         echo=True,
     )
-    ctx.run("isort plum_tools", echo=True)
-    ctx.run("black plum_tools", echo=True)
+    ctx.run("isort plum_tools tests", echo=True)
+    ctx.run("black plum_tools tests", echo=True)
 
 
 @task(clean)

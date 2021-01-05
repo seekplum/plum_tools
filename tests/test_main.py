@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 
 from __future__ import print_function
+
 import os
 import sys
 
@@ -20,5 +21,5 @@ def main():
     pytest.main(args)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     main()
