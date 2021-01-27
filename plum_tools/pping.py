@@ -68,7 +68,8 @@ def main():
     """程序主入口"""
     parser = argparse.ArgumentParser()
     parser.add_argument(
-        "-t" "--type",
+        "-t",
+        "--type",
         action="store",
         required=False,
         dest="type",
@@ -76,7 +77,8 @@ def main():
         help="host type",
     )
     parser.add_argument(
-        "-p" "--prefix-host",
+        "-p",
+        "--prefix-host",
         action="store",
         required=False,
         dest="prefix_host",

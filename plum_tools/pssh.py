@@ -90,7 +90,8 @@ def main():
     parser.add_argument(dest="host", action="store", help="specify server")
 
     parser.add_argument(
-        "-t" "--type",
+        "-t",
+        "--type",
         action="store",
         required=False,
         dest="type",
@@ -98,7 +99,8 @@ def main():
         help="host type",
     )
     parser.add_argument(
-        "-i" "--identityfile",
+        "-i",
+        "--identityfile",
         action="store",
         required=False,
         dest="identityfile",
@@ -106,7 +108,8 @@ def main():
         help="ssh login identityfile path",
     )
     parser.add_argument(
-        "-u" "--username",
+        "-u",
+        "--username",
         action="store",
         required=False,
         dest="user",
@@ -114,7 +117,8 @@ def main():
         help="ssh login username",
     )
     parser.add_argument(
-        "-p" "--port",
+        "-p",
+        "--port",
         action="store",
         required=False,
         dest="port",

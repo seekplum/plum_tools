@@ -116,7 +116,8 @@ def main():
     parser = argparse.ArgumentParser()
 
     parser.add_argument(
-        "-p" "--path",
+        "-p",
+        "--path",
         action="store",
         required=False,
         dest="path",
@@ -125,7 +126,8 @@ def main():
         help="The directory path to check",
     )
     parser.add_argument(
-        "-d" "--detail",
+        "-d",
+        "--detail",
         action="store_true",
         required=False,
         dest="detail",
@@ -133,7 +135,8 @@ def main():
         help="display error details",
     )
     parser.add_argument(
-        "-t" "--test",
+        "-t",
+        "--test",
         action="store_true",
         required=False,
         dest="test",
