@@ -17,6 +17,7 @@ import pytest
 from plum_tools.conf import PathConfig
 from plum_tools.prn import SyncFiles
 from plum_tools.prn import get_project_conf
+from plum_tools.prn import main
 
 
 @pytest.mark.parametrize(
@@ -75,3 +76,162 @@ def test_translate(capsys):
         captured = capsys.readouterr()
         output = captured.out
         assert output == u"[32m上传目录 /tmp/ 到 user@1.1.1.1 服务器(端口: 22) /tmp 目录成功[0m\n"
+
+
+def test_main():
+    mock_parser = mock.Mock()
+    mock_args = mock.Mock(
+        servers=["test", "dev"],
+        projects=["test", "python"],
+        default="default",
+        download=False,
+        identity_file="",
+        user="",
+        port=0,
+        local="",
+        remote="",
+        delete=None,
+        exclude=[],
+        debug=False,
+    )
+    mock_project_conf = mock.Mock()
+    mock_parser.parse_args.return_value = mock_args
+    with mock.patch(
+        "plum_tools.prn.argparse.ArgumentParser", return_value=mock_parser
+    ) as mock_argparse, mock.patch(
+        "plum_tools.prn.get_project_conf", return_value=mock_project_conf
+    ) as mock_project, mock.patch(
+        "plum_tools.prn.sync_files"
+    ) as mock_sync:
+        main()
+        mock_argparse.assert_called_once_with()
+        mock_parser.add_argument.assert_has_calls(
+            [
+                mock.call(
+                    "-s",
+                    "--servers",
+                    required=True,
+                    action="store",
+                    dest="servers",
+                    nargs="+",
+                    help="specify server",
+                ),
+                mock.call(
+                    "-p",
+                    "--projects",
+                    required=False,
+                    action="store",
+                    dest="projects",
+                    nargs="+",
+                    default=["default"],
+                    help="specify project",
+                ),
+                mock.call(
+                    "-t",
+                    "--type",
+                    action="store",
+                    required=False,
+                    dest="type",
+                    default="default",
+                    help="host type",
+                ),
+                mock.call(
+                    "--download",
+                    action="store_true",
+                    required=False,
+                    dest="download",
+                    default=False,
+                    help="Download the file locally",
+                ),
+                mock.call(
+                    "-i",
+                    "--identityfile",
+                    action="store",
+                    required=False,
+                    dest="identity_file",
+                    default="",
+                    help="ssh login identityfile path",
+                ),
+                mock.call(
+                    "-u",
+                    "--username",
+                    action="store",
+                    required=False,
+                    dest="user",
+                    default="",
+                    help="ssh login username",
+                ),
+                mock.call(
+                    "--port",
+                    action="store",
+                    required=False,
+                    dest="port",
+                    type=int,
+                    default=0,
+                    help="ssh login port",
+                ),
+                mock.call(
+                    "-l",
+                    "--local",
+                    action="store",
+                    required=False,
+                    dest="local",
+                    default="",
+                    help="local path",
+                ),
+                mock.call(
+                    "-r",
+                    "--remote",
+                    action="store",
+                    required=False,
+                    dest="remote",
+                    default="",
+                    help="remote path",
+                ),
+                mock.call(
+                    "-d",
+                    "--delete",
+                    action="store",
+                    required=False,
+                    dest="delete",
+                    type=int,
+                    default=None,
+                    help="delete remote path other file",
+                ),
+                mock.call(
+                    "-e",
+                    "--exclude",
+                    action="store",
+                    nargs="+",
+                    required=False,
+                    dest="exclude",
+                    default=[],
+                    help="exclude file",
+                ),
+                mock.call(
+                    "--debug",
+                    action="store_true",
+                    required=False,
+                    dest="debug",
+                    default=False,
+                    help="debug output from parser",
+                ),
+            ]
+        )
+        mock_parser.parse_args.assert_called_once_with()
+        mock_project.assert_has_calls(
+            [
+                mock.call(project, "", "", None, [], False)
+                for project in ["test", "python"]
+            ]
+        )
+        mock_sync.assert_called_once_with(
+            ["test", "dev"],
+            mock_args.type,
+            "",
+            0,
+            "",
+            [mock_project_conf, mock_project_conf],
+            False,
+            False,
+        )
