@@ -19,6 +19,7 @@ from plum_tools.gitrepo import check_project
 from plum_tools.gitrepo import check_projects
 from plum_tools.gitrepo import find_git_project_for_python
 from plum_tools.gitrepo import main
+from tests.common import MockPool
 
 
 # @mock.patch("builtins.os")
@@ -91,15 +92,6 @@ def test_check_project_with_modify():
     side_effect=[True, True, False, True, True],
 )
 def test_check_projects(mock_check, capsys):
-    class MockPool(object):
-        def __call__(self, processes):
-            assert processes == 100
-
-        def map(self, func, targets):
-            assert callable(func)
-            assert isinstance(targets, list)
-            return [func(target) for target in targets]
-
     mock_os_result = [("/tmp/{}".format(i + 1), None, None) for i in range(5)]
 
     with mock.patch(
@@ -153,15 +145,6 @@ def test_check_projects(mock_check, capsys):
     side_effect=[True, True, False, True, True],
 )
 def test_check_projects_with_not_detail(mock_check, capsys):
-    class MockPool(object):
-        def __call__(self, processes):
-            assert processes == 100
-
-        def map(self, func, targets):
-            assert callable(func)
-            assert isinstance(targets, list)
-            return [func(target) for target in targets]
-
     mock_os_result = [("/tmp/{}".format(i + 1), None, None) for i in range(5)]
 
     with mock.patch(

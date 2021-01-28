@@ -9,6 +9,16 @@ curr_path = os.path.dirname(os.path.abspath(__file__))
 fixtures_path = os.path.join(curr_path, "fixtures")
 
 
+class MockPool(object):
+    def __call__(self, processes):
+        assert processes == 100
+
+    def map(self, func, targets):
+        assert callable(func)
+        assert isinstance(targets, list)
+        return [func(target) for target in targets]
+
+
 @contextmanager
 def make_temp_dir(prefix="plum_tools_", clean=True):
     """

@@ -16,6 +16,8 @@ import mock
 
 from plum_tools.pping import main
 from plum_tools.pping import ping
+from plum_tools.pping import run
+from tests.common import MockPool
 
 
 def test_ping():
@@ -28,6 +30,27 @@ def test_ping():
 def test_ping_with_cmd_error():
     ip = ping("1.1.1.999")
     assert ip is None
+
+
+def test_run(capsys):
+    mock_ips = ["1.1.1.%d" % i if i < 10 else "" for i in range(1, 255)]
+    with mock.patch(
+        "plum_tools.pping.Pool", return_value=MockPool()
+    ) as mock_pool, mock.patch(
+        "plum_tools.pping.get_prefix_host_ip", return_value="1.1.1"
+    ) as mock_prefix, mock.patch(
+        "plum_tools.pping.ping", side_effect=mock_ips
+    ) as mock_ping:
+        run("test", "")
+
+    mock_pool.assert_called_once_with(processes=100)
+    mock_prefix.assert_called_once_with("test")
+    mock_ping.assert_has_calls([mock.call("1.1.1.%d" % i) for i in range(1, 255)])
+    captured = capsys.readouterr()
+    output = captured.out
+    for ip in mock_ips:
+        if ip:
+            assert ip in output
 
 
 def test_main():
