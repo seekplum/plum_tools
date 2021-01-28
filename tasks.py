@@ -2,6 +2,7 @@
 
 import os
 
+import six
 from invoke import task
 
 root = os.path.dirname(os.path.abspath(__file__))
@@ -50,7 +51,8 @@ def tupload(ctx, name="private"):
 def check(ctx, job=4):
     """检查代码规范"""
     ctx.run("isort --check-only --diff plum_tools", echo=True)
-    ctx.run("black --check plum_tools", echo=True)
+    if six.PY3:
+        ctx.run("black --check plum_tools", echo=True)
     ctx.run("flake8 plum_tools", echo=True)
     ctx.run("mypy plum_tools", echo=True)
 
