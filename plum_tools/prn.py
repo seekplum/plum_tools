@@ -192,8 +192,11 @@ class SyncFiles(object):
             ssh_cmd = "ssh -p %d" % self._port
         else:
             ssh_cmd = "ssh"
+        directory = os.path.dirname(self._dest)
+        if not directory:
+            directory = self._dest
         option.append(
-            "'--rsync-path=mkdir -p %s && rsync'" % os.path.dirname(self._dest)
+            "'--rsync-path=mkdir -p %s && rsync'" % directory
         )
         option.append(
             '-e \'%s -i %s -o "%s" -o "%s" -o "%s"\''
