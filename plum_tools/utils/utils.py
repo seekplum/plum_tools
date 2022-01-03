@@ -177,7 +177,14 @@ def run_cmd(cmd, is_raise_exception=True, timeout=None):
     if is_raise_exception and exit_code != 0:
         message = "run `%s` fail" % cmd
         raise RunCmdError(message, out_msg=out_msg, err_msg=err_msg)
-    return six.ensure_str(out_msg)
+    try:
+        return six.ensure_str(out_msg)
+    except UnicodeDecodeError:
+        try:
+            return six.ensure_str(out_msg, encoding="unicode_escape")
+        except UnicodeDecodeError:
+            print_text("Output: %s" % out_msg)
+            raise
 
 
 def get_file_abspath(path):
