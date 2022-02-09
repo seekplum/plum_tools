@@ -30,6 +30,18 @@ def clean(ctx):
     ctx.run("find . -name '*.egg-info' -exec rm -rf {} +", echo=True)
 
 
+@task
+def checkone(ctx, source):
+    """检查代码规范
+
+    inv checkone tasks.py
+    """
+    ctx.run("isort --check-only --diff {source}".format(source=source), echo=True)
+    ctx.run("black --check {source}".format(source=source), echo=True)
+    ctx.run("flake8 {source}".format(source=source), echo=True)
+    ctx.run("mypy {source}".format(source=source), echo=True)
+
+
 @task(clean)
 def sdist(ctx):
     ctx.run("python setup.py sdist", echo=True)
@@ -50,11 +62,11 @@ def tupload(ctx, name="private"):
 @task(clean)
 def check(ctx, job=4):
     """检查代码规范"""
-    ctx.run("isort --check-only --diff plum_tools", echo=True)
+    ctx.run("isort --check-only --diff %s" % package_name, echo=True)
     if six.PY3:
-        ctx.run("black --check plum_tools", echo=True)
-    ctx.run("flake8 plum_tools", echo=True)
-    ctx.run("mypy plum_tools", echo=True)
+        ctx.run("black --check %s" % package_name, echo=True)
+    ctx.run("flake8 %s" % package_name, echo=True)
+    ctx.run("mypy %s" % package_name, echo=True)
 
 
 @task(clean)
@@ -73,8 +85,8 @@ def coverage(ctx):
     """运行单元测试和计算测试覆盖率"""
     ctx.run(
         "export PYTHONPATH=`pwd` && "
-        "coverage run --rcfile=.coveragerc --source=plum_tools -m pytest tests && "
-        "coverage report -m --fail-under=57",
+        "coverage run --rcfile=.coveragerc --source=%s -m pytest tests && "
+        "coverage report -m --fail-under=57" % package_name,
         encoding="utf-8",
         pty=True,
         echo=True,
@@ -126,12 +138,13 @@ def format(ctx):
         "--exclude=__init__.py",
     ]
     ctx.run(
-        "autoflake {args} plum_tools tests".format(args=" ".join(autoflake_args)),
+        "autoflake {args} {package_name} tests".format(args=" ".join(autoflake_args)),
+        package_name=package_name,
         echo=True,
     )
-    ctx.run("isort plum_tools tests", echo=True)
+    ctx.run("isort %s tests" % package_name, echo=True)
     if six.PY3:
-        ctx.run("black plum_tools tests", echo=True)
+        ctx.run("black %s tests" % package_name, echo=True)
 
 
 @task(clean)
