@@ -19,6 +19,9 @@ import os
 import six
 
 
+VERSION = "0.2.3"
+
+
 class ClsReadOnlyClass(type):
     """类属性只读"""
 

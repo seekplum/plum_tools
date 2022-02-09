@@ -18,7 +18,7 @@ import os
 import subprocess
 import sys
 
-from .conf import PathConfig
+from .conf import VERSION, PathConfig
 from .exceptions import RunCmdError
 from .exceptions import SystemTypeError
 from .utils.printer import print_error
@@ -325,9 +325,18 @@ def main():  # pylint: disable=R0914
     """程序主入口"""
     parser = argparse.ArgumentParser()
     parser.add_argument(
+        "-v",
+        "--version",
+        required=False,
+        action="store_true",
+        dest="version",
+        default=False,
+        help="print version information",
+    )
+    parser.add_argument(
         "-s",
         "--servers",
-        required=True,
+        required=False,
         action="store",
         dest="servers",
         nargs="+",
@@ -436,7 +445,13 @@ def main():  # pylint: disable=R0914
     )
 
     args = parser.parse_args()
+    if args.version:
+        print_ok("Version: %s" % VERSION)
+        return
     host_list, host_type, projects = args.servers, args.type, args.projects
+    if not host_list:
+        parser.print_help()
+        return
 
     user, port, identity_file = args.user, args.port, args.identity_file
 
