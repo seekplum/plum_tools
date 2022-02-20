@@ -90,25 +90,43 @@ def get_project_conf(project, src, dest, delete, exclude, is_download=False):
     # 从命令行中更新对应值
     if src:
         data["src"] = src
+    if not isinstance(data["src"], list):
+        data["src"] = [data["src"]]
+    if dest:
+        data["dest"] = dest
+    if not isinstance(data["dest"], list):
+        data["dest"] = [data["dest"]]
 
     # 上传时对本地路径取绝对路径
     if not is_download:
         try:
-            data["src"] = get_file_abspath(data["src"])
+            data["src"] = [get_file_abspath(path) for path in data["src"]]
         except RunCmdError:
-            print_error("%s 文件/目录不存在" % src)
+            print_error("%s 文件/目录不存在" % " ".join(data["src"]))
             sys.exit(1)
         except SystemTypeError as e:
             print_error(str(e))
             sys.exit(1)
-    if dest:
-        data["dest"] = dest
     if delete is not None:  # 默认值为None
         data["delete"] = delete
     if exclude:
         data["exclude"] = exclude
 
     return data
+
+
+def process_path(path, is_local=False):
+    # 本地端目录结尾需要有 /
+    if is_local and not path.endswith("/") and os.path.isdir(path):
+        path += "/"
+    # 目标端目录结尾不能有 /
+    if not is_local and path.endswith("/"):
+        path = path[:-1]
+    return path
+
+
+def process_paths(paths, is_local=False):
+    return " ".join([process_path(path, is_local=is_local) for path in paths])
 
 
 class SyncFiles(object):
@@ -214,20 +232,15 @@ class SyncFiles(object):
         pv = ""
 
         if self._is_download:
-            self._src, self._dest = self._dest, self._src
-
-        # 本地端目录结尾需要有 /
-        if not self._src.endswith("/") and os.path.isdir(self._src):
-            self._src += "/"
-        # 目标端目录结尾不能有 /
-        if self._dest.endswith("/"):
-            self._dest = self._dest[:-1]
+            self._src, self._dest = process_paths(self._dest, is_local=True), process_paths(self._src)
+        else:
+            self._src, self._dest = process_paths(self._src, is_local=True), process_paths(self._dest)
 
         # 从远端下载文件到本地
         if self._is_download:
-            src = "%s@%s:%s%s" % (self._user, self._hostname, self._src, pv)
+            src = "'%s@%s:%s%s'" % (self._user, self._hostname, self._src, pv)
             dest = self._dest
-            text = "从 %s@%s 服务器(端口: %s) 下载目录 %s 到本地 %s " % (
+            text = "从 %s@%s 服务器(端口: %s) 下载 %s 到本地 %s " % (
                 self._user,
                 self._hostname,
                 self._port,
@@ -238,7 +251,7 @@ class SyncFiles(object):
         else:
             src = self._src
             dest = "%s@%s:%s%s" % (self._user, self._hostname, self._dest, pv)
-            text = "上传目录 %s 到 %s@%s 服务器(端口: %s) %s 目录" % (
+            text = "上传 %s 到 %s@%s 服务器(端口: %s) %s " % (
                 self._src,
                 self._user,
                 self._hostname,
@@ -403,6 +416,7 @@ def main():  # pylint: disable=R0914
         action="store",
         required=False,
         dest="local",
+        nargs="+",
         default="",
         help="local path",
     )
@@ -412,6 +426,7 @@ def main():  # pylint: disable=R0914
         action="store",
         required=False,
         dest="remote",
+        nargs="+",
         default="",
         help="remote path",
     )
@@ -453,9 +468,12 @@ def main():  # pylint: disable=R0914
         parser.print_help()
         return
 
-    user, port, identity_file = args.user, args.port, args.identity_file
-
     src, dest, delete, exclude = args.local, args.remote, args.delete, args.exclude
+    if len(src) > 1 and len(dest) > 1:
+        print_error("本地路径和目标路径不能同时传入多个值")
+        return
+
+    user, port, identity_file = args.user, args.port, args.identity_file
 
     is_download, is_debug = args.download, args.debug
 
