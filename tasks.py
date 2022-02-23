@@ -37,9 +37,11 @@ def checkone(ctx, source):
     inv checkone tasks.py
     """
     ctx.run("isort --check-only --diff {source}".format(source=source), echo=True)
-    ctx.run("black --check {source}".format(source=source), echo=True)
+    if six.PY3:
+        ctx.run("black --check {source}".format(source=source), echo=True)
     ctx.run("flake8 {source}".format(source=source), echo=True)
-    ctx.run("mypy {source}".format(source=source), echo=True)
+    if six.PY3:
+        ctx.run("mypy {source}".format(source=source), echo=True)
 
 
 @task(clean)
@@ -66,7 +68,8 @@ def check(ctx, job=4):
     if six.PY3:
         ctx.run("black --check %s" % package_name, echo=True)
     ctx.run("flake8 %s" % package_name, echo=True)
-    ctx.run("mypy %s" % package_name, echo=True)
+    if six.PY3:
+        ctx.run("mypy %s" % package_name, echo=True)
 
 
 @task(clean)
