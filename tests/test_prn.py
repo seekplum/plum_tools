@@ -49,8 +49,8 @@ def test_get_project_conf(project, src, dest, delete, exclude):
         assert data == {
             "exclude": exclude,
             "delete": delete,
-            "src": src,
-            "dest": dest,
+            "src": [src],
+            "dest": [dest],
         }
         p.assert_called_with(PathConfig.plum_yml_path)
 
@@ -75,7 +75,7 @@ def test_translate(capsys):
         )
         captured = capsys.readouterr()
         output = captured.out
-        assert output == u"[32m上传目录 /tmp/ 到 user@1.1.1.1 服务器(端口: 22) /tmp 目录成功[0m\n"
+        assert output == u"[32m上传 /tmp 到 user@1.1.1.1 服务器(端口: 22) tmp 成功[0m\n"
 
 
 def test_main():
@@ -108,9 +108,18 @@ def test_main():
         mock_parser.add_argument.assert_has_calls(
             [
                 mock.call(
+                    "-v",
+                    "--version",
+                    required=False,
+                    action="store_true",
+                    dest="version",
+                    default=False,
+                    help="print version information",
+                ),
+                mock.call(
                     "-s",
                     "--servers",
-                    required=True,
+                    required=False,
                     action="store",
                     dest="servers",
                     nargs="+",
@@ -176,6 +185,7 @@ def test_main():
                     action="store",
                     required=False,
                     dest="local",
+                    nargs="+",
                     default="",
                     help="local path",
                 ),
@@ -185,6 +195,7 @@ def test_main():
                     action="store",
                     required=False,
                     dest="remote",
+                    nargs="+",
                     default="",
                     help="remote path",
                 ),

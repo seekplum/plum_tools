@@ -215,7 +215,7 @@ def get_file_abspath(path):
     # 获取操作系统类型
     system_type = platform.system()
     if system_type == "Linux":
-        pattern = re.compile(r'File: "(.*)"')
+        pattern = re.compile(r'File: (.*)')
     # mac系统
     elif system_type == "Darwin":
         pattern = re.compile(r'"\s+\d+\s+\d+\s+\d+(.*)$')
