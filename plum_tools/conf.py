@@ -19,7 +19,7 @@ import os
 import six
 
 
-VERSION = "0.2.6"
+VERSION = "0.2.7"
 
 
 class ClsReadOnlyClass(type):
