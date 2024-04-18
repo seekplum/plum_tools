@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 #=============================================================================
 #  ProjectName: plum_tools
@@ -11,42 +9,39 @@
 #       Create: 2018-07-07 10:26
 #=============================================================================
 """
+
 import argparse
 from multiprocessing import Pool
+from typing import Optional
 
-from .conf import Constant
-from .conf import OsCommand
+from .conf import Constant, OsCommand
 from .exceptions import RunCmdError
 from .utils.printer import print_text
 from .utils.sshconf import get_prefix_host_ip
 from .utils.utils import run_cmd
 
 
-def ping(ip):
+def ping(ip: str) -> Optional[str]:
     """ping指定ip是否能ping通
 
     :param ip 主机ip
-    :type ip str
     :example ip 10.10.100.1
     """
     cmd = OsCommand.ping_command % ip
     try:
         run_cmd(cmd)
     except RunCmdError:
-        pass
-    else:
-        return ip
+        return None
+    return ip
 
 
-def run(host_type, prefix_host):
+def run(host_type: str, prefix_host: str) -> None:
     """打印IP段内所有能ping通的ip
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
     :example host_type default
 
     :param prefix_host: 主机前缀
-    :type prefix_host str
     :example prefix_host 1.1.1
     """
     if not prefix_host:
@@ -56,15 +51,15 @@ def run(host_type, prefix_host):
     if not prefix_host.endswith(mark):
         prefix_host += mark
 
-    pool = Pool(processes=Constant.processes_number)
-    targets = ["%s%d" % (prefix_host, i) for i in range(1, 255)]
-    result = pool.map(ping, targets)
+    targets = [f"{prefix_host}{i}" for i in range(1, 255)]
+    with Pool(processes=Constant.processes_number) as pool:
+        result = pool.map(ping, targets)
     for ip in result:
         if ip:
             print_text(ip)
 
 
-def main():
+def main() -> None:
     """程序主入口"""
     parser = argparse.ArgumentParser()
     parser.add_argument(

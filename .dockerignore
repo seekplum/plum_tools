@@ -5,3 +5,5 @@
 !Pipfile
 !Pipfile.lock
 !plum_tools
+!tasks.py
+!tests

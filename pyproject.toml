@@ -1,0 +1,108 @@
+[tool.pylint.master]
+job = 0
+suggestion-mode = "yes"
+extension-pkg-whitelist = ""
+
+[tool.pylint.format]
+max-line-length = 120
+
+[tool.pylint.similarities]
+ignore-imports = "yes"
+
+[tool.pylint.basic]
+argument-naming-style = "any"
+attr-naming-style = "any"
+function-naming-style = "any"
+method-naming-style = "any"
+variable-naming-style = "any"
+
+[tool.pylint.message_control]
+disable = ["duplicate-code", "missing-docstring", "logging-fstring-interpolation", "superfluous-parens", "broad-except", "unnecessary-lambda", "use-dict-literal"]
+
+[tool.pylint.design]
+min-public-methods = 0
+max-args = 7
+
+[tool.mypy]
+plugins = []
+ignore_missing_imports = true
+mypy_path = ""
+exclude = []
+
+[[tool.mypy.overrides]]
+module = [
+  "plum_tools.*",
+  "tests.*",
+  "tasks.*"
+]
+disallow_untyped_defs = true
+
+[tool.pytest.ini_options]
+addopts = " -svv --cov=app"
+minversion = "6.0"
+testpaths = [
+  "tests",
+]
+
+[tool.coverage.report]
+exclude_lines = [
+  "pragma: no cover",
+  "def __repr__",
+  "raise AssertionError",
+  "raise NotImplementedError",
+  "if __name__ == .__main__.:",
+]
+fail_under = 50.0
+show_missing = true
+skip_covered = true
+skip_empty = true
+sort = "miss"
+
+[tool.coverage.path]
+source = "app"
+
+[tool.black]
+line-length = 120
+
+[tool.isort]
+multi_line_output = 3
+include_trailing_comma = true
+line_length = 120
+force_grid_wrap = 0
+profile = "black"
+src_paths = ["app", "tests"]
+use_parentheses = true
+known_first_party = []
+
+[tool.flake8]
+ignore = ['B008', 'W503', 'E203']
+max-line-length = 120
+max-complexity = 12
+exclude = [
+  '.git',
+  '__pycache__',
+  '.mypy_cache',
+  '.pytest_cache',
+  'test.py'
+]
+extend-immutable-calls = []
+
+[tool.ruff]
+line-length = 120
+
+[tool.ruff.lint.flake8-bugbear]
+extend-immutable-calls = []
+
+[tool.bandit]
+exclude_dirs = [
+  '.git',
+  '__pycache__',
+  '.mypy_cache',
+  '.pytest_cache',
+  'test.py'
+]
+skips = ['B108', 'B110', 'B311', 'B105', 'B106', 'B301', 'B306', 'B403', 'B404', 'B413', 'B507', 'B601', 'B602', 'B605', 'B607']
+
+[tool.bandit.assert_used]
+skips = ['./tests/*', 'tests/*', '*_test.py', '*test_*.py']
+

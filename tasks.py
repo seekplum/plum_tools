@@ -1,184 +1,171 @@
-# -*- coding: utf-8 -*-
-
 import os
 import subprocess
 from datetime import datetime
+from multiprocessing import cpu_count
+from typing import Any, Optional
 
-import six
 from invoke import task
+from invoke.context import Context
 
-root = os.path.dirname(os.path.abspath(__file__))
-package_name = "plum_tools"
+PACKAGE_NAME = "plum_tools"
 
 
-def covert_source(source):
-    source = source.replace("/", ".")
+def covert_source(source: str) -> str:
+    source = source.replace("/", ".").replace(" ", ",")
     if source.endswith(".py"):
         source = source[:-3]
     return source
 
 
-@task
-def clean(ctx):
-    """清除项目中无效文件"""
-    ctx.run("rm -rf build dist", echo=True)
-    ctx.run("find . -name '*.pyc' -exec rm -f {} +", echo=True)
-    ctx.run("find . -name '*.pyo' -exec rm -f {} +", echo=True)
-    ctx.run("find . -name '*.log' -exec rm -f {} +", echo=True)
-    ctx.run("find . -name '__pycache__' -exec rm -rf {} +", echo=True)
-    ctx.run("find . -name 'htmlcov' -exec rm -rf {} +", echo=True)
-    ctx.run("find . -name '.coverage*' -exec rm -rf {} +", echo=True)
-    ctx.run("find . -name '.pytest_cache' -exec rm -rf {} +", echo=True)
-    ctx.run("find . -name '.benchmarks' -exec rm -rf {} +", echo=True)
-    ctx.run("find . -name '*.egg-info' -exec rm -rf {} +", echo=True)
-    ctx.run("find . -name '.DS_Store' -exec rm -rf {} +", echo=True)
+def get_source(source: Optional[str] = None, *, ignote_tests: bool = False, ignote_tasks: bool = False) -> str:
+    if not source:
+        source = PACKAGE_NAME
+        if not ignote_tasks:
+            source += " tasks.py"
+        if not ignote_tests:
+            source += " tests"
+    return source
+
+
+def get_tests(tests: Optional[str] = None) -> str:
+    if not tests:
+        tests = "tests"
+    return tests
+
+
+def ctx_run(ctx: Context, cmd: str, **kwargs: Any) -> None:
+    kwargs.setdefault("encoding", "utf-8")
+    kwargs.setdefault("echo", True)
+    kwargs.setdefault("pty", True)
+    ctx.run(cmd, **kwargs)
 
 
 @task
-def checkone(ctx, source):
-    """检查代码规范
+def clean_pyc(ctx: Context) -> None:
+    """清理 Python 运行文件"""
+    ctx_run(ctx, "rm -rf build dist")
+    ctx_run(ctx, "find . -name '*.pyc' -exec rm -f {} +")
+    ctx_run(ctx, "find . -name '*.pyo' -exec rm -f {} +")
+    ctx_run(ctx, "find . -name '*~' -exec rm -f {} +")
+    ctx_run(ctx, "find . -name '*.log' -exec rm -f {} +")
+    ctx_run(ctx, "find . -name '*.log.*' -exec rm -f {} +")
+    ctx_run(ctx, "find . -name '__pycache__' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name '.mypy_cache' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name '.ruff_cache' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name '*.egg-info' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name '.DS_Store' -exec rm -rf {} +")
 
-    inv checkone tasks.py
+
+@task
+def clean_test(ctx: Context) -> None:
+    """清理测试文件"""
+    ctx_run(ctx, "find . -name '.pytest_cache' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name '.coverage' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name 'pytest_coverage*.xml' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name 'pytest_result*.xml' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name 'htmlcov' -exec rm -rf {} +")
+    ctx_run(ctx, "find . -name '.benchmarks' -exec rm -rf {} +")
+
+
+@task(clean_pyc, clean_test)
+def clean(_: Context) -> None:
+    """清理所有不该进代码库的文件"""
+
+
+@task(clean)
+def sdist(ctx: Context) -> None:
+    """构建pypi包"""
+    ctx_run(ctx, "python setup.py sdist")
+
+
+@task(clean)
+def upload(ctx: Context, name: str = "private") -> None:
+    """上传包到指定pip源
+
+    inv upload --name private
     """
-    ctx.run(
-        "isort --check-only --diff {source}".format(source=source),
-        echo=True,
-    )
-    ctx.run("black --check {source}".format(source=source), echo=True)
-    ctx.run("flake8 {source}".format(source=source), echo=True)
-    if six.PY3:
-        ctx.run("mypy {source}".format(source=source), echo=True)
-
-
-@task(clean)
-def sdist(ctx):
-    ctx.run("python setup.py sdist", echo=True)
-
-
-@task(clean)
-def upload(ctx, name="private"):
-    """上传包到指定pip源"""
-    ctx.run("python setup.py sdist upload -r %s" % name, echo=True)
+    ctx_run(ctx, f"python setup.py sdist upload -r {name}")
 
 
 @task(sdist)
-def tupload(ctx, name="private"):
-    """上传包到指定pip源"""
-    ctx.run("twine upload dist/* -r %s" % name, echo=True)
+def tupload(ctx: Context, name: str = "private") -> None:
+    """上传包到指定pip源
+
+    inv tupload --name private
+    """
+    ctx_run(ctx, f"twine upload dist/* -r {name}")
 
 
 @task(clean)
-def check(ctx, job=4):
-    """检查代码规范"""
-    ctx.run("isort --check-only --diff %s" % package_name, echo=True)
-    if six.PY3:
-        ctx.run("black --check %s" % package_name, echo=True)
-    ctx.run("flake8 %s" % package_name, echo=True)
-    if six.PY3:
-        ctx.run("mypy %s" % package_name, echo=True)
+def format(ctx: Context, source: Optional[str] = None) -> None:  # pylint: disable=redefined-builtin
+    """格式化代码
+
+    inv format --source tasks.py
+    """
+    source = get_source(source)
+    autoflake_args = [
+        "--remove-all-unused-imports",
+        "--recursive",
+        "--remove-unused-variables",
+        "--in-place",
+        "--exclude=__init__.py",
+    ]
+    args = " ".join(autoflake_args)
+    ctx_run(ctx, f"autoflake {args} {source} tests")
+    ctx_run(ctx, f"isort {source} tests")
+    ctx_run(ctx, f"black {source} tests")
 
 
 @task(clean)
-def unittest(ctx):
+def lint(ctx: Context, source: Optional[str] = None) -> None:
+    """检查代码规范
+
+    inv lint --source tasks.py
+    """
+    source = get_source(source)
+    ctx_run(ctx, f"mypy {source}")
+    ctx_run(ctx, f"black --check {source}")
+    ctx_run(ctx, f"isort --check-only --diff {source}")
+    ctx_run(ctx, f"flake8 {source}")
+    ctx_run(ctx, f"pylint {source} --job {cpu_count()}")
+    ctx_run(ctx, f"bandit -c pyproject.toml -r {source}")
+
+
+@task(clean)
+def test(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None) -> None:
     """运行单元测试和计算测试覆盖率
+
+    inv test --source plum_tools/conf.py --tests tests/test_conf.py
 
     pytest --cov-config=.coveragerc --cov=plum_tools --cov-fail-under=100 tests
     """
-    ctx.run(
-        "export PYTHONPATH=`pwd` && pytest tests", encoding="utf-8", pty=True, echo=True
-    )
-
-
-@task(clean)
-def coverage(ctx):
-    """运行单元测试和计算测试覆盖率"""
-    ctx.run(
-        "export PYTHONPATH=`pwd` && "
-        "coverage run --rcfile=.coveragerc --source=%s -m pytest tests && "
-        "coverage report -m --fail-under=57" % package_name,
-        encoding="utf-8",
-        pty=True,
-        echo=True,
-    )
-
-
-@task(clean)
-def unittestone(ctx, source, test):
-    """运行单元测试和计算测试覆盖率
-
-    inv unittestone --source plum_tools.fib --test tests/test_fib.py
-    """
-    ctx.run(
+    source = get_source(source, ignote_tests=True, ignote_tasks=True)
+    tests = get_tests(tests)
+    ctx_run(
+        ctx,
         "export PYTHONPATH=`pwd` && "
         "pytest -vv -rsxS -q --cov-config=.coveragerc --cov-report term-missing "
-        "--cov --cov-fail-under=100 {source} {test}".format(
-            source=covert_source(source), test=test
-        ),
-        encoding="utf-8",
-        pty=True,
-        echo=True,
+        f"--cov --cov-fail-under=57 {source} {tests}",
     )
 
 
 @task(clean)
-def coverageone(ctx, source, test):
+def coverage(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None) -> None:
     """运行单元测试和计算测试覆盖率
 
-    inv coverageone --source plum_tools.fib --test tests/test_fib.py
+    inv coverage --source plum_tools/conf.py --tests tests/test_conf.py
     """
-    ctx.run(
+    source = get_source(source, ignote_tests=True)
+    tests = get_tests(tests)
+    ctx_run(
+        ctx,
         "export PYTHONPATH=`pwd` && "
-        "coverage run --rcfile=.coveragerc --source={source} -m pytest -vv -rsxS -q {test} && "
-        "coverage report -m".format(source=covert_source(source), test=test),
-        encoding="utf-8",
-        pty=True,
-        echo=True,
+        f"coverage run --rcfile=.coveragerc --source={covert_source(source)} -m pytest -vv -rsxS -q {tests} && "
+        "coverage report -m --fail-under=57",
     )
 
 
-@task(clean)
-def format(ctx):
-    """格式化代码"""
-    autoflake_args = [
-        "--remove-all-unused-imports",
-        "--recursive",
-        "--remove-unused-variables",
-        "--in-place",
-        "--exclude=__init__.py",
-    ]
-    ctx.run(
-        "autoflake {args} {package_name} tests".format(args=" ".join(autoflake_args)),
-        package_name=package_name,
-        echo=True,
-    )
-    ctx.run("isort %s tests" % package_name, echo=True)
-    if six.PY3:
-        ctx.run("black %s tests" % package_name, echo=True)
-
-
-@task(clean)
-def formatone(ctx, source):
-    """格式化单个文件"""
-    autoflake_args = [
-        "--ignore-init-module-imports",
-        "--remove-all-unused-imports",
-        "--recursive",
-        "--remove-unused-variables",
-        "--in-place",
-        "--exclude=__init__.py",
-    ]
-    ctx.run(
-        "autoflake {args} {source}".format(
-            source=source, args=" ".join(autoflake_args)
-        ),
-        echo=True,
-    )
-    ctx.run("isort {source}".format(source=source), echo=True)
-    if six.PY3:
-        ctx.run("black {source}".format(source=source), echo=True)
-
-
-def get_site_packages_dir(packages: str) -> str:
+def get_site_packages_dir(packages: Optional[str]) -> str:
     if packages is None:
         return ""
     if not os.getenv("VIRTUAL_ENV"):
@@ -188,21 +175,10 @@ def get_site_packages_dir(packages: str) -> str:
     ).strip()
     if not packages.strip():
         return site_packages_dir
-    packages_list = [
-        package_name.strip()
-        for package_name in packages.split(",")
-        if package_name.strip()
-    ]
-    packages_unique = sorted(
-        list(set(packages_list)), key=lambda x: packages_list.index(x)
-    )
+    packages_list = [package_name.strip() for package_name in packages.split(",") if package_name.strip()]
+    packages_unique = sorted(list(set(packages_list)), key=lambda x: packages_list.index(x))
     if packages_unique:
-        return " ".join(
-            [
-                os.path.join(site_packages_dir, package_name)
-                for package_name in packages_unique
-            ]
-        )
+        return " ".join([os.path.join(site_packages_dir, package_name) for package_name in packages_unique])
     return site_packages_dir
 
 
@@ -213,43 +189,59 @@ def get_plint_args(msg_ids: str, ignore_default: bool) -> list:
         "--persistent=n",
     ]
     if not ignore_default:
-        pylint_args.append(
-            "--ignore=.git,venv*,docs,node_modules,tests,test*.py,debug_celery.py"
-        )
+        pylint_args.append("--ignore=.git,venv*,docs,node_modules,tests,test*.py,debug_celery.py")
     if msg_ids:
         pylint_args.extend(["--disable=all", f"--enable={msg_ids}"])
     return pylint_args
 
 
 @task
-def pylintone(ctx, source, msg_ids="", packages=None, ignore_default=False):
+def pylint(
+    ctx: Context, source: str, msg_ids: str = "", packages: Optional[str] = None, ignore_default: bool = False
+) -> None:
     """检查单个文件
 
-    inv --help pylintone
+    inv --help pylint
 
-    inv pylintone --source 'plum_tools *.py' --msg-ids="W1505" --packages="pymongo,celery"
+    inv pylint --source 'plum_tools *.py' --msg-ids="W1505" --packages="paramiko,pyyaml"
     """
     time_str = datetime.now().strftime("%Y%m%d_%H%M%S")
     file_name = f'pylint_{msg_ids.replace(",", "_")}_{time_str}.log'
     site_packages_dir = get_site_packages_dir(packages)
     pylint_args = " ".join(get_plint_args(msg_ids, ignore_default))
     cmd = f"pylint {pylint_args} {source} {site_packages_dir} > {file_name}"
-    ctx.run(cmd, echo=True)
+    ctx_run(ctx, cmd)
 
 
 @task
-def lock(ctx):
-    """生成版本文件
+def install(ctx: Context, dev: bool = False, skip_lock: bool = False) -> None:
+    """安装依赖
 
     1.安装Pipenv
 
     pip install pipenv
-
-    2.安装项目依赖包
-
-    pipenv install --deploy --dev --skip-lock
     """
-    ctx.run(
-        'if [ -f "Pipfile.lock" ]; then pipenv lock -v --keep-outdated ; else pipenv lock --pre --clear ; fi',
-        echo=False,
+    dev_flag = "--dev" if dev else ""
+    skip_lock_flag = "--skip-lock" if skip_lock else ""
+    ctx_run(
+        ctx,
+        (
+            "PIPENV_VENV_IN_PROJECT=0 PIPENV_IGNORE_VIRTUALENVS=0 PIPENV_VERBOSITY=-1 "
+            f"pipenv install --system --deploy {dev_flag} {skip_lock_flag}"
+        ),
+    )
+
+
+@task
+def requirements(ctx: Context) -> None:
+    """导出依赖文件"""
+    ctx_run(ctx, "pipenv requirements > requirements.txt")
+    ctx_run(ctx, "pipenv requirements --dev-only > requirements-dev.txt")
+
+
+@task
+def lock(ctx: Context) -> None:
+    """生成版本文件"""
+    ctx_run(
+        ctx, 'if [ -f "Pipfile.lock" ]; then pipenv lock --dev --verbose; else pipenv lock --pre --clear  --verbose; fi'
     )

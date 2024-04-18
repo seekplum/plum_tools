@@ -1,4 +1,3 @@
-# -*- coding:UTF-8
 """
 #=============================================================================
 #  ProjectName: plum-tools
@@ -10,23 +9,21 @@
 #       Create: 2018-07-05 22:02
 #=============================================================================
 """
+
 import argparse
 import os
 from multiprocessing import Pool
+from typing import Generator
 
 from .conf import Constant
-from .utils.git import check_is_git_repository
-from .utils.git import check_repository_modify_status
-from .utils.git import check_repository_stash
-from .utils.printer import print_error
-from .utils.printer import print_warn
+from .utils.git import check_is_git_repository, check_repository_modify_status, check_repository_stash
+from .utils.printer import print_error, print_warn
 
 
-def find_git_project_for_python(path):
+def find_git_project_for_python(path: str) -> Generator[str, None, None]:
     """查找目录下所有的 git仓库
 
     :param path 要被检查的目录
-    :type path str
     :example path "/tmp/git"
 
     >>> for path in find_git_project_for_python("/tmp"):
@@ -39,14 +36,12 @@ def find_git_project_for_python(path):
             yield root
 
 
-def check_project(path):
+def check_project(path: str) -> dict:
     """检查git项目
 
     :param path 仓库路径
-    :type path str
     :example path /tmp/git
 
-    :rtype result dict
     :return result {
         path: 仓库路径
         output: 检查输出信息
@@ -79,26 +74,20 @@ def check_project(path):
     return result
 
 
-def check_projects(projects, detail):
+def check_projects(projects: list[str], detail: bool) -> None:
     """检查指导目录下所有的仓库是否有修改
 
     当仓库中有内容被修改时，打印黄色警告信息
 
     :param projects 需要检查的目录列表
-    :type projects list
     :example ["/tmp"]
 
     :param detail 是否显示详细错误信息
-    :type detail bool
     :example False
     """
-    targets = [
-        path
-        for project_path in projects
-        for path in find_git_project_for_python(project_path)
-    ]
-    pool = Pool(processes=Constant.processes_number)
-    result = pool.map(check_project, targets)
+    targets = [path for project_path in projects for path in find_git_project_for_python(project_path)]
+    with Pool(processes=Constant.processes_number) as pool:
+        result = pool.map(check_project, targets)
     for item in result:
         # 仓库中文件没有被改动而且没有文件被储藏了
         if not item["status"]:
@@ -111,7 +100,7 @@ def check_projects(projects, detail):
         print_error(item["output"])
 
 
-def main():
+def main() -> None:
     """程序主入口"""
     parser = argparse.ArgumentParser()
 

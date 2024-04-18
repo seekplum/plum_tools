@@ -77,17 +77,28 @@ inv coverage
 ### 第二种
 
 ```bash
-inv unittest
+inv test
 ```
 
 ## 检查 Python 代码规范
 
 ```bash
-inv check
+inv lint
 ```
+
+## 更新版本
+
+```bash
+# 小版本
+bumpversion patch
+
+# 中版本
+bumpversion minor
+```
+
 ## gitrepo
 
-查找指定路径下所有被改动的git仓库
+查找指定路径下所有被改动的 git 仓库
 
 ```bash
 ➜  ~ gitrepo -h
@@ -103,7 +114,7 @@ optional arguments:
 
 ## pssh
 
-通过ip简写或别名快速登录机器
+通过 ip 简写或别名快速登录机器
 
 ```bash
 ➜  ~ pssh -h
@@ -125,7 +136,7 @@ optional arguments:
 
 ## gitstash
 
-外部传入一个branch，保存本地未提交的修改，然后切换到branch，将上次该branch保存的未提交的结果stash pop出来
+外部传入一个 branch，保存本地未提交的修改，然后切换到 branch，将上次该 branch 保存的未提交的结果 stash pop 出来
 
 ```bash
 ➜  ~ gitstash -h
@@ -140,7 +151,7 @@ optional arguments:
 
 ## pipmi
 
-对指定机器进行远程执行ipmitool相关操作
+对指定机器进行远程执行 ipmitool 相关操作
 
 ```bash
 ➜  ~ pipmi -h
@@ -169,7 +180,6 @@ optional arguments:
   -P PASSWORD, --Password PASSWORD
                         specify ipmi password
 ```
-
 
 ## prn
 
@@ -202,7 +212,7 @@ optional arguments:
 
 ## pping
 
-ping指定网段所有ip是否能ping通
+ping 指定网段所有 ip 是否能 ping 通
 
 ```bash
 ➜  ~ pping -h

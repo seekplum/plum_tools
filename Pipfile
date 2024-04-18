@@ -5,26 +5,30 @@ name = "aliyun"
 
 [dev-packages]
 autoflake = "*"
-black = "*"  # Only Python3
+black = "*"
 isort = "*"
-mypy = "*"  # Only Python3.5 or later
+mypy = "*"
 invoke = "*"
 bumpversion = "*"
 pytest = "*"
 pytest-cov = "*"
 pytest-benchmark = "*"
-mock = "*"
 twine = "*"
 coverage = "*"
 coveralls = "*"
 flake8 = "*"
+flake8-bugbear = "*"
+flake8-pyproject = "*"
+pylint = "*"
+"bandit[toml]" = "*"
 pre-commit = "*"
+types-PyYAML = "*"
+types-paramiko = "*"
 
 [packages]
+setuptools = "*"
 pyyaml = "*"
-six = "*"
-schema = "*"
 paramiko = "*"
 
 [requires]
-python_version = "3.9"
+python_version = "3.12"

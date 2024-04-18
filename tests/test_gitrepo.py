@@ -11,14 +11,13 @@
 #       Create: 2019-04-04 23:43
 #=============================================================================
 """
+
 import os
+from unittest import mock
 
-import mock
+import pytest
+from plum_tools.gitrepo import check_project, check_projects, find_git_project_for_python, main
 
-from plum_tools.gitrepo import check_project
-from plum_tools.gitrepo import check_projects
-from plum_tools.gitrepo import find_git_project_for_python
-from plum_tools.gitrepo import main
 from tests.common import MockPool
 
 
@@ -27,8 +26,8 @@ from tests.common import MockPool
     "plum_tools.gitrepo.check_is_git_repository",
     side_effect=[True, True, False, True, True],
 )
-def test_find_git_project_for_python(mock_check):
-    mock_os_result = [("/tmp/{}".format(i + 1), None, None) for i in range(5)]
+def test_find_git_project_for_python(mock_check: mock.MagicMock) -> None:
+    mock_os_result = [(f"/tmp/{i + 1}", None, None) for i in range(5)]
 
     with mock.patch("plum_tools.gitrepo.os") as mock_os:
         mock_os.walk.return_value = mock_os_result
@@ -46,7 +45,7 @@ def test_find_git_project_for_python(mock_check):
     )
 
 
-def test_check_project_with_modify():
+def test_check_project_with_modify() -> None:
     with mock.patch(
         "plum_tools.gitrepo.check_repository_modify_status",
         return_value=(True, "test1"),
@@ -91,12 +90,12 @@ def test_check_project_with_modify():
     "plum_tools.gitrepo.check_is_git_repository",
     side_effect=[True, True, False, True, True],
 )
-def test_check_projects(mock_check, capsys):
-    mock_os_result = [("/tmp/{}".format(i + 1), None, None) for i in range(5)]
+def test_check_projects(mock_check: mock.MagicMock, capsys: pytest.CaptureFixture) -> None:
+    mock_os_result = [(f"/tmp/{i + 1}", None, None) for i in range(5)]
 
-    with mock.patch(
-        "plum_tools.gitrepo.Pool", return_value=MockPool()
-    ) as mock_pool, mock.patch("plum_tools.gitrepo.os") as mock_os, mock.patch(
+    with mock.patch("plum_tools.gitrepo.Pool", return_value=MockPool()) as mock_pool, mock.patch(
+        "plum_tools.gitrepo.os"
+    ) as mock_os, mock.patch(
         "plum_tools.gitrepo.check_repository_modify_status",
         side_effect=[
             (True, "test1"),
@@ -144,12 +143,12 @@ def test_check_projects(mock_check, capsys):
     "plum_tools.gitrepo.check_is_git_repository",
     side_effect=[True, True, False, True, True],
 )
-def test_check_projects_with_not_detail(mock_check, capsys):
-    mock_os_result = [("/tmp/{}".format(i + 1), None, None) for i in range(5)]
+def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pytest.CaptureFixture) -> None:
+    mock_os_result = [(f"/tmp/{i + 1}", None, None) for i in range(5)]
 
-    with mock.patch(
-        "plum_tools.gitrepo.Pool", return_value=MockPool()
-    ) as mock_pool, mock.patch("plum_tools.gitrepo.os") as mock_os, mock.patch(
+    with mock.patch("plum_tools.gitrepo.Pool", return_value=MockPool()) as mock_pool, mock.patch(
+        "plum_tools.gitrepo.os"
+    ) as mock_os, mock.patch(
         "plum_tools.gitrepo.check_repository_modify_status",
         side_effect=[
             (True, "test1"),
@@ -193,7 +192,7 @@ def test_check_projects_with_not_detail(mock_check, capsys):
     assert "test5" not in captured.out
 
 
-def test_main():
+def test_main() -> None:
     mock_parser = mock.Mock()
     mock_args = mock.Mock(path="/tmp/test111", detail=True)
     mock_parser.parse_args.return_value = mock_args

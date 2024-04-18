@@ -6,14 +6,14 @@ repos:
     name: check
     stages: [commit]
     language: system
-    entry: inv check
+    entry: inv lint
     types: [python]
 
   - id: unittest
     name: unittest
     stages: [commit]
     language: system
-    entry: inv unittest
+    entry: inv test
     types: [python]
     pass_filenames: false
 

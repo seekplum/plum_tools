@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 #=============================================================================
 #  ProjectName: plum_tools
@@ -12,12 +10,8 @@
 #=============================================================================
 """
 
-from __future__ import print_function
-
 import os
-
-import six
-
+from typing import Any, Type
 
 VERSION = "0.2.7"
 
@@ -25,20 +19,20 @@ VERSION = "0.2.7"
 class ClsReadOnlyClass(type):
     """类属性只读"""
 
-    def __setattr__(cls, key, value):
+    def __setattr__(cls, key: str, _: Any) -> None:
         """修改属性式抛出异常"""
-        raise ValueError("%s is read-only" % key)
+        raise ValueError(f"{key} is read-only")
 
 
-class ReadOnlyClass(six.with_metaclass(ClsReadOnlyClass)):
+class ReadOnlyClass(metaclass=ClsReadOnlyClass):
     """所有属性只读"""
 
-    def __init__(self):
+    def __init__(self) -> None:
         """初始化"""
 
-    def __setattr__(self, key, value):
+    def __setattr__(self, key: str, _: Any) -> None:
         """修改属性式抛出异常"""
-        raise ValueError("%s is read-only" % key)
+        raise ValueError(f"{key} is read-only")
 
 
 class GitCommand(ReadOnlyClass):
@@ -61,7 +55,8 @@ class OsCommand(ReadOnlyClass):
 
     find_command = 'find %s -name ".git"'  # 通过系统命令查找文件路径
     ping_command = "ping -W 3 -c 1 %s"  # ping命令 -W 超时时间 -c 次数
-    ipmi_command = "ipmitool -I lanplus -H %(ip)s -U %(user)s -P %(password)s %(command)s"  # ipmi命令
+    # ipmi命令
+    ipmi_command = "ipmitool -I lanplus -H %(ip)s -U %(user)s -P %(password)s %(command)s"
     stat_command = "stat %s"
 
 
@@ -91,33 +86,25 @@ class PathConfig(ReadOnlyClass):
     ssh_config_path = os.path.join(home, ssh_config_name)  # ssh配置文件路径
 
 
-def generate_test_class(cls, short):
+def generate_test_class(cls: Type[ReadOnlyClass], short: str) -> None:
     """生成测试代码
 
     :param cls: 只读属性的类
-    :type cls object
     :example cls OsCommand
 
     :param short: 类的简写
-    :type short str
-    :example short str
+    :example short a
     """
     cls_name = cls.__name__
-    print("class Test%s(object):" % cls_name)
-    print("    @classmethod")
-    print("    def setup(cls):")
-    print("        cls.%s = %s" % (short, cls_name))
+    print(f"class Test{cls_name}(unittest.TestCase):")
+    print("    def setUp(self) -> None:")
+    print(f"        self.{short} = {cls_name}")
     print()
-    print("    @classmethod")
-    print("    def teardown(cls):")
-    print("        del cls.%s" % short)
+    print("    def tearDown(self) -> None:")
+    print(f"        del self.{short}")
     print()
-    cls_variables = [
-        attr
-        for attr in dir(cls)
-        if not callable(getattr(cls, attr)) and not attr.startswith("__")
-    ]
+    cls_variables = [attr for attr in dir(cls) if not callable(getattr(cls, attr)) and not attr.startswith("__")]
     for name in cls_variables:
-        print("    def test_%s(self):" % name)
-        print("        assert self.%s.%s == '%s'" % (short, name, getattr(cls, name)))
+        print(f"    def test_{name}(self) -> None:")
+        print(f"        assert self.{short}.{name} == '{getattr(cls, name)}'")
         print()

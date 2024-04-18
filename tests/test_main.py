@@ -8,7 +8,7 @@ import sys
 import pytest
 
 
-def main():
+def main() -> None:
     curr_path = os.path.dirname(os.path.abspath(__file__))
     if len(sys.argv) > 1:
         args = sys.argv[1:]

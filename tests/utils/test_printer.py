@@ -11,17 +11,20 @@
 #       Create: 2019-04-04 20:03
 #=============================================================================
 """
-import pytest
 
-from plum_tools.compat import implements_to_unicode
-from plum_tools.utils.printer import get_color
-from plum_tools.utils.printer import get_green
-from plum_tools.utils.printer import get_red
-from plum_tools.utils.printer import get_yellow
-from plum_tools.utils.printer import print_error
-from plum_tools.utils.printer import print_ok
-from plum_tools.utils.printer import print_text
-from plum_tools.utils.printer import print_warn
+from typing import Any
+
+import pytest
+from plum_tools.utils.printer import (
+    get_color,
+    get_green,
+    get_red,
+    get_yellow,
+    print_error,
+    print_ok,
+    print_text,
+    print_warn,
+)
 
 
 @pytest.mark.parametrize(
@@ -33,11 +36,10 @@ from plum_tools.utils.printer import print_warn
         (4, ""),
         (5, "1"),
         (6, "测试"),
-        (7, u"测试"),
     ],
 )
-def test_color(c, s):
-    assert get_color(c, s) == "\033[3%sm%s\033[0m" % (c, implements_to_unicode(s))
+def test_color(c: int, s: Any) -> None:
+    assert get_color(c, s) == f"\033[3{c}m{s}\033[0m"
 
 
 @pytest.mark.parametrize(
@@ -49,11 +51,10 @@ def test_color(c, s):
         "",
         "1",
         "测试",
-        u"测试",
     ],
 )
-def test_get_red(s):
-    assert get_red(s) == "\033[3%sm%s\033[0m" % (1, implements_to_unicode(s))
+def test_get_red(s: Any) -> None:
+    assert get_red(s) == f"\033[3{1}m{s}\033[0m"
 
 
 @pytest.mark.parametrize(
@@ -65,11 +66,10 @@ def test_get_red(s):
         "",
         "1",
         "测试",
-        u"测试",
     ],
 )
-def test_get_green(s):
-    assert get_green(s) == "\033[3%sm%s\033[0m" % (2, implements_to_unicode(s))
+def test_get_green(s: Any) -> None:
+    assert get_green(s) == f"\033[3{2}m{s}\033[0m"
 
 
 @pytest.mark.parametrize(
@@ -81,11 +81,10 @@ def test_get_green(s):
         "",
         "1",
         "测试",
-        u"测试",
     ],
 )
-def test_get_yellow(s):
-    assert get_yellow(s) == "\033[3%sm%s\033[0m" % (3, implements_to_unicode(s))
+def test_get_yellow(s: Any) -> None:
+    assert get_yellow(s) == f"\033[3{3}m{s}\033[0m"
 
 
 @pytest.mark.parametrize(
@@ -97,13 +96,12 @@ def test_get_yellow(s):
         "",
         "1",
         "测试",
-        u"测试",
     ],
 )
-def test_print_text(s, capsys):
+def test_print_text(s: Any, capsys: pytest.CaptureFixture) -> None:
     print_text(s)
     captured = capsys.readouterr()
-    assert captured.out == implements_to_unicode(s) + "\n"
+    assert captured.out == f"{s}\n"
 
 
 @pytest.mark.parametrize(
@@ -115,13 +113,12 @@ def test_print_text(s, capsys):
         "",
         "1",
         "测试",
-        u"测试",
     ],
 )
-def test_print_ok(s, capsys):
+def test_print_ok(s: Any, capsys: pytest.CaptureFixture) -> None:
     print_ok(s)
     captured = capsys.readouterr()
-    assert captured.out == "\033[3%sm%s\033[0m\n" % (2, implements_to_unicode(s))
+    assert captured.out == f"\033[3{2}m{s}\033[0m\n"
 
 
 @pytest.mark.parametrize(
@@ -133,13 +130,12 @@ def test_print_ok(s, capsys):
         "",
         "1",
         "测试",
-        u"测试",
     ],
 )
-def test_print_warn(s, capsys):
+def test_print_warn(s: Any, capsys: pytest.CaptureFixture) -> None:
     print_warn(s)
     captured = capsys.readouterr()
-    assert captured.out == "\033[3%sm%s\033[0m\n" % (3, implements_to_unicode(s))
+    assert captured.out == f"\033[3{3}m{s}\033[0m\n"
 
 
 @pytest.mark.parametrize(
@@ -151,10 +147,9 @@ def test_print_warn(s, capsys):
         "",
         "1",
         "测试",
-        u"测试",
     ],
 )
-def test_pprint_error(s, capsys):
+def test_pprint_error(s: Any, capsys: pytest.CaptureFixture) -> None:
     print_error(s)
     captured = capsys.readouterr()
-    assert captured.out == "\033[3%sm%s\033[0m\n" % (1, implements_to_unicode(s))
+    assert captured.out == f"\033[3{1}m{s}\033[0m\n"

@@ -19,7 +19,7 @@ print_warn () {
 run_unittest() {
     desc="Run UnitTest"
     echo ${desc}
-    inv unittest
+    inv test
     exit_code=$?
     check ${desc}
 }
@@ -27,7 +27,7 @@ run_unittest() {
 check_code_style() {
     desc="Check code style"
     echo ${desc}
-    inv check
+    inv lint
     exit_code=$?
     check ${desc}
 }

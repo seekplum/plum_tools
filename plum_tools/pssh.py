@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """
 #=============================================================================
 #  ProjectName: plum-tools
@@ -12,6 +11,7 @@
 #       Create: 2018-07-05 22:02
 #=============================================================================
 """
+
 import argparse
 import os
 
@@ -19,63 +19,52 @@ from .conf import SSHConfig
 from .utils.sshconf import merge_ssh_config
 
 
-def get_login_ssh_cmd(hostname, user, port, identityfile):
+def get_login_ssh_cmd(hostname: str, user: str, port: int, identityfile: str) -> str:
     """组合登陆的命令
 
     :param hostname 主机ip
-    :type hostname str
     :example hostname 10.10.100.1
 
     :param user ssh登陆使用的用户名
-    :type user str
     :example user 10.10.100.1
 
     :param port ssh登陆使用的端口号
-    :type port int
     :example port 22
 
     :param identityfile 主机ip
-    :type identityfile str
     :example identityfile ~/.ssh/id_rsa
 
-    :rtype cmd str
     :return cmd ssh登陆的命令
     """
     cmd = (
-        "ssh  -i %s "
+        f"ssh  -i {identityfile} "
         '-o "UserKnownHostsFile=/dev/null" '
         '-o "StrictHostKeyChecking no" '
-        '-o  "ConnectTimeout=%s" '
-        "%s@%s -p %d" % (identityfile, SSHConfig.connect_timeout, user, hostname, port)
+        f'-o  "ConnectTimeout={SSHConfig.connect_timeout}" '
+        f"{user}@{hostname} -p {port}"
     )
     return cmd
 
 
-def login(host, host_type, user, port, identityfile):
+def login(host: str, host_type: str, user: str, port: int, identityfile: str) -> None:
     """登陆主机
 
     :param host: ip的简写或者主机的别名
-    :type host str
     :example host 1
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
     :example host_type default
 
     :param user ssh登陆用户名
-    :type user str
     :example user root
 
     :param port ssh登陆端口
-    :type port int
     :example port 22
 
     :param user ssh登陆用户名
-    :type user str
     :example user root
 
     :param identityfile ssh登陆私钥文件路径
-    :type identityfile str
     :example identityfile ~/.ssh/id_rsa
     """
     ssh_conf = merge_ssh_config(host, host_type, user, port, identityfile)
@@ -84,7 +73,7 @@ def login(host, host_type, user, port, identityfile):
     os.system(cmd)
 
 
-def main():
+def main() -> None:
     """程序主入口"""
     parser = argparse.ArgumentParser()
     parser.add_argument(dest="host", action="store", help="specify server")

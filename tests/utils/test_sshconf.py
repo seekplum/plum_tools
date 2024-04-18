@@ -11,25 +11,24 @@
 #       Create: 2019-04-04 23:42
 #=============================================================================
 """
-import mock
+
+from unittest import mock
+
 import pytest
-
 from plum_tools.conf import PathConfig
-from plum_tools.utils.sshconf import SSHConf
-from plum_tools.utils.sshconf import get_host_ip
-from plum_tools.utils.sshconf import get_prefix_host_ip
+from plum_tools.utils.sshconf import SSHConf, get_host_ip, get_prefix_host_ip
 
 
-class TestSSHConf(object):
+class TestSSHConf:
     @pytest.mark.parametrize(
         "host, user, port, identityfile",
         [
-            (1, None, None, None),
-            (2, "", "", ""),
-            (3.1, "", 0, False),
+            ("1", None, None, None),
+            ("2", "", "", ""),
+            ("3.1", "", 0, False),
         ],
     )
-    def test_get_ssh_conf_with_empty(self, host, user, port, identityfile):
+    def test_get_ssh_conf_with_empty(self, host: str, user: str, port: int, identityfile: str) -> None:
         s = SSHConf(user, port, identityfile)
         with mock.patch(
             "plum_tools.utils.utils.YmlConfig.parse_config_yml",
@@ -51,11 +50,11 @@ class TestSSHConf(object):
     @pytest.mark.parametrize(
         "host, user, port, identityfile",
         [
-            (1, "mysql", 3306, "/tmp/id_rsa"),
-            (1.1, "oracle", 1521, "/tmp/id_dsa"),
+            ("1", "mysql", 3306, "/tmp/id_rsa"),
+            ("1.1", "oracle", 1521, "/tmp/id_dsa"),
         ],
     )
-    def test_get_ssh_conf(self, host, user, port, identityfile):
+    def test_get_ssh_conf(self, host: str, user: str, port: int, identityfile: str) -> None:
         s = SSHConf(user, port, identityfile)
         with mock.patch(
             "plum_tools.utils.utils.YmlConfig.parse_config_yml",
@@ -75,7 +74,7 @@ class TestSSHConf(object):
         assert ssh_conf["identityfile"] == identityfile
 
     @pytest.mark.parametrize("alias_conf", [{}])
-    def test_merge_ssh_conf_with_raise(self, alias_conf):
+    def test_merge_ssh_conf_with_raise(self, alias_conf: dict) -> None:
         s = SSHConf("", 22, "")
         with mock.patch(
             "plum_tools.utils.utils.YmlConfig.parse_config_yml",
@@ -92,7 +91,7 @@ class TestSSHConf(object):
                 p.assert_called_with(PathConfig.plum_yml_path)
 
     @pytest.mark.parametrize("alias_conf", [{"hostname": "1.1.1.1"}])
-    def test_merge_ssh_conf_with_empty(self, alias_conf):
+    def test_merge_ssh_conf_with_empty(self, alias_conf: dict) -> None:
         s = SSHConf("", 22, "")
         with mock.patch(
             "plum_tools.utils.utils.YmlConfig.parse_config_yml",
@@ -112,7 +111,7 @@ class TestSSHConf(object):
             assert ssh_conf["port"] == 22
             assert ssh_conf["identityfile"] == "~/.ssh/id_rsa"
 
-    def test_merge_ssh_conf_with_alias(self):
+    def test_merge_ssh_conf_with_alias(self) -> None:
         alias_conf = {
             "hostname": "1.1.1.1",
             "user": "oracle",
@@ -138,7 +137,7 @@ class TestSSHConf(object):
             assert ssh_conf["port"] == alias_conf["port"]
             assert ssh_conf["identityfile"] == alias_conf["identityfile"]
 
-    def test_merge_ssh_conf(self):
+    def test_merge_ssh_conf(self) -> None:
         alias_conf = {
             "hostname": "1.1.1.1",
             "user": "oracle",
@@ -166,10 +165,8 @@ class TestSSHConf(object):
             assert ssh_conf["identityfile"] == identityfile
 
 
-@pytest.mark.parametrize(
-    "host_type, result", [(1, "1.1.1"), (2, "2.2.2."), ("test", "3.3.3")]
-)
-def test_get_prefix_host_ip(host_type, result):
+@pytest.mark.parametrize("host_type, result", [(1, "1.1.1"), (2, "2.2.2."), ("test", "3.3.3")])
+def test_get_prefix_host_ip(host_type: str, result: list) -> None:
     with mock.patch(
         "plum_tools.utils.utils.YmlConfig.parse_config_yml",
         return_value={
@@ -182,11 +179,9 @@ def test_get_prefix_host_ip(host_type, result):
         p.assert_called_with(PathConfig.plum_yml_path)
 
 
-def test_get_prefix_host_ip_with_raise():
+def test_get_prefix_host_ip_with_raise() -> None:
     # 命令行直接运行是OK的，没有编码问题，通过 ctx.run 运行有UnicodeEncodeError:, 需要排查 encoding
-    with mock.patch(
-        "plum_tools.utils.utils.YmlConfig.parse_config_yml", return_value={}
-    ) as p:
+    with mock.patch("plum_tools.utils.utils.YmlConfig.parse_config_yml", return_value={}) as p:
         with pytest.raises(SystemExit):
             get_prefix_host_ip("test")
         p.assert_called_with(PathConfig.plum_yml_path)
@@ -195,13 +190,13 @@ def test_get_prefix_host_ip_with_raise():
 @pytest.mark.parametrize(
     "host, host_type, result",
     [
-        ("1", 1, "1.1.1.1"),
-        ("2", 1, "1.1.1.2"),
-        ("2.1", 1, "1.1.2.1"),
-        ("2.2", 1, "1.1.2.2"),
+        ("1", "1", "1.1.1.1"),
+        ("2", "1", "1.1.1.2"),
+        ("2.1", "1", "1.1.2.1"),
+        ("2.2", "1", "1.1.2.2"),
     ],
 )
-def test_get_host_ip(host, host_type, result):
+def test_get_host_ip(host: str, host_type: str, result: str) -> None:
     with mock.patch(
         "plum_tools.utils.utils.YmlConfig.parse_config_yml",
         return_value={

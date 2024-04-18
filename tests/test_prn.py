@@ -11,13 +11,13 @@
 #       Create: 2019-04-04 16:24
 #=============================================================================
 """
-import mock
-import pytest
 
+from typing import Optional
+from unittest import mock
+
+import pytest
 from plum_tools.conf import PathConfig
-from plum_tools.prn import SyncFiles
-from plum_tools.prn import get_project_conf
-from plum_tools.prn import main
+from plum_tools.prn import SyncFiles, get_project_conf, main
 
 
 @pytest.mark.parametrize(
@@ -31,7 +31,7 @@ from plum_tools.prn import main
         ("xxx", "/tmp/1", "/tmp/2", None, []),
     ],
 )
-def test_get_project_conf(project, src, dest, delete, exclude):
+def test_get_project_conf(project: str, src: str, dest: str, delete: Optional[int], exclude: list[str]) -> None:
     with mock.patch(
         "plum_tools.utils.utils.YmlConfig.parse_config_yml",
         return_value={
@@ -45,7 +45,7 @@ def test_get_project_conf(project, src, dest, delete, exclude):
             }
         },
     ) as p, mock.patch("plum_tools.prn.get_file_abspath", side_effect=lambda x: x):
-        data = get_project_conf(project, src, dest, delete, exclude)
+        data = get_project_conf(project, [src], [dest], delete, exclude)
         assert data == {
             "exclude": exclude,
             "delete": delete,
@@ -55,17 +55,17 @@ def test_get_project_conf(project, src, dest, delete, exclude):
         p.assert_called_with(PathConfig.plum_yml_path)
 
 
-def test_translate(capsys):
-    hostname, user, port, identityfile, src, dest, exclude, delete = (
+def test_translate(capsys: pytest.CaptureFixture) -> None:
+    hostname, user, port, identityfile, src, dest, delete = (
         "1.1.1.1",
         "user",
         22,
         "",
         "/tmp",
         "/tmp",
-        [],
         0,
     )
+    exclude: list[str] = []
     u = SyncFiles(hostname, user, port, identityfile, src, dest, exclude, delete)
     with mock.patch("plum_tools.prn.run_cmd") as m:
         u.translate()
@@ -75,10 +75,13 @@ def test_translate(capsys):
         )
         captured = capsys.readouterr()
         output = captured.out
-        assert output == u"[32m上传 /tmp 到 user@1.1.1.1 服务器(端口: 22) tmp 成功[0m\n"
+        assert (
+            output
+            == "[32m上传 /tmp/ 到 user@1.1.1.1 服务器(端口: 22) /tmp 成功[0m\n"  # pylint: disable=invalid-character-esc
+        )
 
 
-def test_main():
+def test_main() -> None:
     mock_parser = mock.Mock()
     mock_args = mock.Mock(
         servers=["test", "dev"],
@@ -93,16 +96,13 @@ def test_main():
         delete=None,
         exclude=[],
         debug=False,
+        version=False,
     )
     mock_project_conf = mock.Mock()
     mock_parser.parse_args.return_value = mock_args
-    with mock.patch(
-        "plum_tools.prn.argparse.ArgumentParser", return_value=mock_parser
-    ) as mock_argparse, mock.patch(
+    with mock.patch("plum_tools.prn.argparse.ArgumentParser", return_value=mock_parser) as mock_argparse, mock.patch(
         "plum_tools.prn.get_project_conf", return_value=mock_project_conf
-    ) as mock_project, mock.patch(
-        "plum_tools.prn.sync_files"
-    ) as mock_sync:
+    ) as mock_project, mock.patch("plum_tools.prn.sync_files") as mock_sync:
         main()
         mock_argparse.assert_called_once_with()
         mock_parser.add_argument.assert_has_calls(
@@ -230,12 +230,7 @@ def test_main():
             ]
         )
         mock_parser.parse_args.assert_called_once_with()
-        mock_project.assert_has_calls(
-            [
-                mock.call(project, "", "", None, [], False)
-                for project in ["test", "python"]
-            ]
-        )
+        mock_project.assert_has_calls([mock.call(project, "", "", None, [], False) for project in ["test", "python"]])
         mock_sync.assert_called_once_with(
             ["test", "dev"],
             mock_args.type,

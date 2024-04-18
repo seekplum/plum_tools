@@ -12,18 +12,18 @@
 #=============================================================================
 """
 
-import mock
+from unittest import mock
 
 from plum_tools.pssh import main
 
 
-def test_main():
+def test_main() -> None:
     mock_parser = mock.Mock()
     mock_args = mock.Mock(host="dev", type="default", identityfile="", user="", port=0)
     mock_parser.parse_args.return_value = mock_args
-    with mock.patch(
-        "plum_tools.pssh.argparse.ArgumentParser", return_value=mock_parser
-    ) as mock_argparse, mock.patch("plum_tools.pssh.login") as mock_login:
+    with mock.patch("plum_tools.pssh.argparse.ArgumentParser", return_value=mock_parser) as mock_argparse, mock.patch(
+        "plum_tools.pssh.login"
+    ) as mock_login:
         main()
         mock_argparse.assert_called_once_with()
         mock_parser.add_argument.assert_has_calls(

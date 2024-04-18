@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 #=============================================================================
 #  ProjectName: plum_tools
@@ -11,33 +9,30 @@
 #       Create: 2018-07-07 19:05
 #=============================================================================
 """
+
 import os
 
 from ..conf import GitCommand
-from .utils import cd
-from .utils import run_cmd
+from .utils import cd, run_cmd
 
 
-def get_current_branch_name():
+def get_current_branch_name() -> str:
     """查询当前分支名
 
-    :rtype str
     :return 当前分支名
     """
     return run_cmd(GitCommand.branch_abbrev).strip()
 
 
-def check_is_git_repository(path):
+def check_is_git_repository(path: str) -> bool:
     """检查目录是否为git 仓库
 
     :param path 要被检查的目录
-    :type path str
     :example path /tmp/git/
 
     >>> check_is_git_repository("/tmp")
     False
 
-    :rtype bool
     :return
         True `path`目录是一个git仓库
         False `path`目录不是一个git仓库
@@ -48,14 +43,12 @@ def check_is_git_repository(path):
     return False
 
 
-def check_repository_modify_status(repo_path):
+def check_repository_modify_status(repo_path: str) -> tuple[bool, str]:
     """检查仓库是否有文件修改
 
     :param repo_path 仓库路径
-    :type repo_path str
     :example repo_path /tmp/git
 
-    :rtype result bool
     :return result 检查结果
         True 仓库有文件进行了修改未提交
         False 仓库没有文件进行了修改
@@ -63,7 +56,6 @@ def check_repository_modify_status(repo_path):
     >>> check_repository_modify_status("`pwd`")#doctest: +ELLIPSIS
     (True, '...')
 
-    :rtype output str
     :return output 命令输出
     """
     with cd(repo_path):
@@ -82,14 +74,12 @@ def check_repository_modify_status(repo_path):
     return result, output
 
 
-def check_repository_stash(repo_path):
+def check_repository_stash(repo_path: str) -> tuple[bool, str]:
     """检查仓库是否在储藏区
 
     :param repo_path 仓库路径
-    :type repo_path str
     :example repo_path /tmp/git
 
-    :rtype result bool
     :return result 检查结果
         True 仓库有文件在储藏区
         False 仓库中储藏区是干净的
@@ -97,7 +87,6 @@ def check_repository_stash(repo_path):
     >>> check_repository_stash("`pwd`")
     (False, '')
 
-    :rtype output str
     :return output 命令输出
     """
     with cd(repo_path):

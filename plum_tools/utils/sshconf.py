@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 #=============================================================================
 #  ProjectName: plum_tools
@@ -16,40 +14,34 @@ import re
 import sys
 
 from ..conf import PathConfig
-from .utils import YmlConfig
-from .utils import print_error
+from .utils import YmlConfig, print_error
 
 
-class SSHConf(object):
+class SSHConf:
     """SSH相关配置"""
 
-    def __init__(self, user, port, identityfile):
+    def __init__(self, user: str, port: int, identityfile: str) -> None:
         """初始
 
         :param user ssh登陆使用的用户名
-        :type user str
         :example user 10.10.100.1
 
         :param port ssh登陆使用的端口号
-        :type port int
         :example port 22
 
         :param identityfile 主机ip
-        :type identityfile str
         :example identityfile ~/.ssh/id_rsa
         """
         self._user = user
         self._port = port
         self._identityfile = identityfile
 
-    def get_ssh_conf(self, host):
+    def get_ssh_conf(self, host: str) -> dict:
         """查询默认的ssh登陆信息
 
         :param host: 主机ip
-        :type host str
         :example host 10.10.100.1
 
-        :rtype ssh_conf dict
         :return ssh_conf ssh主机信息
         :example ssh_conf
         {
@@ -70,11 +62,10 @@ class SSHConf(object):
         ssh_conf["hostname"] = host
         return ssh_conf
 
-    def merge_ssh_conf(self, alias_conf):
+    def merge_ssh_conf(self, alias_conf: dict) -> dict:
         """合并ssh配置信息
 
         :param alias_conf 在./ssh/config配置文件中的ssh主机信息
-        :type alias_conf dict
         :example alias_conf
         {
             'identityfile': '~/.ssh/seekplum',
@@ -83,7 +74,6 @@ class SSHConf(object):
             'port': 22
         }
 
-        :rtype ssh_conf dict
         :return ssh_conf 和输入信息合并后的ssh主机信息
         :example ssh_conf
         {
@@ -96,8 +86,7 @@ class SSHConf(object):
         yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
         default_ssh_conf = yml_config["default_ssh_conf"]
         ssh_conf = {
-            "identityfile": self._identityfile
-            or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
+            "identityfile": self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
             "hostname": alias_conf["hostname"],
             "user": self._user or alias_conf.get("user", default_ssh_conf["user"]),
             "port": int(self._port or alias_conf.get("port", default_ssh_conf["port"])),
@@ -105,39 +94,34 @@ class SSHConf(object):
         return ssh_conf
 
 
-def get_prefix_host_ip(host_type):
+def get_prefix_host_ip(host_type: str) -> str:
     """查询不同类型的前三段IP
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
     :example host_type default
 
-    :rtype prefix_host str
     :return prefix_host IP前三段值
     :example prefix_host 10.10.100
     """
-    type_key = "host_type_%s" % host_type
+    type_key = f"host_type_{host_type}"
     try:
         yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
         prefix_host = yml_config[type_key]
     except KeyError:
-        print_error("yml文件: %s 中缺少key: %s" % (PathConfig.plum_yml_path, type_key))
+        print_error(f"yml文件: {PathConfig.plum_yml_path} 中缺少key: {type_key}")
         sys.exit(1)
     return prefix_host
 
 
-def get_host_ip(host, host_type):
+def get_host_ip(host: str, host_type: str) -> str:
     """查询主机的ip
 
     :param host: ip的简写
-    :type host str
     :example host 1
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
     :example host_type default
 
-    :rtype str
     :return 完整的主机ip
     """
     prefix_host = get_prefix_host_ip(host_type)
@@ -148,14 +132,13 @@ def get_host_ip(host, host_type):
     normal_point = 3
     if point_count < normal_point:
         prefix_host = mark.join(prefix_host.split(mark)[: (normal_point - point_count)])
-        host = "%s.%s" % (prefix_host, host)
+        host = f"{prefix_host}.{host}"
     return host
 
 
-def get_ssh_alias_conf(host):
+def get_ssh_alias_conf(host: str) -> dict:
     """解析~/.ssh/config配置信息
 
-    :rtype ssh_conf dict
     :return ssh_conf ssh主机信息
     :example ssh_conf
     {
@@ -168,7 +151,7 @@ def get_ssh_alias_conf(host):
     begin = False
     # 查询默认的ssh信息
     ssh_conf = {}
-    with open(PathConfig.ssh_config_path, "r") as f:
+    with open(PathConfig.ssh_config_path, encoding="utf-8") as f:
         for line in f:
             data = line.split()
             # config配置都是两列
@@ -191,39 +174,32 @@ def get_ssh_alias_conf(host):
                 ssh_conf[key] = value
 
     if not begin:
-        print_error("未在 %s 中配置主机 %s 的ssh登陆信息" % (PathConfig.ssh_config_path, host))
+        print_error(f"未在 {PathConfig.ssh_config_path} 中配置主机 {host} 的ssh登陆信息")
         sys.exit(1)
     return ssh_conf
 
 
-def merge_ssh_config(host, host_type, user, port, identityfile):
+def merge_ssh_config(host: str, host_type: str, user: str, port: int, identityfile: str) -> dict:
     """合并ssh配置信息
 
     :param host: ip的简写或者主机的别名
-    :type host str
     :example host 1
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
     :example host_type default
 
     :param user ssh登陆用户名
-    :type user str
     :example user root
 
     :param port ssh登陆端口
-    :type port int
     :example port 22
 
     :param user ssh登陆用户名
-    :type user str
     :example user root
 
     :param identityfile ssh登陆私钥文件路径
-    :type identityfile str
     :example identityfile ~/.ssh/id_rsa
 
-    :rtype ssh_conf dict
     :return ssh_conf ssh主机信息
     :example ssh_conf
     {

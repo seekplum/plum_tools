@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 #=============================================================================
 #  ProjectName: plum_tools
@@ -13,95 +11,87 @@
 #       Create: 2018-07-07 14:14
 #=============================================================================
 """
+
 import argparse
-import socket
 import sys
 from contextlib import contextmanager
+from typing import Any, Generator, Optional
 
 import paramiko
 
-from .conf import Constant
-from .conf import OsCommand
-from .conf import PathConfig
-from .exceptions import RunCmdError
-from .exceptions import SSHException
-from .utils.printer import print_error
-from .utils.printer import print_text
+from .conf import Constant, OsCommand, PathConfig
+from .exceptions import RunCmdError, SSHException
+from .utils.printer import print_error, print_text
 from .utils.sshconf import get_host_ip
-from .utils.utils import YmlConfig
-from .utils.utils import get_file_abspath
+from .utils.utils import YmlConfig, ensure_str, get_file_abspath
 
 
 class PSSHClient(paramiko.SSHClient):
     """SSH连接客户端"""
 
-    def __init__(self, host):
+    def __init__(self, host: str) -> None:
         """初始化
 
         :param host 主机ip
-        :type host str
         :example host 10.10.100.1
         """
-        super(PSSHClient, self).__init__()  # pylint: disable=R1725
+        super().__init__()  # pylint: disable=R1725
         self.host = host
 
-    def run_cmd(self, cmd, is_raise_exception=True, **kwargs):
+    def run_cmd(self, cmd: str, is_raise_exception: bool = True, **kwargs: Any) -> str:
         """执行系统命令
 
         :param cmd 要执行的命令
-        :type cmd str
         :example cmd hostname
 
         :param is_raise_exception 执行命令有错误信息是否抛出异常，默认值为True
-        :type is_raise_exception bool
         :example is_raise_exception False
 
         :raise RunCmdError
 
-        :rtype out_msg str
         :return out_msg 命令执行结果
         """
         stdin, stdout, stderr = self.exec_command(cmd, **kwargs)
         stdin.close()
         stdout.flush()
-        out_msg = stdout.read()
-        err_msg = stderr.read()
+        out_msg = ensure_str(stdout.read())
+        err_msg = ensure_str(stderr.read())
         if is_raise_exception and err_msg:
-            message = "[%s] run cmd `%s` fail" % (self.host, cmd)
+            message = f"[{self.host}] run cmd `{cmd}` fail"
             raise RunCmdError(message, out_msg=out_msg, err_msg=err_msg)
         return out_msg
 
 
-class SSHTool(object):
+class SSHTool:
     """SSH连接工具类"""
 
     def __init__(
-        self, hostname, username, port, conn_timeout=3, password=None, identityfile=None
-    ):
+        self,
+        hostname: str,
+        username: str,
+        port: int,
+        conn_timeout: int = 3,
+        password: Optional[str] = None,
+        identityfile: Optional[str] = None,
+    ) -> None:
         """初始化
 
         :param hostname 主机ip
-        :type hostname str
         :example hostname 10.10.100.1
 
         :param username 用户名
-        :type username str
         :example username root
 
         :param port 端口号
-        :type port int
         :example port 22
 
         :param conn_timeout 连接超时时间
-        :type conn_timeout int
         :example conn_timeout 3
 
         :param password 密码
-        :type password str
         :example password xxx
 
         :param identityfile 密钥文件路径
-        :type identityfile str
         :example identityfile ~/.ssh/id_rsa
         """
         self.host = hostname
@@ -111,10 +101,9 @@ class SSHTool(object):
         self.port = port
         self.conn_timeout = conn_timeout
 
-    def get_ssh(self):
+    def get_ssh(self) -> PSSHClient:
         """获取一个 ssh连接对象
 
-        :rtype ssh paramiko.SSHClient
         :return: ssh ssh连接对象
         """
         try:
@@ -129,50 +118,50 @@ class SSHTool(object):
                 timeout=self.conn_timeout,
             )
             return ssh
-        except socket.timeout:
-            msg = "连接超时(%s@%s:%s)." % (self.username, self.host, self.port)
-            msg = "%s请检查用户名,IP地址,端口号是否正确" % msg
-            raise SSHException(msg)
-        except paramiko.ssh_exception.NoValidConnectionsError:
-            msg = "连接出现异常(%s@%s:%s)." % (self.username, self.host, self.port)
-            raise SSHException("%s请检查端口或IP地址是否正确" % msg)
-        except paramiko.ssh_exception.AuthenticationException:
-            msg = "连接出现异常(%s@%s:%s)." % (self.username, self.host, self.port)
-            raise SSHException("%s请检查密码或密钥是否正确" % msg)
+        except TimeoutError as e:
+            msg = f"连接超时({self.username}@{self.host}:{self.port})."
+            msg = f"{msg}请检查用户名,IP地址,端口号是否正确"
+            raise SSHException(msg) from e
+        except paramiko.ssh_exception.NoValidConnectionsError as e:
+            msg = f"连接出现异常({self.username}@{self.host}:{self.port})."
+            raise SSHException(f"{msg}请检查端口或IP地址是否正确") from e
+        except paramiko.ssh_exception.AuthenticationException as e:
+            msg = f"连接出现异常({self.username}@{self.host}:{self.port})."
+            raise SSHException(f"{msg}请检查密码或密钥是否正确") from e
         except Exception as e:
-            msg = "连接出现异常(%s@%s:%s) %s." % (self.username, self.host, self.port, e)
-            raise SSHException(msg)
+            msg = f"连接出现异常({self.username}@{self.host}:{self.port}) {e}."
+            raise SSHException(msg) from e
 
 
 @contextmanager
-def get_ssh(hostname, username, port, conn_timeout=3, password=None, identityfile=None):
+def get_ssh(
+    hostname: str,
+    username: str,
+    port: int,
+    conn_timeout: int = 3,
+    password: Optional[str] = None,
+    identityfile: Optional[str] = None,
+) -> Generator[PSSHClient, None, None]:
     """获取一个 ssh连接对象
 
     :param hostname 主机ip
-    :type hostname str
     :example hostname 10.10.100.1
 
     :param username 用户名
-    :type username str
     :example username root
 
     :param port 端口号
-    :type port int
     :example port 22
 
     :param conn_timeout 连接超时时间
-    :type conn_timeout int
     :example conn_timeout 3
 
     :param password 密码
-    :type password str
     :example password xxx
 
     :param identityfile 密钥文件路径
-    :type identityfile str
     :example identityfile ~/.ssh/id_rsa
 
-    :rtype ssh paramiko.SSHClient
     :return: ssh ssh连接对象
     """
     ssh_tool = SSHTool(
@@ -181,37 +170,31 @@ def get_ssh(hostname, username, port, conn_timeout=3, password=None, identityfil
         port=port,
         conn_timeout=conn_timeout,
         password=password,
-        identityfile=get_file_abspath(identityfile),
+        identityfile=get_file_abspath(identityfile) if identityfile else None,
     )
     ssh = ssh_tool.get_ssh()
     yield ssh
     ssh.close()
 
 
-def get_ssh_config(hostname, username, port, identityfile, password):
+def get_ssh_config(hostname: str, username: str, port: int, identityfile: str, password: str) -> dict:
     """查询默认的ssh配置信息
 
     :param hostname 主机ip
-    :type hostname str
     :example hostname 10.10.100.1
 
     :param username 用户名
-    :type username str
     :example username root
 
     :param port 端口号
-    :type port int
     :example port 22
 
     :param password 密码
-    :type password str
     :example password xxx
 
     :param identityfile 密钥文件路径
-    :type identityfile str
     :example identityfile ~/.ssh/id_rsa
 
-    :rtype ssh_conf dict
     :return ssh_conf ssh登陆的配置信息
     :example ssh_conf
     {
@@ -234,18 +217,15 @@ def get_ssh_config(hostname, username, port, identityfile, password):
     return ssh_conf
 
 
-def get_ipmi_ip(host, host_type):
+def get_ipmi_ip(host: str, host_type: str) -> str:
     """根据ip计算带外 ip
 
     :param host: ip的简写
-    :type host str
     :example host 1
 
     :param host_type ip类型,不同的ip类型，ip前缀不一样
-    :type host_type str
     :example host_type default
 
-    :rtype ipmi_ip str
     :return ipmi_ip 带外ip
     :example ipmi_ip 10.10.10.101
     """
@@ -257,10 +237,9 @@ def get_ipmi_ip(host, host_type):
     return ipmi_ip
 
 
-def get_args():
+def get_args() -> argparse.Namespace:
     """获取程序参数
 
-    :rtype argparse.Namespace
     :return 命令行参数
     """
     parser = argparse.ArgumentParser()
@@ -300,7 +279,8 @@ def get_args():
         help="specify password",
     )
     parser.add_argument(
-        "-p" "--port",
+        "-p",
+        "--port",
         action="store",
         required=False,
         dest="port",
@@ -309,7 +289,8 @@ def get_args():
         help="ssh login port",
     )
     parser.add_argument(
-        "-i" "--identityfile",
+        "-i",
+        "--identityfile",
         action="store",
         required=False,
         dest="identityfile",
@@ -317,7 +298,8 @@ def get_args():
         help="ssh login identityfile path",
     )
     parser.add_argument(
-        "-t" "--type",
+        "-t",
+        "--type",
         action="store",
         required=False,
         dest="type",
@@ -356,29 +338,26 @@ def get_args():
     return args
 
 
-class Parser(object):
+class Parser:
     """解析命令行参数"""
 
-    def __init__(self, args):
+    def __init__(self, args: argparse.Namespace) -> None:
         """初始化
 
         :param args 命令行参数
-        :type args argparse.Namespace
         """
         self._args = args
 
-    def _parser_login_ip(self):
+    def _parser_login_ip(self) -> str:
         """解析登陆主机需要的ip
 
         :return 主机ip
-        :rtype str
         """
         return get_host_ip(self._args.host, self._args.type)
 
-    def parser_ssh_conf(self):
+    def parser_ssh_conf(self) -> dict:
         """解析登陆需要的ssh配置信息
 
-        :rtype dict
         :return ssh配置信息
         """
         return get_ssh_config(
@@ -389,23 +368,20 @@ class Parser(object):
             self._args.password,
         )
 
-    def parser_ip_list(self):
+    def parser_ip_list(self) -> list[str]:
         """解析带外IP集合
 
-        :rtype list
         :return 带外IP集合
         """
         return self._args.servers
 
-    def parser_ipmi_auth(self, short_ip):
+    def parser_ipmi_auth(self, short_ip: str) -> dict:
         """解析带外认证信息
 
         :param short_ip 简写IP
-        :type short_ip str
         :example short_ip 1
 
         :return 带外认证信息
-        :rtype dict
         """
         return {
             "ip": get_ipmi_ip(short_ip, self._args.type),
@@ -415,7 +391,7 @@ class Parser(object):
         }
 
 
-def main():
+def main() -> None:
     """程序主入口"""
     args = get_args()
     p = Parser(args)
@@ -425,14 +401,12 @@ def main():
             # 对每台机器执行 ipmi 命令
             for short_ip in p.parser_ip_list():
                 cmd = OsCommand.ipmi_command % p.parser_ipmi_auth(short_ip)
-                print_text("cmd: %s" % cmd)
+                print_text(f"cmd: {cmd}")
                 try:
                     output = ssh.run_cmd(cmd, timeout=Constant.command_timeout)
-                    print_text("output: %s\n" % output)
-                except socket.timeout:
-                    print_error(
-                        "执行命令: %s 超时，超时时间为: %s秒" % (cmd, Constant.command_timeout)
-                    )
+                    print_text(f"output: {output}\n")
+                except TimeoutError:
+                    print_error(f"执行命令: {cmd} 超时，超时时间为: {Constant.command_timeout}秒")
                 except RunCmdError as e:
                     print_error(e.err_msg)
     except SSHException as e:
