@@ -6,7 +6,7 @@ import shutil
 from plum_tools.conf import PathConfig
 from setuptools import find_packages, setup
 
-version = "0.2.7"
+version = "0.3.0"
 
 
 def install():
