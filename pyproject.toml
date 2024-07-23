@@ -14,7 +14,7 @@ authors = [
   {"name" = "seekplum", "email" = "1131909224m@sina.cn"}
 ]
 name = "plum_tools"
-version = "0.3.0"
+version = "0.3.1"
 description = "linux下常用的工具包"
 dependencies = [
   "pyyaml",
