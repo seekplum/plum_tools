@@ -24,9 +24,9 @@ pylint = "*"
 pre-commit = "*"
 types-PyYAML = "*"
 types-paramiko = "*"
+setuptools = "*"
 
 [packages]
-setuptools = "*"
 pyyaml = "*"
 paramiko = "*"
 

@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "7cd133514ef06d4ccdb2a0dd7e0c67ce79662e33dd3a503893206e6303202d85"
+            "sha256": "dcdea004129c5679f9023edd240aa9f024e9d5cd268f4d59fdac1929303044ac"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -334,15 +334,6 @@
             "index": "aliyun",
             "markers": "python_version >= '3.6'",
             "version": "==6.0.1"
-        },
-        "setuptools": {
-            "hashes": [
-                "sha256:032d42ee9fb536e33087fb66cac5f840eb9391ed05637b3f2a76a7c8fb477936",
-                "sha256:33874fdc59b3188304b2e7c80d9029097ea31627180896fb549c578ceb8a0855"
-            ],
-            "index": "aliyun",
-            "markers": "python_version >= '3.8'",
-            "version": "==71.1.0"
         }
     },
     "develop": {
@@ -894,11 +885,11 @@
         },
         "importlib-metadata": {
             "hashes": [
-                "sha256:15584cf2b1bf449d98ff8a6ff1abef57bf20f3ac6454f431736cd3e660921b2f",
-                "sha256:188bd24e4c346d3f0a933f275c2fec67050326a856b9a359881d7c2a697e8812"
+                "sha256:3cd29f739ed65973840b068e3132135ce954c254d48b5b640484467ef7ab3c8c",
+                "sha256:fcdcb1d5ead7bdf3dd32657bb94ebe9d2aabfe89a19782ddc32da5041d6ebfb4"
             ],
             "markers": "python_version >= '3.8'",
-            "version": "==8.0.0"
+            "version": "==8.1.0"
         },
         "iniconfig": {
             "hashes": [
@@ -1307,6 +1298,15 @@
             "markers": "sys_platform == 'linux'",
             "version": "==3.3.3"
         },
+        "setuptools": {
+            "hashes": [
+                "sha256:032d42ee9fb536e33087fb66cac5f840eb9391ed05637b3f2a76a7c8fb477936",
+                "sha256:33874fdc59b3188304b2e7c80d9029097ea31627180896fb549c578ceb8a0855"
+            ],
+            "index": "aliyun",
+            "markers": "python_version >= '3.8'",
+            "version": "==71.1.0"
+        },
         "stevedore": {
             "hashes": [
                 "sha256:1c15d95766ca0569cad14cb6272d4d31dae66b011a929d7c18219c176ea1b5c9",
@@ -1343,12 +1343,12 @@
         },
         "types-pyyaml": {
             "hashes": [
-                "sha256:a9e0f0f88dc835739b0c1ca51ee90d04ca2a897a71af79de9aec5f38cb0a5342",
-                "sha256:b845b06a1c7e54b8e5b4c683043de0d9caf205e7434b3edc678ff2411979b8f6"
+                "sha256:cf7b31ae67e0c5b2919c703d2affc415485099d3fe6666a6912f040fd05cb67f",
+                "sha256:e5becec598f3aa3a2ddf671de4a75fa1c6856fbf73b2840286c9d50fae2d5d48"
             ],
             "index": "aliyun",
             "markers": "python_version >= '3.8'",
-            "version": "==6.0.12.20240311"
+            "version": "==6.0.12.20240724"
         },
         "typing-extensions": {
             "hashes": [
