@@ -22,9 +22,7 @@ def test_main() -> None:
     mock_stash_instance = mock.Mock()
     mock_args = mock.Mock(branch="test")
     mock_parser.parse_args.return_value = mock_args
-    with mock.patch(
-        "plum_tools.gitstash.argparse.ArgumentParser", return_value=mock_parser
-    ) as mock_argparse, mock.patch(
+    with mock.patch("plum_tools.gitstash.get_base_parser", return_value=mock_parser) as mock_argparse, mock.patch(
         "plum_tools.gitstash.get_current_branch_name", return_value="master"
     ) as mock_current_branch, mock.patch(
         "plum_tools.gitstash.GitCheckoutStash", return_value=mock_stash_instance

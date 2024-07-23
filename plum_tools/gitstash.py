@@ -12,13 +12,13 @@
 #=============================================================================
 """
 
-import argparse
 import os
 import sys
 
 from .conf import Constant, GitCommand
 from .exceptions import RunCmdError
 from .utils.git import check_repository_modify_status, check_repository_stash, get_current_branch_name
+from .utils.parser import get_base_parser
 from .utils.printer import print_warn
 from .utils.utils import cd, run_cmd
 
@@ -92,7 +92,7 @@ class GitCheckoutStash:
 
 def main() -> None:
     """程序主入口"""
-    parser = argparse.ArgumentParser()
+    parser = get_base_parser()
     parser.add_argument(dest="branch", action="store", help="specify branch")
     args = parser.parse_args()
     new_branch = args.branch

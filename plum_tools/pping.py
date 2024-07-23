@@ -10,12 +10,12 @@
 #=============================================================================
 """
 
-import argparse
 from multiprocessing import Pool
 from typing import Optional
 
 from .conf import Constant, OsCommand
 from .exceptions import RunCmdError
+from .utils.parser import get_base_parser
 from .utils.printer import print_text
 from .utils.sshconf import get_prefix_host_ip
 from .utils.utils import run_cmd
@@ -61,7 +61,7 @@ def run(host_type: str, prefix_host: str) -> None:
 
 def main() -> None:
     """程序主入口"""
-    parser = argparse.ArgumentParser()
+    parser = get_base_parser()
     parser.add_argument(
         "-t",
         "--type",

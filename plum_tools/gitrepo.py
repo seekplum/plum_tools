@@ -10,13 +10,13 @@
 #=============================================================================
 """
 
-import argparse
 import os
 from multiprocessing import Pool
 from typing import Generator
 
 from .conf import Constant
 from .utils.git import check_is_git_repository, check_repository_modify_status, check_repository_stash
+from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_warn
 
 
@@ -102,8 +102,7 @@ def check_projects(projects: list[str], detail: bool) -> None:
 
 def main() -> None:
     """程序主入口"""
-    parser = argparse.ArgumentParser()
-
+    parser = get_base_parser()
     parser.add_argument(
         "-p",
         "--path",

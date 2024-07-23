@@ -53,7 +53,7 @@ def test_main() -> None:
     mock_parser = mock.Mock()
     mock_args = mock.Mock(type="1", prefix_host="1.1.1")
     mock_parser.parse_args.return_value = mock_args
-    with mock.patch("plum_tools.pping.argparse.ArgumentParser", return_value=mock_parser) as mock_argparse, mock.patch(
+    with mock.patch("plum_tools.pping.get_base_parser", return_value=mock_parser) as mock_argparse, mock.patch(
         "plum_tools.pping.run"
     ) as mock_run:
         main()

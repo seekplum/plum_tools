@@ -21,6 +21,7 @@ import paramiko
 
 from .conf import Constant, OsCommand, PathConfig
 from .exceptions import RunCmdError, SSHException
+from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_text
 from .utils.sshconf import get_host_ip
 from .utils.utils import YmlConfig, ensure_str, get_file_abspath
@@ -242,7 +243,7 @@ def get_args() -> argparse.Namespace:
 
     :return 命令行参数
     """
-    parser = argparse.ArgumentParser()
+    parser = get_base_parser()
     parser.add_argument(
         "-l",
         "--login",

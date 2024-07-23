@@ -12,14 +12,14 @@
 #=============================================================================
 """
 
-import argparse
 import os
 import subprocess
 import sys
 from typing import Optional
 
-from .conf import VERSION, PathConfig
+from .conf import PathConfig
 from .exceptions import RunCmdError, SystemTypeError
+from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_ok, print_text
 from .utils.sshconf import merge_ssh_config
 from .utils.utils import YmlConfig, get_file_abspath, run_cmd
@@ -291,16 +291,7 @@ def sync_files(  # pylint: disable=too-many-arguments
 
 def main() -> None:  # pylint: disable=R0914
     """程序主入口"""
-    parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "-v",
-        "--version",
-        required=False,
-        action="store_true",
-        dest="version",
-        default=False,
-        help="print version information",
-    )
+    parser = get_base_parser()
     parser.add_argument(
         "-s",
         "--servers",
@@ -415,9 +406,6 @@ def main() -> None:  # pylint: disable=R0914
     )
 
     args = parser.parse_args()
-    if args.version:
-        print_ok(f"Version: {VERSION}")
-        return
     host_list, host_type, projects = args.servers, args.type, args.projects
     if not host_list:
         parser.print_help()

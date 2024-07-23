@@ -196,9 +196,9 @@ def test_main() -> None:
     mock_parser = mock.Mock()
     mock_args = mock.Mock(path="/tmp/test111", detail=True)
     mock_parser.parse_args.return_value = mock_args
-    with mock.patch(
-        "plum_tools.gitrepo.argparse.ArgumentParser", return_value=mock_parser
-    ) as mock_argparse, mock.patch("plum_tools.gitrepo.check_projects") as mock_check:
+    with mock.patch("plum_tools.gitrepo.get_base_parser", return_value=mock_parser) as mock_argparse, mock.patch(
+        "plum_tools.gitrepo.check_projects"
+    ) as mock_check:
         main()
         mock_argparse.assert_called_once_with()
         mock_parser.add_argument.assert_has_calls(

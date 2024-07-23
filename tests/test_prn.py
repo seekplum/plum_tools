@@ -100,22 +100,13 @@ def test_main() -> None:
     )
     mock_project_conf = mock.Mock()
     mock_parser.parse_args.return_value = mock_args
-    with mock.patch("plum_tools.prn.argparse.ArgumentParser", return_value=mock_parser) as mock_argparse, mock.patch(
+    with mock.patch("plum_tools.prn.get_base_parser", return_value=mock_parser) as mock_argparse, mock.patch(
         "plum_tools.prn.get_project_conf", return_value=mock_project_conf
     ) as mock_project, mock.patch("plum_tools.prn.sync_files") as mock_sync:
         main()
         mock_argparse.assert_called_once_with()
         mock_parser.add_argument.assert_has_calls(
             [
-                mock.call(
-                    "-v",
-                    "--version",
-                    required=False,
-                    action="store_true",
-                    dest="version",
-                    default=False,
-                    help="print version information",
-                ),
                 mock.call(
                     "-s",
                     "--servers",

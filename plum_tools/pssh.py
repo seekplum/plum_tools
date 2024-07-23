@@ -12,10 +12,10 @@
 #=============================================================================
 """
 
-import argparse
 import os
 
 from .conf import SSHConfig
+from .utils.parser import get_base_parser
 from .utils.sshconf import merge_ssh_config
 
 
@@ -75,7 +75,7 @@ def login(host: str, host_type: str, user: str, port: int, identityfile: str) ->
 
 def main() -> None:
     """程序主入口"""
-    parser = argparse.ArgumentParser()
+    parser = get_base_parser()
     parser.add_argument(dest="host", action="store", help="specify server")
 
     parser.add_argument(
