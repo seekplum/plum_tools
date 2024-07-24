@@ -78,25 +78,26 @@ def sdist(ctx: Context) -> None:
     ctx_run(ctx, "python setup.py sdist")
 
 
-@task(clean)
-def upload(ctx: Context, name: str = "private") -> None:
-    """上传包到指定pip源
-
-    inv upload --name private
-    """
-    ctx_run(ctx, f"python setup.py sdist upload -r {name}")
-
-
 @task(sdist)
 def tupload(ctx: Context, name: str = "private") -> None:
     """上传包到指定pip源
 
-    inv tupload --name private
+        inv tupload --name private
+
+        cat <<EOF > ~/.pypirc
+    [distutils]
+    index-servers =
+        private
+
+    [private]
+    username = __token__
+    password = xxxxxxxxxxxxxx
+    EOF
     """
     ctx_run(ctx, f"twine upload dist/* -r {name}")
 
 
-@task(clean)
+@task
 def format(ctx: Context, source: Optional[str] = None) -> None:  # pylint: disable=redefined-builtin
     """格式化代码
 
@@ -116,7 +117,7 @@ def format(ctx: Context, source: Optional[str] = None) -> None:  # pylint: disab
     ctx_run(ctx, f"black {source} tests")
 
 
-@task(clean)
+@task
 def lint(ctx: Context, source: Optional[str] = None) -> None:
     """检查代码规范
 
@@ -131,7 +132,7 @@ def lint(ctx: Context, source: Optional[str] = None) -> None:
     ctx_run(ctx, f"bandit -c pyproject.toml -r {source}")
 
 
-@task(clean)
+@task
 def test(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None) -> None:
     """运行单元测试和计算测试覆盖率
 
@@ -149,7 +150,7 @@ def test(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None
     )
 
 
-@task(clean)
+@task
 def coverage(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None) -> None:
     """运行单元测试和计算测试覆盖率
 
