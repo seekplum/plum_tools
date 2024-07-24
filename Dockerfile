@@ -6,16 +6,16 @@ ENV LC_ALL C.UTF-8
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONFAULTHANDLER 1
 
-# Install pipenv and compilation dependencies
-RUN sed -i 's#http://\(security\|deb\).debian.org#https://mirrors.tuna.tsinghua.edu.cn#g' /etc/apt/sources.list.d/debian.sources
-RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir pipenv invoke
+# Install invoke and compilation dependencies
+# RUN sed -i 's#http://\(security\|deb\).debian.org#https://mirrors.tuna.tsinghua.edu.cn#g' /etc/apt/sources.list.d/debian.sources
+# RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
+RUN pip install --no-cache-dir invoke
 
 WORKDIR /code
 
 # Install python dependencies
-COPY Pipfile .
-COPY Pipfile.lock .
+COPY requirements.txt .
+COPY requirements-dev.txt .
 COPY tasks.py .
 RUN inv install --dev
 

@@ -28,7 +28,7 @@ jobs:
           cache: "pip"
 
       - name: Install tools
-        run: pip install pipenv invoke
+        run: pip install invoke
       - name: Install dependencies
         run: inv install --dev
       - name: Code checker

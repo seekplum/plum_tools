@@ -1,0 +1,9 @@
+--index-url https://mirrors.aliyun.com/pypi/simple
+--trusted-host pypi.org
+
+##
+## 线上运行环境
+##
+
+pyyaml
+paramiko

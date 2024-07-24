@@ -2,8 +2,8 @@
 **
 
 # ... except for dependencies and source
-!Pipfile
-!Pipfile.lock
+!requirements.txt
+!requirements-dev.txt
 !plum_tools
 !tasks.py
 !tests

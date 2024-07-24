@@ -215,34 +215,7 @@ def pylint(
 
 
 @task
-def install(ctx: Context, dev: bool = False, skip_lock: bool = False) -> None:
-    """安装依赖
-
-    1.安装Pipenv
-
-    pip install pipenv
-    """
-    dev_flag = "--dev" if dev else ""
-    skip_lock_flag = "--skip-lock" if skip_lock else ""
-    ctx_run(
-        ctx,
-        (
-            "PIPENV_VENV_IN_PROJECT=0 PIPENV_IGNORE_VIRTUALENVS=0 PIPENV_VERBOSITY=-1 "
-            f"pipenv install --system --deploy {dev_flag} {skip_lock_flag}"
-        ),
-    )
-
-
-@task
-def requirements(ctx: Context) -> None:
-    """导出依赖文件"""
-    ctx_run(ctx, "pipenv requirements > requirements.txt")
-    ctx_run(ctx, "pipenv requirements --dev-only > requirements-dev.txt")
-
-
-@task
-def lock(ctx: Context) -> None:
-    """生成版本文件"""
-    ctx_run(
-        ctx, 'if [ -f "Pipfile.lock" ]; then pipenv lock --dev --verbose; else pipenv lock --pre --clear  --verbose; fi'
-    )
+def install(ctx: Context, dev: bool = False) -> None:
+    """安装依赖"""
+    txt_name = "requirements-dev.txt" if dev else "requirements.txt"
+    ctx_run(ctx, f"pip install --no-cache-dir -r {txt_name}")

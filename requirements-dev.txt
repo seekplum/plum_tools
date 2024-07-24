@@ -1,0 +1,39 @@
+-r requirements.txt
+
+##
+## 本地开发环境, 增加 formatter / linter / mock / test 工具
+##
+
+# formatter
+autoflake
+black
+isort
+mypy
+types-PyYAML
+types-paramiko
+
+# linter
+flake8
+flake8-bugbear
+flake8-pyproject
+pylint
+bandit[toml]
+
+# mock
+mock
+
+# test
+pytest
+pytest-cov
+pytest-benchmark
+coverage
+coveralls
+
+# maintainer
+# pip-tools
+# pip-autoremove
+setuptools
+invoke
+bumpversion
+twine
+pre-commit

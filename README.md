@@ -30,17 +30,16 @@
 
 ## 安装环境依赖
 
-1.安装 pipenv
+1.安装 invoke
 
 ```bash
-pip install pipenv
+pip install invoke
 ```
 
 2.安装项目依赖环境
 
 ```bash
-pipenv --two install --deploy # py2
-pipenv --three install --deploy # py3
+inv install --dev
 ```
 
 3.安装 Git hooks
@@ -61,12 +60,6 @@ cp -r hooks/* .git/hooks/
 ```
 
 ## 运行单元测试
-
-首先需要进入我们安装的虚拟环境
-
-```bash
-pipenv shell
-```
 
 ### 第一种
 

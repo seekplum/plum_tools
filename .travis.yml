@@ -8,7 +8,7 @@ python:
   - 3.11
   - 3.12
 install:
-  - pip install pipenv invoke
+  - pip install invoke
   - inv install --dev
 script:
   - inv link
