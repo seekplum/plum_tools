@@ -194,7 +194,7 @@ def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pyte
 
 def test_main() -> None:
     mock_parser = mock.Mock()
-    mock_args = mock.Mock(path="/tmp/test111", detail=True)
+    mock_args = mock.Mock(path="/tmp/test111", detail=True, stash=False)
     mock_parser.parse_args.return_value = mock_args
     with mock.patch("plum_tools.gitrepo.get_base_parser", return_value=mock_parser) as mock_argparse, mock.patch(
         "plum_tools.gitrepo.check_projects"
@@ -220,18 +220,18 @@ def test_main() -> None:
                     required=False,
                     dest="detail",
                     default=False,
-                    help="display error details",
+                    help="display staged details",
                 ),
                 mock.call(
-                    "-t",
-                    "--test",
+                    "-s",
+                    "--stash",
                     action="store_true",
                     required=False,
-                    dest="test",
+                    dest="stash",
                     default=False,
-                    help="run the test function",
+                    help="display stash details",
                 ),
             ]
         )
         mock_parser.parse_args.assert_called_once_with()
-        mock_check.assert_called_once_with("/tmp/test111", True)
+        mock_check.assert_called_once_with("/tmp/test111", True, False)

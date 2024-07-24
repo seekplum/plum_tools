@@ -10,6 +10,7 @@
 #=============================================================================
 """
 
+import functools
 import os
 from multiprocessing import Pool
 from typing import Generator
@@ -36,11 +37,14 @@ def find_git_project_for_python(path: str) -> Generator[str, None, None]:
             yield root
 
 
-def check_project(path: str) -> dict:
+def check_project(path: str, stash: bool = True) -> dict:
     """检查git项目
 
     :param path 仓库路径
     :example path /tmp/git
+
+    :param stash 是否显示储藏信息
+    :example stash True
 
     :return result {
         path: 仓库路径
@@ -66,6 +70,8 @@ def check_project(path: str) -> dict:
         result["output"] = status_out
         return result
 
+    if not stash:
+        return result
     # 检查是否有文件储藏
     stash_result, stash_out = check_repository_stash(path)
     if stash_result:
@@ -74,7 +80,7 @@ def check_project(path: str) -> dict:
     return result
 
 
-def check_projects(projects: list[str], detail: bool) -> None:
+def check_projects(projects: list[str], detail: bool, stash: bool = True) -> None:
     """检查指导目录下所有的仓库是否有修改
 
     当仓库中有内容被修改时，打印黄色警告信息
@@ -84,10 +90,13 @@ def check_projects(projects: list[str], detail: bool) -> None:
 
     :param detail 是否显示详细错误信息
     :example False
+
+    :param stash 是否显示储藏信息
+    :example False
     """
     targets = [path for project_path in projects for path in find_git_project_for_python(project_path)]
     with Pool(processes=Constant.processes_number) as pool:
-        result = pool.map(check_project, targets)
+        result = pool.map(functools.partial(check_project, stash=stash), targets)
     for item in result:
         # 仓库中文件没有被改动而且没有文件被储藏了
         if not item["status"]:
@@ -120,16 +129,16 @@ def main() -> None:
         required=False,
         dest="detail",
         default=False,
-        help="display error details",
+        help="display staged details",
     )
     parser.add_argument(
-        "-t",
-        "--test",
+        "-s",
+        "--stash",
         action="store_true",
         required=False,
-        dest="test",
+        dest="stash",
         default=False,
-        help="run the test function",
+        help="display stash details",
     )
     args = parser.parse_args()
-    check_projects(args.path, args.detail)
+    check_projects(args.path, args.detail, args.stash)
