@@ -15,7 +15,7 @@
 import argparse
 import sys
 from contextlib import contextmanager
-from typing import Any, Generator, Optional
+from typing import Any, Generator, List, Optional
 
 import paramiko
 
@@ -369,7 +369,7 @@ class Parser:
             self._args.password,
         )
 
-    def parser_ip_list(self) -> list[str]:
+    def parser_ip_list(self) -> List[str]:
         """解析带外IP集合
 
         :return 带外IP集合

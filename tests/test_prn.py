@@ -12,7 +12,7 @@
 #=============================================================================
 """
 
-from typing import Optional
+from typing import List, Optional
 from unittest import mock
 
 import pytest
@@ -31,7 +31,7 @@ from plum_tools.prn import SyncFiles, get_project_conf, main
         ("xxx", "/tmp/1", "/tmp/2", None, []),
     ],
 )
-def test_get_project_conf(project: str, src: str, dest: str, delete: Optional[int], exclude: list[str]) -> None:
+def test_get_project_conf(project: str, src: str, dest: str, delete: Optional[int], exclude: List[str]) -> None:
     with mock.patch(
         "plum_tools.utils.utils.YmlConfig.parse_config_yml",
         return_value={
@@ -65,7 +65,7 @@ def test_translate(capsys: pytest.CaptureFixture) -> None:
         "/tmp",
         0,
     )
-    exclude: list[str] = []
+    exclude: List[str] = []
     u = SyncFiles(hostname, user, port, identityfile, src, dest, exclude, delete)
     with mock.patch("plum_tools.prn.run_cmd") as m:
         u.translate()

@@ -4,7 +4,7 @@ import os
 import shutil
 import tempfile
 from contextlib import contextmanager
-from typing import Any, Callable, Generator
+from typing import Any, Callable, Generator, List
 
 curr_path = os.path.dirname(os.path.abspath(__file__))
 fixtures_path = os.path.join(curr_path, "fixtures")
@@ -17,7 +17,7 @@ class MockPool:
     def __call__(self, processes: int) -> None:
         assert processes == 100
 
-    def map(self, func: Callable, targets: list[str]) -> list:
+    def map(self, func: Callable, targets: List[str]) -> list:
         assert callable(func)
         assert isinstance(targets, list)
         return [func(target) for target in targets]

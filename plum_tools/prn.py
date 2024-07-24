@@ -15,7 +15,7 @@
 import os
 import subprocess
 import sys
-from typing import Optional
+from typing import List, Optional, Union
 
 from .conf import PathConfig
 from .exceptions import RunCmdError, SystemTypeError
@@ -27,10 +27,10 @@ from .utils.utils import YmlConfig, get_file_abspath, run_cmd
 
 def get_project_conf(  # noqa: C901
     project: str,
-    src: list[str],
-    dest: list[str],
+    src: List[str],
+    dest: List[str],
     delete: Optional[int],
-    exclude: list[str],
+    exclude: List[str],
     is_download: bool = False,
 ) -> dict:
     """查询项目信息
@@ -114,7 +114,7 @@ def process_path(path: str, is_local: bool = False) -> str:
     return path
 
 
-def process_paths(paths: str | list[str], is_local: bool = False) -> str:
+def process_paths(paths: Union[str, List[str]], is_local: bool = False) -> str:
     if isinstance(paths, str):
         paths = [paths]
     return " ".join([process_path(path, is_local=is_local) for path in paths])
@@ -132,7 +132,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         identityfile: str,
         src: str,
         dest: str,
-        exclude: list[str],
+        exclude: List[str],
         delete: int,
         is_download: bool = False,
         is_debug: bool = False,
@@ -237,12 +237,12 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
 
 
 def sync_files(  # pylint: disable=too-many-arguments
-    host_list: list[str],
+    host_list: List[str],
     host_type: str,
     user: str,
     port: int,
     identity_file: str,
-    projects_conf: list[dict],
+    projects_conf: List[dict],
     is_download: bool = False,
     is_debug: bool = False,
 ) -> None:

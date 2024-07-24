@@ -11,6 +11,7 @@
 """
 
 import os
+from typing import Tuple
 
 from ..conf import GitCommand
 from .utils import cd, run_cmd
@@ -43,7 +44,7 @@ def check_is_git_repository(path: str) -> bool:
     return False
 
 
-def check_repository_modify_status(repo_path: str) -> tuple[bool, str]:
+def check_repository_modify_status(repo_path: str) -> Tuple[bool, str]:
     """检查仓库是否有文件修改
 
     :param repo_path 仓库路径
@@ -74,7 +75,7 @@ def check_repository_modify_status(repo_path: str) -> tuple[bool, str]:
     return result, output
 
 
-def check_repository_stash(repo_path: str) -> tuple[bool, str]:
+def check_repository_stash(repo_path: str) -> Tuple[bool, str]:
     """检查仓库是否在储藏区
 
     :param repo_path 仓库路径

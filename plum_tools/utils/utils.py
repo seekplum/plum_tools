@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
-from typing import Any, Optional
+from typing import Any, Dict, List, Optional
 
 import yaml
 
@@ -69,11 +69,11 @@ class ProjectConf:
 class GlobalConf:
     default_ssh_conf: SSHConf
     ipmi_interval: int
-    projects: list[ProjectConf]
+    projects: List[ProjectConf]
     dynamic_data: dict
 
     def __init__(
-        self, default_ssh_conf: SSHConf, ipmi_interval: int, projects: list[ProjectConf], **kwargs: dict[str, str]
+        self, default_ssh_conf: SSHConf, ipmi_interval: int, projects: List[ProjectConf], **kwargs: Dict[str, str]
     ) -> None:
         self.default_ssh_conf = default_ssh_conf
         self.ipmi_interval = ipmi_interval
