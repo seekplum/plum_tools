@@ -10,7 +10,7 @@ permissions:
   contents: read
 
 jobs:
-  test:
+  tests:
     runs-on: ${{ matrix.os }}
     timeout-minutes: 10
     strategy:
@@ -36,7 +36,7 @@ jobs:
       - name: Unittest
         run: inv test
 
-  docker-image:
+  build_image:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v2
