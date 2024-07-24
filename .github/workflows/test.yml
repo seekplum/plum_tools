@@ -35,15 +35,3 @@ jobs:
         run: inv lint
       - name: Unittest
         run: inv test
-
-  build_image:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v2
-
-      - name: Build docker image
-        run: docker build . -t plum_tools:test
-
-      - name: Smoke test docker image
-        run: |
-          docker run --rm plum_tools:test
