@@ -85,6 +85,10 @@ def get_project_conf(  # noqa: C901
         data["src"] = src
     if dest:
         data["dest"] = dest
+    if not isinstance(data["src"], list):
+        data["src"] = [data["src"]]
+    if not isinstance(data["dest"], list):
+        data["dest"] = [data["dest"]]
     # 上传时对本地路径取绝对路径
     if not is_download:
         try:
