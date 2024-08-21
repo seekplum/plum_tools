@@ -17,7 +17,12 @@ def covert_source(source: str) -> str:
     return source
 
 
-def get_source(source: Optional[str] = None, *, ignote_tests: bool = False, ignote_tasks: bool = False) -> str:
+def get_source(
+    source: Optional[str] = None,
+    *,
+    ignote_tests: bool = False,
+    ignote_tasks: bool = False,
+) -> str:
     if not source:
         source = PACKAGE_NAME
         if not ignote_tasks:
@@ -98,7 +103,9 @@ def tupload(ctx: Context, name: str = "private") -> None:
 
 
 @task
-def format(ctx: Context, source: Optional[str] = None) -> None:  # pylint: disable=redefined-builtin
+def format(
+    ctx: Context, source: Optional[str] = None
+) -> None:  # pylint: disable=redefined-builtin
     """格式化代码
 
     inv format --source tasks.py
@@ -133,7 +140,9 @@ def lint(ctx: Context, source: Optional[str] = None) -> None:
 
 
 @task
-def test(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None) -> None:
+def test(
+    ctx: Context, source: Optional[str] = None, tests: Optional[str] = None
+) -> None:
     """运行单元测试和计算测试覆盖率
 
     inv test --source plum_tools/conf.py --tests tests/test_conf.py
@@ -151,7 +160,9 @@ def test(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None
 
 
 @task
-def coverage(ctx: Context, source: Optional[str] = None, tests: Optional[str] = None) -> None:
+def coverage(
+    ctx: Context, source: Optional[str] = None, tests: Optional[str] = None
+) -> None:
     """运行单元测试和计算测试覆盖率
 
     inv coverage --source plum_tools/conf.py --tests tests/test_conf.py
@@ -176,10 +187,21 @@ def get_site_packages_dir(packages: Optional[str]) -> str:
     ).strip()
     if not packages.strip():
         return site_packages_dir
-    packages_list = [package_name.strip() for package_name in packages.split(",") if package_name.strip()]
-    packages_unique = sorted(list(set(packages_list)), key=lambda x: packages_list.index(x))
+    packages_list = [
+        package_name.strip()
+        for package_name in packages.split(",")
+        if package_name.strip()
+    ]
+    packages_unique = sorted(
+        list(set(packages_list)), key=lambda x: packages_list.index(x)
+    )
     if packages_unique:
-        return " ".join([os.path.join(site_packages_dir, package_name) for package_name in packages_unique])
+        return " ".join(
+            [
+                os.path.join(site_packages_dir, package_name)
+                for package_name in packages_unique
+            ]
+        )
     return site_packages_dir
 
 
@@ -190,7 +212,9 @@ def get_plint_args(msg_ids: str, ignore_default: bool) -> list:
         "--persistent=n",
     ]
     if not ignore_default:
-        pylint_args.append("--ignore=.git,venv*,docs,node_modules,tests,test*.py,debug_celery.py")
+        pylint_args.append(
+            "--ignore=.git,venv*,docs,node_modules,tests,test*.py,debug_celery.py"
+        )
     if msg_ids:
         pylint_args.extend(["--disable=all", f"--enable={msg_ids}"])
     return pylint_args
@@ -198,7 +222,11 @@ def get_plint_args(msg_ids: str, ignore_default: bool) -> list:
 
 @task
 def pylint(
-    ctx: Context, source: str, msg_ids: str = "", packages: Optional[str] = None, ignore_default: bool = False
+    ctx: Context,
+    source: str,
+    msg_ids: str = "",
+    packages: Optional[str] = None,
+    ignore_default: bool = False,
 ) -> None:
     """检查单个文件
 
