@@ -39,7 +39,7 @@ pip install invoke
 2.安装项目依赖环境
 
 ```bash
-inv install --dev
+uv sync
 ```
 
 3.安装 Git hooks

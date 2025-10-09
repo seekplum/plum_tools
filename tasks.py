@@ -240,10 +240,3 @@ def pylint(
     pylint_args = " ".join(get_plint_args(msg_ids, ignore_default))
     cmd = f"pylint {pylint_args} {source} {site_packages_dir} > {file_name}"
     ctx_run(ctx, cmd)
-
-
-@task
-def install(ctx: Context, dev: bool = False) -> None:
-    """安装依赖"""
-    txt_name = "requirements-dev.txt" if dev else "requirements.txt"
-    ctx_run(ctx, f"pip install --no-cache-dir -r {txt_name}")

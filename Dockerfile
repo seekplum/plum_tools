@@ -6,18 +6,17 @@ ENV LC_ALL C.UTF-8
 ENV PYTHONDONTWRITEBYTECODE 1
 ENV PYTHONFAULTHANDLER 1
 
-# Install invoke and compilation dependencies
+# Install uv and compilation dependencies
 # RUN sed -i 's#http://\(security\|deb\).debian.org#https://mirrors.tuna.tsinghua.edu.cn#g' /etc/apt/sources.list.d/debian.sources
 # RUN apt-get update && apt-get install -y --no-install-recommends gcc && rm -rf /var/lib/apt/lists/*
-RUN pip install --no-cache-dir invoke
+RUN pip install --no-cache-dir uv
 
 WORKDIR /code
 
 # Install python dependencies
-COPY requirements.txt .
-COPY requirements-dev.txt .
 COPY tasks.py .
-RUN inv install --dev
+COPY uv.lock .
+RUN uv sync
 
 # Install application into container
 COPY . .
