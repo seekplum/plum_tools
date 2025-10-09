@@ -123,6 +123,11 @@ def process_paths(paths: Union[str, List[str]], is_local: bool = False) -> str:
         paths = [paths]
     return " ".join([process_path(path, is_local=is_local) for path in paths])
 
+def process_remote_paths(paths: Union[str, List[str]], user: str, hostname: str, pv: str) -> str:
+    if isinstance(paths, str):
+        paths = [paths]
+    return " ".join([f"{user}@{hostname}:{process_path(path, is_local=False)}{pv}" for path in paths])
+
 
 class SyncFiles:  # pylint: disable=too-many-instance-attributes
     """上传文件到服务器"""
@@ -212,13 +217,13 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         pv = ""
 
         if self._is_download:
-            self._src, self._dest = process_paths(self._dest, is_local=True), process_paths(self._src)
+            self._src, self._dest = process_remote_paths(self._dest, self._user, self._hostname, pv), process_paths(self._src)
         else:
             self._src, self._dest = process_paths(self._src, is_local=True), process_paths(self._dest)
 
         # 从远端下载文件到本地
         if self._is_download:
-            src = f"'{self._user}@{self._hostname}:{self._src}{pv}'"
+            src = self._src
             dest = self._dest
             text = f"从 {self._user}@{self._hostname} 服务器(端口: {self._port}) 下载 {self._src} 到本地 {self._dest} "
         # 从本地上传文件到远端

@@ -13,7 +13,7 @@
 import os
 from typing import Any, Type
 
-VERSION = "0.3.5"
+VERSION = "0.3.6"
 
 
 class ClsReadOnlyClass(type):
