@@ -17,7 +17,7 @@ import subprocess
 import sys
 from typing import List, Optional, Union
 
-from .conf import PathConfig
+from .conf import Constant, PathConfig
 from .exceptions import RunCmdError, SystemTypeError
 from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_ok, print_text
@@ -123,10 +123,11 @@ def process_paths(paths: Union[str, List[str]], is_local: bool = False) -> str:
         paths = [paths]
     return " ".join([process_path(path, is_local=is_local) for path in paths])
 
-def process_remote_paths(paths: Union[str, List[str]], user: str, hostname: str, pv: str) -> str:
+
+def process_remote_paths(paths: Union[str, List[str]], user_prefix: str, pv: str) -> str:
     if isinstance(paths, str):
         paths = [paths]
-    return " ".join([f"{user}@{hostname}:{process_path(path, is_local=False)}{pv}" for path in paths])
+    return " ".join([f"{user_prefix}{process_path(path, is_local=False)}{pv}" for path in paths])
 
 
 class SyncFiles:  # pylint: disable=too-many-instance-attributes
@@ -188,6 +189,21 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         self._delete = delete
         self._is_download = is_download
         self._is_debug = is_debug
+        self._is_localhost = hostname == Constant.local_host
+
+    @property
+    def host_info(self) -> str:
+        """主机信息"""
+        if self._is_localhost:
+            return "本地机器"
+        return f"{self._user}@{self._hostname} 服务器(端口: {self._port})"
+
+    @property
+    def user_prefix(self) -> str:
+        """用户前缀"""
+        if self._is_localhost:
+            return ""
+        return f"{self._user}@{self._hostname}:"
 
     def _get_sync_option(self) -> str:
         """组合出同步文件的命令"""
@@ -204,7 +220,8 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         if not directory:
             directory = self._dest
         option.append(f"'--rsync-path=mkdir -p {directory} && rsync'")
-        option.append(f'-e \'{ssh_cmd} -i {self._identity_file} -o "{known_host}" -o "{host_key}" -o "{timeout}"\'')
+        if not self._is_localhost:
+            option.append(f'-e \'{ssh_cmd} -i {self._identity_file} -o "{known_host}" -o "{host_key}" -o "{timeout}"\'')
         if self._delete:
             option.append(" --delete")
         for item in set(self._exclude):
@@ -217,7 +234,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         pv = ""
 
         if self._is_download:
-            self._src, self._dest = process_remote_paths(self._dest, self._user, self._hostname, pv), process_paths(self._src)
+            self._src, self._dest = process_remote_paths(self._dest, self.user_prefix, pv), process_paths(self._src)
         else:
             self._src, self._dest = process_paths(self._src, is_local=True), process_paths(self._dest)
 
@@ -225,12 +242,12 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         if self._is_download:
             src = self._src
             dest = self._dest
-            text = f"从 {self._user}@{self._hostname} 服务器(端口: {self._port}) 下载 {self._src} 到本地 {self._dest} "
+            text = f"从 {self.host_info} 下载 {self._src} 到本地 {self._dest} "
         # 从本地上传文件到远端
         else:
             src = self._src
-            dest = f"{self._user}@{self._hostname}:{self._dest}{pv}"
-            text = f"上传 {self._src} 到 {self._user}@{self._hostname} 服务器(端口: {self._port}) {self._dest} "
+            dest = f"{self.user_prefix}{self._dest}{pv}"
+            text = f"上传 {self._src} 到 {self.host_info} {self._dest} "
 
         rsync = self._get_sync_option()
         cmd = f"{rsync} {src} {dest}"
@@ -290,7 +307,10 @@ def sync_files(  # pylint: disable=too-many-arguments
     :example is_debug False
     """
     for host in host_list:
-        ssh_conf = merge_ssh_config(host, host_type, user, port, identity_file)
+        if host == Constant.local_host:
+            ssh_conf = {"hostname": host, "user": "", "port": 0, "identityfile": ""}
+        else:
+            ssh_conf = merge_ssh_config(host, host_type, user, port, identity_file)
         ssh_conf.update({"is_download": is_download, "is_debug": is_debug})
         for pro_conf in projects_conf:
             pro_conf.update(ssh_conf)
@@ -417,8 +437,7 @@ def main() -> None:  # pylint: disable=R0914
     args = parser.parse_args()
     host_list, host_type, projects = args.servers, args.type, args.projects
     if not host_list:
-        parser.print_help()
-        return
+        host_list = [Constant.local_host]
 
     src, dest, delete, exclude = args.local, args.remote, args.delete, args.exclude
     if len(src) > 1 and len(dest) > 1:

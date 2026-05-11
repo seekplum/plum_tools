@@ -73,6 +73,7 @@ class Constant(ReadOnlyClass):
     stash_uuid = "plum123456789987654321plum"
     command_timeout = 3  # 执行命令超时时间
     processes_number = 100  # 进程数量
+    local_host = "__localhost__"
 
 
 class PathConfig(ReadOnlyClass):

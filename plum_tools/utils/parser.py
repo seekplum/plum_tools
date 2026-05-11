@@ -11,18 +11,22 @@ class ExtraAction(argparse.Action):
         self,
         parser: argparse.ArgumentParser,
         namespace: argparse.Namespace,
-        values: str,
+        values: t.Union[str, t.Sequence[t.Any], None],
         option_string: t.Optional[str] = None,
     ) -> None:
+        def _parser_error() -> None:
+            parser.error(f"Invalid format for {option_string}: '{values}'. Expected 'key=value'.")
+
+        if not isinstance(values, str):
+            _parser_error()
+            return
         split_values = values.split("=")
         if len(split_values) != 2:
-            parser.error(
-                f"Invalid format for {option_string}: '{values}'. Expected 'key=value'."
-            )
+            _parser_error()
+            return
         origin_dest = getattr(namespace, self.dest) or {}
         origin_dest[split_values[0]] = split_values[1]
         setattr(namespace, self.dest, origin_dest)
-
 
 
 def get_base_parser() -> argparse.ArgumentParser:
