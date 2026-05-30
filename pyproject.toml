@@ -4,7 +4,7 @@ authors = [
 ]
 readme = "README.md"
 name = "plum_tools"
-version = "0.4.1"
+version = "0.5.0"
 description = "linux下常用的工具包"
 license = { text = "MIT" }
 dependencies = [
