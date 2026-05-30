@@ -153,7 +153,7 @@ def test_process_path_and_helpers() -> None:
     assert process_path("/remote/path/", is_local=False) == "/remote/path"
     assert process_paths(["/tmp/a", "/tmp/b/"], is_local=False) == "/tmp/a /tmp/b"
     assert process_paths("/tmp/a", is_local=True) == "/tmp/a"
-    assert process_remote_paths(["/a/", "/b"], "user@host:", "") == "user@host:/a user@host:/b"
+    assert process_remote_paths(["/a/", "/b"], "user@host:", "") == "user@host:/a/ user@host:/b"
 
 
 def test_sync_files_builds_localhost_and_remote_syncs() -> None:
@@ -202,11 +202,11 @@ def test_translate_download_debug_and_localhost_paths(capsys: pytest.CaptureFixt
         sync.translate()
 
     mock_subprocess_call.assert_called_once_with(
-        "rsync -rtv '--rsync-path=mkdir -p /local && rsync'  --delete --exclude '.git' /remote/a /remote/b /local/file",
+        "rsync -rtv '--rsync-path=mkdir -p /local && rsync'  --delete --exclude '.git' /remote/a/ /remote/b /local/file",
         shell=True,  # nosec: B604
     )
     captured = capsys.readouterr()
-    assert "从 本地机器 下载 /remote/a /remote/b 到本地 /local/file 成功" in captured.out
+    assert "从 本地机器 下载 /remote/a/ /remote/b 到本地 /local/file 成功" in captured.out
 
 
 def test_translate_reports_run_cmd_error(capsys: pytest.CaptureFixture[str]) -> None:

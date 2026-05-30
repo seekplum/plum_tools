@@ -126,7 +126,7 @@ def process_paths(paths: str | list[str], is_local: bool = False) -> str:
 def process_remote_paths(paths: str | list[str], user_prefix: str, pv: str) -> str:
     if isinstance(paths, str):
         paths = [paths]
-    return " ".join([f"{user_prefix}{process_path(path, is_local=False)}{pv}" for path in paths])
+    return " ".join([f"{user_prefix}{path}{pv}" for path in paths])
 
 
 class SyncFiles:  # pylint: disable=too-many-instance-attributes
@@ -259,7 +259,9 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         try:
             if self._is_debug:
                 print_text(cmd)
-                subprocess.call(cmd, shell=True)  # nosec B602
+                exit_code = subprocess.call(cmd, shell=True)  # nosec B602
+                if exit_code != 0:
+                    print_error(f"{text}失败, 错误码: {exit_code}")
             else:
                 run_cmd(cmd)
             print_ok(f"{text}成功")
