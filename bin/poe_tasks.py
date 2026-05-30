@@ -284,6 +284,7 @@ def clean_test() -> None:
     tmp_files = (
         "pytest_coverage*.xml",
         "pytest_result*.xml",
+        "coverage.xml",
     )
     tmp_dirs = (
         ".ruff_cache",
