@@ -14,12 +14,13 @@
 
 import argparse
 import sys
+from collections.abc import Generator
 from contextlib import contextmanager
-from typing import Any, Generator, List, Optional
+from typing import Any
 
 import paramiko
 
-from .conf import Constant, OsCommand, PathConfig
+from .conf import COMMAND_TIMEOUT, OsCommand, PathConfig
 from .exceptions import RunCmdError, SSHException
 from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_text
@@ -52,7 +53,7 @@ class PSSHClient(paramiko.SSHClient):
 
         :return out_msg 命令执行结果
         """
-        stdin, stdout, stderr = self.exec_command(cmd, **kwargs)
+        stdin, stdout, stderr = self.exec_command(cmd, **kwargs)  # nosec B601
         stdin.close()
         stdout.flush()
         out_msg = ensure_str(stdout.read())
@@ -72,8 +73,8 @@ class SSHTool:
         username: str,
         port: int,
         conn_timeout: int = 3,
-        password: Optional[str] = None,
-        identityfile: Optional[str] = None,
+        password: str | None = None,
+        identityfile: str | None = None,
     ) -> None:
         """初始化
 
@@ -109,7 +110,7 @@ class SSHTool:
         """
         try:
             ssh = PSSHClient(host=self.host)
-            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+            ssh.set_missing_host_key_policy(paramiko.AutoAddPolicy())  # nosec B507
             ssh.connect(
                 hostname=self.host,
                 username=self.username,
@@ -140,8 +141,8 @@ def get_ssh(
     username: str,
     port: int,
     conn_timeout: int = 3,
-    password: Optional[str] = None,
-    identityfile: Optional[str] = None,
+    password: str | None = None,
+    identityfile: str | None = None,
 ) -> Generator[PSSHClient, None, None]:
     """获取一个 ssh连接对象
 
@@ -174,8 +175,10 @@ def get_ssh(
         identityfile=get_file_abspath(identityfile) if identityfile else None,
     )
     ssh = ssh_tool.get_ssh()
-    yield ssh
-    ssh.close()
+    try:
+        yield ssh
+    finally:
+        ssh.close()
 
 
 def get_ssh_config(hostname: str, username: str, port: int, identityfile: str, password: str) -> dict:
@@ -206,16 +209,15 @@ def get_ssh_config(hostname: str, username: str, port: int, identityfile: str, p
         'port': 22
     }
     """
-    yml_data = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
     default_ssh_conf = yml_data["default_ssh_conf"]
-    ssh_conf = {
+    return {
         "hostname": hostname,
-        "username": username or default_ssh_conf["username"],
+        "username": username or default_ssh_conf["user"],
         "port": port or default_ssh_conf["port"],
         "identityfile": identityfile or default_ssh_conf["identityfile"],
         "password": password,
     }
-    return ssh_conf
 
 
 def get_ipmi_ip(host: str, host_type: str) -> str:
@@ -230,12 +232,11 @@ def get_ipmi_ip(host: str, host_type: str) -> str:
     :return ipmi_ip 带外ip
     :example ipmi_ip 10.10.10.101
     """
-    yml_data = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
     hostname = get_host_ip(host, host_type)
     item = hostname.split(".")
     item[-1] = str(int(item[-1]) + yml_data["ipmi_interval"])
-    ipmi_ip = ".".join(item)
-    return ipmi_ip
+    return ".".join(item)
 
 
 def get_args() -> argparse.Namespace:
@@ -335,8 +336,7 @@ def get_args() -> argparse.Namespace:
         help="specify ipmi password",
     )
 
-    args = parser.parse_args()
-    return args
+    return parser.parse_args()
 
 
 class Parser:
@@ -369,7 +369,7 @@ class Parser:
             self._args.password,
         )
 
-    def parser_ip_list(self) -> List[str]:
+    def parser_ip_list(self) -> list[str]:
         """解析带外IP集合
 
         :return 带外IP集合
@@ -401,13 +401,13 @@ def main() -> None:
         with get_ssh(**p.parser_ssh_conf()) as ssh:
             # 对每台机器执行 ipmi 命令
             for short_ip in p.parser_ip_list():
-                cmd = OsCommand.ipmi_command % p.parser_ipmi_auth(short_ip)
+                cmd = OsCommand.IPMI_COMMAND % p.parser_ipmi_auth(short_ip)
                 print_text(f"cmd: {cmd}")
                 try:
-                    output = ssh.run_cmd(cmd, timeout=Constant.command_timeout)
+                    output = ssh.run_cmd(cmd, timeout=COMMAND_TIMEOUT)
                     print_text(f"output: {output}\n")
                 except TimeoutError:
-                    print_error(f"执行命令: {cmd} 超时，超时时间为: {Constant.command_timeout}秒")
+                    print_error(f"执行命令: {cmd} 超时，超时时间为: {COMMAND_TIMEOUT}秒")
                 except RunCmdError as e:
                     print_error(e.err_msg)
     except SSHException as e:

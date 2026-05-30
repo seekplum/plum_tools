@@ -51,8 +51,8 @@ class SSHConf:
             'port': 22
         }
         """
-        yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
-        ssh_conf = yml_config["default_ssh_conf"]
+        yml_config = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
+        ssh_conf = dict(yml_config["default_ssh_conf"])
         if self._user:
             ssh_conf["user"] = self._user
         if self._port:
@@ -83,15 +83,14 @@ class SSHConf:
             'port': 22
         }
         """
-        yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
         default_ssh_conf = yml_config["default_ssh_conf"]
-        ssh_conf = {
+        return {
             "identityfile": self._identityfile or alias_conf.get("identityfile", default_ssh_conf["identityfile"]),
             "hostname": alias_conf["hostname"],
             "user": self._user or alias_conf.get("user", default_ssh_conf["user"]),
             "port": int(self._port or alias_conf.get("port", default_ssh_conf["port"])),
         }
-        return ssh_conf
 
 
 def get_prefix_host_ip(host_type: str) -> str:
@@ -105,10 +104,10 @@ def get_prefix_host_ip(host_type: str) -> str:
     """
     type_key = f"host_type_{host_type}"
     try:
-        yml_config = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
+        yml_config = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
         prefix_host = yml_config[type_key]
     except KeyError:
-        print_error(f"yml文件: {PathConfig.plum_yml_path} 中缺少key: {type_key}")
+        print_error(f"yml文件: {PathConfig.PLUM_YML_PATH} 中缺少key: {type_key}")
         sys.exit(1)
     return prefix_host
 
@@ -124,16 +123,17 @@ def get_host_ip(host: str, host_type: str) -> str:
 
     :return 完整的主机ip
     """
-    prefix_host = get_prefix_host_ip(host_type)
     mark = "."
     # 处理输入的前两位的情况
     point_count = host.count(mark)
     # 标准ip中点的数量
     normal_point = 3
-    if point_count < normal_point:
-        prefix_host = mark.join(prefix_host.split(mark)[: (normal_point - point_count)])
-        host = f"{prefix_host}.{host}"
-    return host
+    if point_count == normal_point:
+        return host
+
+    prefix_host = get_prefix_host_ip(host_type)
+    prefix_host = mark.join(prefix_host.split(mark)[: (normal_point - point_count)])
+    return f"{prefix_host}.{host}"
 
 
 def get_ssh_alias_conf(host: str) -> dict:
@@ -151,7 +151,7 @@ def get_ssh_alias_conf(host: str) -> dict:
     begin = False
     # 查询默认的ssh信息
     ssh_conf = {}
-    with open(PathConfig.ssh_config_path, encoding="utf-8") as f:
+    with open(PathConfig.SSH_CONFIG_PATH, encoding="utf-8") as f:
         for line in f:
             data = line.split()
             # config配置都是两列
@@ -165,7 +165,7 @@ def get_ssh_alias_conf(host: str) -> dict:
             if key == "host":
                 if begin:  # pylint: disable=R1723
                     break
-                elif value == host:
+                if value == host:
                     begin = True
                 else:
                     continue
@@ -174,7 +174,7 @@ def get_ssh_alias_conf(host: str) -> dict:
                 ssh_conf[key] = value
 
     if not begin:
-        print_error(f"未在 {PathConfig.ssh_config_path} 中配置主机 {host} 的ssh登陆信息")
+        print_error(f"未在 {PathConfig.SSH_CONFIG_PATH} 中配置主机 {host} 的ssh登陆信息")
         sys.exit(1)
     return ssh_conf
 

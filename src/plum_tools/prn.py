@@ -15,9 +15,8 @@
 import os
 import subprocess
 import sys
-from typing import List, Optional, Union
 
-from .conf import Constant, PathConfig
+from .conf import LOCAL_HOST, PathConfig
 from .exceptions import RunCmdError, SystemTypeError
 from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_ok, print_text
@@ -27,10 +26,10 @@ from .utils.utils import YmlConfig, get_file_abspath, run_cmd
 
 def get_project_conf(  # noqa: C901
     project: str,
-    src: List[str],
-    dest: List[str],
-    delete: Optional[int],
-    exclude: List[str],
+    src: list[str],
+    dest: list[str],
+    delete: int | None,
+    exclude: list[str],
     is_download: bool = False,
 ) -> dict:
     """查询项目信息
@@ -67,13 +66,13 @@ def get_project_conf(  # noqa: C901
         "delete": 0
     }
     """
-    yml_data = YmlConfig.parse_config_yml(PathConfig.plum_yml_path)
+    yml_data = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
     data = {}
     try:
-        data = yml_data["projects"][project]
+        data = dict(yml_data["projects"][project])
     except KeyError:
         if not (src and dest):
-            print_error(f"yml文件: {PathConfig.plum_yml_path} 中没有配置项目: {project} 的信息")
+            print_error(f"yml文件: {PathConfig.PLUM_YML_PATH} 中没有配置项目: {project} 的信息")
             sys.exit(1)
 
     # 设置默认值
@@ -118,13 +117,13 @@ def process_path(path: str, is_local: bool = False) -> str:
     return path
 
 
-def process_paths(paths: Union[str, List[str]], is_local: bool = False) -> str:
+def process_paths(paths: str | list[str], is_local: bool = False) -> str:
     if isinstance(paths, str):
         paths = [paths]
     return " ".join([process_path(path, is_local=is_local) for path in paths])
 
 
-def process_remote_paths(paths: Union[str, List[str]], user_prefix: str, pv: str) -> str:
+def process_remote_paths(paths: str | list[str], user_prefix: str, pv: str) -> str:
     if isinstance(paths, str):
         paths = [paths]
     return " ".join([f"{user_prefix}{process_path(path, is_local=False)}{pv}" for path in paths])
@@ -133,7 +132,7 @@ def process_remote_paths(paths: Union[str, List[str]], user_prefix: str, pv: str
 class SyncFiles:  # pylint: disable=too-many-instance-attributes
     """上传文件到服务器"""
 
-    # pylint: disable=R0913
+    # pylint: disable=too-many-positional-arguments,too-many-arguments
     def __init__(
         self,
         hostname: str,
@@ -142,10 +141,11 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         identityfile: str,
         src: str,
         dest: str,
-        exclude: List[str],
+        exclude: list[str],
         delete: int,
         is_download: bool = False,
         is_debug: bool = False,
+        ignore_rsync_path: bool = False,
     ):
         """文件上传功能
 
@@ -178,6 +178,9 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
 
         :param is_debug 是否打印详细信息
         :example is_debug False
+
+        :param ignore_rsync_path 是否忽略 rsync-path 参数
+        :example ignore_rsync_path False
         """
         self._hostname = hostname
         self._user = user
@@ -189,7 +192,8 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         self._delete = delete
         self._is_download = is_download
         self._is_debug = is_debug
-        self._is_localhost = hostname == Constant.local_host
+        self._ignore_rsync_path = ignore_rsync_path
+        self._is_localhost = hostname == LOCAL_HOST
 
     @property
     def host_info(self) -> str:
@@ -216,10 +220,11 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             ssh_cmd = f"ssh -p {self._port}"
         else:
             ssh_cmd = "ssh"
-        directory = os.path.dirname(self._dest)
-        if not directory:
-            directory = self._dest
-        option.append(f"'--rsync-path=mkdir -p {directory} && rsync'")
+        if not self._ignore_rsync_path:
+            directory = os.path.dirname(self._dest)
+            if not directory:
+                directory = self._dest
+            option.append(f"'--rsync-path=mkdir -p {directory} && rsync'")
         if not self._is_localhost:
             option.append(f'-e \'{ssh_cmd} -i {self._identity_file} -o "{known_host}" -o "{host_key}" -o "{timeout}"\'')
         if self._delete:
@@ -254,7 +259,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         try:
             if self._is_debug:
                 print_text(cmd)
-                subprocess.call(cmd, shell=True)
+                subprocess.call(cmd, shell=True)  # nosec B602
             else:
                 run_cmd(cmd)
             print_ok(f"{text}成功")
@@ -262,15 +267,16 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             print_error(f"{text}失败, 失败原因: {e.err_msg}")
 
 
-def sync_files(  # pylint: disable=too-many-arguments
-    host_list: List[str],
+def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+    host_list: list[str],
     host_type: str,
     user: str,
     port: int,
     identity_file: str,
-    projects_conf: List[dict],
+    projects_conf: list[dict],
     is_download: bool = False,
     is_debug: bool = False,
+    ignore_rsync_path: bool = False,
 ) -> None:
     """上传文件到服务器上
 
@@ -305,16 +311,24 @@ def sync_files(  # pylint: disable=too-many-arguments
 
     :param is_debug 是否打印详细信息
     :example is_debug False
+
+    :param ignore_rsync_path 是否忽略 rsync-path 参数
+    :example ignore_rsync_path False
     """
     for host in host_list:
-        if host == Constant.local_host:
+        if host == LOCAL_HOST:
             ssh_conf = {"hostname": host, "user": "", "port": 0, "identityfile": ""}
         else:
             ssh_conf = merge_ssh_config(host, host_type, user, port, identity_file)
-        ssh_conf.update({"is_download": is_download, "is_debug": is_debug})
+        ssh_conf.update(
+            {
+                "is_download": is_download,
+                "is_debug": is_debug,
+                "ignore_rsync_path": ignore_rsync_path,
+            }
+        )
         for pro_conf in projects_conf:
-            pro_conf.update(ssh_conf)
-            sync = SyncFiles(**pro_conf)
+            sync = SyncFiles(**{**pro_conf, **ssh_conf})
             sync.translate()
 
 
@@ -433,11 +447,19 @@ def main() -> None:  # pylint: disable=R0914
         default=False,
         help="debug output from parser",
     )
+    parser.add_argument(
+        "--ignore-rsync-path",
+        action="store_true",
+        required=False,
+        dest="ignore_rsync_path",
+        default=False,
+        help="ignore rsync-path option",
+    )
 
     args = parser.parse_args()
     host_list, host_type, projects = args.servers, args.type, args.projects
     if not host_list:
-        host_list = [Constant.local_host]
+        host_list = [LOCAL_HOST]
 
     src, dest, delete, exclude = args.local, args.remote, args.delete, args.exclude
     if len(src) > 1 and len(dest) > 1:
@@ -447,6 +469,7 @@ def main() -> None:  # pylint: disable=R0914
     user, port, identity_file = args.user, args.port, args.identity_file
 
     is_download, is_debug = args.download, args.debug
+    ignore_rsync_path = args.ignore_rsync_path
 
     projects_conf = [get_project_conf(project, src, dest, delete, exclude, is_download) for project in projects]
     sync_files(
@@ -458,4 +481,5 @@ def main() -> None:  # pylint: disable=R0914
         projects_conf,
         is_download,
         is_debug,
+        ignore_rsync_path,
     )

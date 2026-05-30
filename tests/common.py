@@ -1,13 +1,9 @@
-# -*- coding: utf-8 -*-
-
 import os
 import shutil
 import tempfile
+from collections.abc import Callable, Generator
 from contextlib import contextmanager
-from typing import Any, Callable, Generator, List
-
-curr_path = os.path.dirname(os.path.abspath(__file__))
-fixtures_path = os.path.join(curr_path, "fixtures")
+from typing import Any
 
 
 class MockPool:
@@ -17,7 +13,7 @@ class MockPool:
     def __call__(self, processes: int) -> None:
         assert processes == 100
 
-    def map(self, func: Callable, targets: List[str]) -> list:
+    def map(self, func: Callable, targets: list[str]) -> list:
         assert callable(func)
         assert isinstance(targets, list)
         return [func(target) for target in targets]
@@ -25,7 +21,7 @@ class MockPool:
     def __enter__(self) -> "MockPool":
         return self
 
-    def __exit__(self, exc_type: Any, exc_val: Exception, exc_tb: Any) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Exception, exc_tb: Any) -> None:  # noqa
         pass
 
 
@@ -43,13 +39,17 @@ def make_temp_dir(prefix: str = "plum_tools_", clean: bool = True) -> Generator[
             shutil.rmtree(temp_dir)
 
 
-@contextmanager
-def make_temp_file(suffix: str = "", prefix: str = "plum_tools_", clean: bool = True) -> Generator[str, None, None]:
+@contextmanager  # noqa
+def make_temp_file(
+    suffix: str = "",
+    prefix: str = "plum_tools_",
+    clean: bool = True,
+) -> Generator[str, None, None]:
     """
     创建临时文件
     clean: True 在with语句之后删除文件夹
     """
-    temp_file = tempfile.mktemp(suffix=suffix, prefix=prefix)
+    _, temp_file = tempfile.mkstemp(suffix=suffix, prefix=prefix)
     try:
         yield temp_file
     finally:

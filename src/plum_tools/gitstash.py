@@ -15,7 +15,7 @@
 import os
 import sys
 
-from .conf import Constant, GitCommand
+from .conf import STASH_UUID, GitCommand
 from .exceptions import RunCmdError
 from .utils.git import check_repository_modify_status, check_repository_stash, get_current_branch_name
 from .utils.parser import get_base_parser
@@ -39,14 +39,14 @@ class GitCheckoutStash:
         self._current_path = os.getcwd()  # 当前执行命令的路径
         self._new_branch = new_branch
         self._mark = "-"
-        self._stash_uuid = f"{self._current_branch}{self._mark}{Constant.stash_uuid}"
+        self._stash_uuid = f"{self._current_branch}{self._mark}{STASH_UUID}"
 
     def _stash(self) -> None:
         """储藏文件"""
         # 分支有修改,先进行stash储藏
         is_modify, _ = check_repository_modify_status(self._current_path)
         if is_modify:
-            cmd = GitCommand.stash_save % self._stash_uuid
+            cmd = GitCommand.STASH_SAVE % self._stash_uuid
             with cd(self._current_path):
                 run_cmd(cmd)
 
@@ -62,7 +62,7 @@ class GitCheckoutStash:
     def _checkout(self) -> None:
         """切换分支"""
         # 切换到新分支
-        cmd = GitCommand.git_checkout % self._new_branch
+        cmd = GitCommand.GIT_CHECKOUT % self._new_branch
         with cd(self._current_path):
             run_cmd(cmd)
 
@@ -74,11 +74,12 @@ class GitCheckoutStash:
             return
         for line in stash_out.splitlines():
             stash_string, _ = line.split(":", 1)
-            stash_save = f"{self._new_branch}{self._mark}{Constant.stash_uuid}"
+            stash_save = f"{self._new_branch}{self._mark}{STASH_UUID}"
             if stash_save.strip() in line:
-                cmd = GitCommand.stash_pop % stash_string
+                cmd = GitCommand.STASH_POP % stash_string
                 with cd(self._current_path):
                     run_cmd(cmd)
+                break
 
     def checkout(self) -> None:
         """储藏文件切换分支"""

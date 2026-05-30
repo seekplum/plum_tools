@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 #=============================================================================
 #  ProjectName: plum-tools
@@ -16,6 +14,7 @@ import os
 from unittest import mock
 
 import pytest
+
 from plum_tools.utils.git import (
     check_is_git_repository,
     check_repository_modify_status,
@@ -23,7 +22,6 @@ from plum_tools.utils.git import (
     get_current_branch_name,
 )
 from plum_tools.utils.utils import cd
-
 from tests.common import make_temp_dir
 
 

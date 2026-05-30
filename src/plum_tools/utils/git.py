@@ -11,7 +11,6 @@
 """
 
 import os
-from typing import Tuple
 
 from ..conf import GitCommand
 from .utils import cd, run_cmd
@@ -22,7 +21,7 @@ def get_current_branch_name() -> str:
 
     :return 当前分支名
     """
-    return run_cmd(GitCommand.branch_abbrev).strip()
+    return run_cmd(GitCommand.BRANCH_ABBREV).strip()
 
 
 def check_is_git_repository(path: str) -> bool:
@@ -44,7 +43,7 @@ def check_is_git_repository(path: str) -> bool:
     return False
 
 
-def check_repository_modify_status(repo_path: str) -> Tuple[bool, str]:
+def check_repository_modify_status(repo_path: str) -> tuple[bool, str]:
     """检查仓库是否有文件修改
 
     :param repo_path 仓库路径
@@ -60,22 +59,22 @@ def check_repository_modify_status(repo_path: str) -> Tuple[bool, str]:
     :return output 命令输出
     """
     with cd(repo_path):
-        output = run_cmd(GitCommand.status_default)
+        output = run_cmd(GitCommand.STATUS_DEFAULT)
 
     result = False
 
     # 检查是否落后、超前远程分支
-    if GitCommand.pull_keyword in output or GitCommand.push_keyword in output:
+    if GitCommand.PULL_KEYWORD in output or GitCommand.PUSH_KEYWORD in output:
         result = True
     else:
         with cd(repo_path):
             # 检查本地是否还有文件未提交
-            if run_cmd(GitCommand.status_short):
+            if run_cmd(GitCommand.STATUS_SHORT):
                 result = True
     return result, output
 
 
-def check_repository_stash(repo_path: str) -> Tuple[bool, str]:
+def check_repository_stash(repo_path: str) -> tuple[bool, str]:
     """检查仓库是否在储藏区
 
     :param repo_path 仓库路径
@@ -91,7 +90,7 @@ def check_repository_stash(repo_path: str) -> Tuple[bool, str]:
     :return output 命令输出
     """
     with cd(repo_path):
-        output = run_cmd(GitCommand.stash_list)
+        output = run_cmd(GitCommand.STASH_LIST)
     result = False
     if output:
         result = True

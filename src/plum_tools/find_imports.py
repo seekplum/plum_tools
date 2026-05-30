@@ -1,14 +1,12 @@
 import ast
 import sys
 import typing as t
-
 from enum import StrEnum
 from pathlib import Path
-from .utils.parser import get_base_parser, add_extra_argument
 
+from .utils.parser import add_extra_argument, get_base_parser
 
 STD_LIB_MODULE_NAMES = sys.stdlib_module_names
-MY_MODULE_NAMES = [str(d) for d in Path(".").iterdir()]
 MODULE_NAME_PAIRS = {
     "PIL": "pillow",
     "grpc": "grpcio",
@@ -54,7 +52,7 @@ def parse_imports(source: str) -> GeneratorModuleDict:
                 )
         elif isinstance(node, ast.ImportFrom):
             if node.module:
-                if node.level == 1:  # 不考虑相对导入
+                if node.level > 0:  # 不考虑相对导入
                     continue
                 first_name = node.module.split(".")[0]
                 yield ModuleDict(
@@ -66,7 +64,7 @@ def parse_imports(source: str) -> GeneratorModuleDict:
 
 
 def find_imports_by_file(file_path: str) -> GeneratorModuleDict:
-    with open(file_path, "r", encoding="utf-8") as f:
+    with open(file_path, encoding="utf-8") as f:
         yield from parse_imports(f.read())
 
 
@@ -74,22 +72,28 @@ def find_imports(
     project_dir: str, *, mode: FindMode = FindMode.ALL, ignore_paths: t.List[str] | None = None
 ) -> GeneratorModuleDict:
     exists = set()
-    ignore_paths = set(ignore_paths or []) | {".venv/", "__pycache__"}
-    for file in Path(project_dir).rglob("*.py"):
+    project_path = Path(project_dir)
+    ignore_path_set = {str(Path(path)) for path in ignore_paths or []}
+    ignore_dir_parts = {".venv", "__pycache__"}
+    my_module_names = {path.name for path in project_path.iterdir()}
+    src_path = project_path / "src"
+    if src_path.is_dir():
+        my_module_names.update(path.name for path in src_path.iterdir())
+
+    for file in project_path.rglob("*.py"):
         file_path = str(file)
+        relative_parts = file.relative_to(project_path).parts
         # 遍历目录中的所有文件，除了.venv和__pycache__目录
-        if any(file_path.startswith(p) or f"{p}/" in file_path for p in ignore_paths):
+        if file_path in ignore_path_set or any(part in ignore_dir_parts for part in relative_parts):
             continue
         if file.absolute() == Path(__file__).absolute():
             continue
         try:
             for module in find_imports_by_file(file_path):
-                if module["name"] in exists or any(
-                    module["name"].startswith(prefix) for prefix in MY_MODULE_NAMES
-                ):
+                if module["name"] in exists or module["name"] in my_module_names:
                     continue
                 exists.add(module["name"])
-                if mode == FindMode.ALL or module["mode"] == mode:
+                if mode in (FindMode.ALL, module["mode"]):
                     yield module
         except Exception as e:
             print(f"Error parsing {file_path}: {e}")

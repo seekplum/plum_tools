@@ -1,6 +1,13 @@
 # linux 小工具
 
-[![LICENSE](https://img.shields.io/github/license/seekplum/plum_tools.svg)](https://github.com/seekplum/plum_tools/blob/master/LICENSE)[![travis-ci](https://travis-ci.org/seekplum/plum_tools.svg?branch=master)](https://travis-ci.org/seekplum/plum_tools)[![coveralls](https://coveralls.io/repos/github/seekplum/plum_tools/badge.svg?branch=master)](https://coveralls.io/github/seekplum/plum_tools?branch=master) [![pypi version](https://img.shields.io/pypi/v/plum_tools.svg)](https://pypi.python.org/pypi/plum_tools) [![pyversions](https://img.shields.io/pypi/pyversions/plum_tools.svg)](https://pypi.python.org/pypi/plum_tools)
+[![LICENSE](https://img.shields.io/github/license/seekplum/plum_tools.svg)](https://github.com/seekplum/plum_tools/blob/master/LICENSE)
+[![codecov](https://codecov.io/gh/seekplum/plum_tools/branch/master/graph/badge.svg)](https://codecov.io/gh/seekplum/plum_tools)
+[![CI](https://github.com/copier-org/copier/workflows/CI/badge.svg)](https://github.com/copier-org/copier/actions?query=branch%3Amaster)
+[![pypi version](https://img.shields.io/pypi/v/plum_tools?logo=pypi&logoColor=%23959DA5)](https://pypi.python.org/pypi/plum_tools)
+[![pyversions](https://img.shields.io/pypi/pyversions/plum_tools?logo=python&logoColor=%23959DA5)](https://pypi.python.org/pypi/plum_tools)
+[![Checked with mypy](http://www.mypy-lang.org/static/mypy_badge.svg)](http://mypy-lang.org/)
+[![Code style: black](https://img.shields.io/badge/code%20style-black-000000.svg)](https://github.com/psf/black)
+
 
 ## 目录结构
 
@@ -8,32 +15,28 @@
 ➜  tree -L 1 -a
 .
 ├── .bumpversion.cfg    # `bumpversion`工具的配置文件，用于自动更新版本
-├── .env                # 环境变量配置,`不会提交到gitlab中`
 ├── .gitignore          # 维护git仓库需要忽略文件
 ├── .gitlab-ci.yml      # gitlab ci的配置文件
 ├── .pylintrc           # pylint 配置文件
 ├── CHANGELOG.md        # 记录模块的变化
-├── MANIFEST.in         # 打包时添加文件或移除文件等的配置
-├── Pipfile             # python依赖包版本文件
-├── Pipfile.lock        # 根据Pipfile生成的版本锁文件
 ├── README.md           # 项目自述文件
-├── VERSION             # 项目版本文件
 ├── bin                 # 项目二进制程序
 ├── docs                # 项目文档
 ├── plum_tools          # 核心代码模块
-├── setup.cfg           # 安装配置文件
-├── setup.py            # 安装脚本
-├── tasks.py            # 任务执行脚本
 └── tests               # 单元测试目录
 
 ```
 
 ## 安装环境依赖
 
-1.安装 invoke
+1.安装 [uv](https://github.com/astral-sh/uv)
 
 ```bash
-pip install invoke
+# 推荐
+curl -LsSf https://astral.sh/uv/install.sh | sh
+
+# 或
+pip install uv
 ```
 
 2.安装项目依赖环境
@@ -42,41 +45,17 @@ pip install invoke
 uv sync
 ```
 
-3.安装 Git hooks
-
-由于钩子文件无法提交到 `.git` 中，所以在第一次 clone 项目中需要执行以下命令，把钩子放到指定位置，有两种方式，建议使用第一种
-
-第一种
-
-```bash
-pre-commit install -t pre-commit
-pre-commit install -t pre-push
-```
-
-第二种
-
-```bash
-cp -r hooks/* .git/hooks/
-```
 
 ## 运行单元测试
 
-### 第一种
-
 ```bash
-inv coverage
-```
-
-### 第二种
-
-```bash
-inv test
+uv run poe test
 ```
 
 ## 检查 Python 代码规范
 
 ```bash
-inv lint
+uv run poe lint
 ```
 
 ## 更新版本

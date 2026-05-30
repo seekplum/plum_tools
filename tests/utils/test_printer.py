@@ -1,5 +1,3 @@
-# -*- coding: utf-8 -*-
-
 """
 #=============================================================================
 #  ProjectName: plum-tools
@@ -15,6 +13,7 @@
 from typing import Any
 
 import pytest
+
 from plum_tools.utils.printer import (
     get_color,
     get_green,

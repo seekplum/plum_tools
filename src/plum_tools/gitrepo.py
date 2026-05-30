@@ -12,10 +12,10 @@
 
 import functools
 import os
+from collections.abc import Generator
 from multiprocessing import Pool
-from typing import Generator, List
 
-from .conf import Constant
+from .conf import PROCESSES_NUMBER
 from .utils.git import check_is_git_repository, check_repository_modify_status, check_repository_stash
 from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_warn
@@ -80,7 +80,7 @@ def check_project(path: str, stash: bool = True) -> dict:
     return result
 
 
-def check_projects(projects: List[str], detail: bool, stash: bool = True) -> None:
+def check_projects(projects: list[str], detail: bool, stash: bool = True) -> None:
     """检查指导目录下所有的仓库是否有修改
 
     当仓库中有内容被修改时，打印黄色警告信息
@@ -95,7 +95,7 @@ def check_projects(projects: List[str], detail: bool, stash: bool = True) -> Non
     :example False
     """
     targets = [path for project_path in projects for path in find_git_project_for_python(project_path)]
-    with Pool(processes=Constant.processes_number) as pool:
+    with Pool(processes=PROCESSES_NUMBER) as pool:
         result = pool.map(functools.partial(check_project, stash=stash), targets)
     for item in result:
         # 仓库中文件没有被改动而且没有文件被储藏了

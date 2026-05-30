@@ -1,26 +1,41 @@
-# See https://pre-commit.com/ for usage and config
 repos:
-- repo: local
-  hooks:
-  - id: check
-    name: check
-    stages: [commit]
-    language: system
-    entry: inv lint
-    types: [python]
+  - repo: local
+    hooks:
+      - id: commitizen
+        name: commitizen check
+        entry: uv run cz check
+        args: [--allow-abort, --commit-msg-file]
+        stages: [commit-msg]
+        language: system
+        require_serial: false
 
-  - id: unittest
-    name: unittest
-    stages: [commit]
-    language: system
-    entry: inv test
-    types: [python]
-    pass_filenames: false
+      - id: lint-codespell
+        name: lint-codespell
+        entry: uv run poe lint-codespell
+        language: system
+        pass_filenames: true
+        require_serial: false
 
-  - id: coverage
-    name: coverage
-    stages: [push]
-    language: system
-    entry: inv coverage
-    types: [python]
-    pass_filenames: false
+      - id: lint-mypy
+        name: lint-mypy
+        entry: uv run poe lint-mypy
+        language: system
+        pass_filenames: false
+        require_serial: false
+        types_or: [python, pyi]
+
+      - id: lint-ruff
+        name: lint-ruff
+        entry: uv run poe lint-ruff
+        language: system
+        pass_filenames: true
+        require_serial: false
+        types_or: [python, pyi]
+
+      - id: unittest
+        name: unittest
+        entry: uv run poe test
+        language: system
+        pass_filenames: false
+        require_serial: false
+        types_or: [python, pyi]

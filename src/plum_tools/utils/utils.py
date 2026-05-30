@@ -17,7 +17,7 @@ import signal
 import subprocess
 import sys
 from dataclasses import asdict, dataclass
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 import yaml
 
@@ -46,7 +46,7 @@ class cd:  # pylint: disable=invalid-name
         self._current_path = os.getcwd()
         os.chdir(self._new_path)
 
-    def __exit__(self, exc_type: Any, exc_val: Exception, exc_tb: Any) -> None:
+    def __exit__(self, exc_type: Any, exc_val: Exception, exc_tb: Any) -> None:  # noqa
         os.chdir(self._current_path)
 
 
@@ -60,20 +60,20 @@ class SSHConf:
 @dataclass
 class ProjectConf:
     src: str
-    desc: str
-    dest: Optional[str]
-    exclude: Optional[list]
+    desc: str  # noqa
+    dest: str | None
+    exclude: list | None
 
 
 @dataclass
 class GlobalConf:
     default_ssh_conf: SSHConf
     ipmi_interval: int
-    projects: List[ProjectConf]
+    projects: list[ProjectConf]
     dynamic_data: dict
 
     def __init__(
-        self, default_ssh_conf: SSHConf, ipmi_interval: int, projects: List[ProjectConf], **kwargs: Dict[str, str]
+        self, default_ssh_conf: SSHConf, ipmi_interval: int, projects: list[ProjectConf], **kwargs: dict[str, str]
     ) -> None:
         self.default_ssh_conf = default_ssh_conf
         self.ipmi_interval = ipmi_interval
@@ -119,8 +119,8 @@ class YmlConfig:
                     obj = GlobalConf(**yaml.safe_load(f.read()))
                     data = obj.get_data()
                 except TypeError as e:
-                    print_error(f"yml文件: {PathConfig.plum_yml_path} 格式错误, {e.args[0]}, 请参照以下格式进行修改")
-                    with open(os.path.join(PathConfig.root, PathConfig.plum_yml_name), encoding="utf-8") as fp:
+                    print_error(f"yml文件: {PathConfig.PLUM_YML_PATH} 格式错误, {e.args[0]}, 请参照以下格式进行修改")
+                    with open(os.path.join(PathConfig.ROOT, PathConfig.PLUM_YML_NAME), encoding="utf-8") as fp:
                         text = fp.read()
                     print_text(text)
                     sys.exit(1)
@@ -128,7 +128,7 @@ class YmlConfig:
                     cls._yml_data = data
                     return cls._yml_data
         except OSError:
-            print_error(f"yml文件: {PathConfig.plum_yml_path} 不存在")
+            print_error(f"yml文件: {PathConfig.PLUM_YML_PATH} 不存在")
             sys.exit(1)
 
 
@@ -145,7 +145,7 @@ def ensure_str(s: Any, encoding: str = "utf-8", errors: str = "strict") -> str:
     raise TypeError(f"not expecting type '{type(s)}'")
 
 
-def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: Optional[int] = None) -> str:
+def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: int | None = None) -> str:
     """执行系统命令
 
     :param cmd 系统命令
@@ -187,7 +187,13 @@ def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: Optional[int] = 
         signal.signal(signal.SIGALRM, raise_timeout_exception)
         signal.alarm(timeout)
 
-    with subprocess.Popen(cmd, shell=True, close_fds=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE) as p:
+    with subprocess.Popen(
+        cmd,
+        shell=True,
+        close_fds=True,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    ) as p:  # nosec B602
         out_msg = ensure_str(p.stdout.read())  # type: ignore[union-attr]
         err_msg = ensure_str(p.stderr.read())  # type: ignore[union-attr]
         exit_code = p.wait()
@@ -229,7 +235,7 @@ def get_file_abspath(path: str) -> str:
 
     # 通过系统命令stat查找真实路径
     path = replace_path(path)
-    cmd = OsCommand.stat_command % path
+    cmd = OsCommand.STAT_COMMAND % path
     output = run_cmd(cmd)
 
     # 获取操作系统类型
@@ -243,6 +249,5 @@ def get_file_abspath(path: str) -> str:
         raise SystemTypeError("此项功能仅支持 Linux / Darwin(mac)")
     match = pattern.search(output)
     if match:
-        abs_path = replace_path(match.group(1).strip())
-        return abs_path
+        return replace_path(match.group(1).strip())
     raise FileNotFoundError(f"文件: {path} 不存在")

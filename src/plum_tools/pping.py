@@ -11,9 +11,8 @@
 """
 
 from multiprocessing import Pool
-from typing import Optional
 
-from .conf import Constant, OsCommand
+from .conf import PROCESSES_NUMBER, OsCommand
 from .exceptions import RunCmdError
 from .utils.parser import get_base_parser
 from .utils.printer import print_text
@@ -21,13 +20,13 @@ from .utils.sshconf import get_prefix_host_ip
 from .utils.utils import run_cmd
 
 
-def ping(ip: str) -> Optional[str]:
+def ping(ip: str) -> str | None:
     """ping指定ip是否能ping通
 
     :param ip 主机ip
     :example ip 10.10.100.1
     """
-    cmd = OsCommand.ping_command % ip
+    cmd = OsCommand.PING_COMMAND % ip
     try:
         run_cmd(cmd)
     except RunCmdError:
@@ -52,7 +51,7 @@ def run(host_type: str, prefix_host: str) -> None:
         prefix_host += mark
 
     targets = [f"{prefix_host}{i}" for i in range(1, 255)]
-    with Pool(processes=Constant.processes_number) as pool:
+    with Pool(processes=PROCESSES_NUMBER) as pool:
         result = pool.map(ping, targets)
     for ip in result:
         if ip:

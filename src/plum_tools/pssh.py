@@ -36,14 +36,13 @@ def get_login_ssh_cmd(hostname: str, user: str, port: int, identityfile: str) ->
 
     :return cmd ssh登陆的命令
     """
-    cmd = (
+    return (
         f"ssh  -i {identityfile} "
         '-o "UserKnownHostsFile=/dev/null" '
         '-o "StrictHostKeyChecking no" '
-        f'-o  "ConnectTimeout={SSHConfig.connect_timeout}" '
+        f'-o  "ConnectTimeout={SSHConfig.CONNECT_TIMEOUT}" '
         f"{user}@{hostname} -p {port}"
     )
-    return cmd
 
 
 def login(host: str, host_type: str, user: str, port: int, identityfile: str) -> None:
@@ -70,7 +69,7 @@ def login(host: str, host_type: str, user: str, port: int, identityfile: str) ->
     ssh_conf = merge_ssh_config(host, host_type, user, port, identityfile)
     cmd = get_login_ssh_cmd(**ssh_conf)
     # 不能使用run_cmd，因为会导致夯住，需要等待结果返回
-    os.system(cmd)
+    os.system(cmd)  # nosec B605
 
 
 def main() -> None:

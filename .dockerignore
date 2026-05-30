@@ -1,9 +1,0 @@
-# Ignore everything
-**
-
-# ... except for dependencies and source
-!requirements.txt
-!requirements-dev.txt
-!plum_tools
-!tasks.py
-!tests
