@@ -13,7 +13,7 @@
 import os
 from enum import IntEnum, StrEnum
 
-VERSION = "0.5.0"
+VERSION = "0.6.0"
 
 
 STASH_UUID = "plum123456789987654321plum"
