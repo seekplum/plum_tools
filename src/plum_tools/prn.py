@@ -262,6 +262,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
                 exit_code = subprocess.call(cmd, shell=True)  # nosec B602
                 if exit_code != 0:
                     print_error(f"{text}失败, 错误码: {exit_code}")
+                    return
             else:
                 run_cmd(cmd)
             print_ok(f"{text}成功")

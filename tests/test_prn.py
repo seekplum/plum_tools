@@ -198,7 +198,7 @@ def test_translate_download_debug_and_localhost_paths(capsys: pytest.CaptureFixt
         True,
     )
 
-    with mock.patch("plum_tools.prn.subprocess.call") as mock_subprocess_call:
+    with mock.patch("plum_tools.prn.subprocess.call", return_value=0) as mock_subprocess_call:
         sync.translate()
 
     mock_subprocess_call.assert_called_once_with(
