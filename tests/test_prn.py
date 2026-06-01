@@ -202,6 +202,7 @@ def test_translate_download_debug_and_localhost_paths(capsys: pytest.CaptureFixt
         sync.translate()
 
     mock_subprocess_call.assert_called_once_with(
+        # flake8: noqa: E501
         "rsync -rtv '--rsync-path=mkdir -p /local && rsync'  --delete --exclude '.git' /remote/a/ /remote/b /local/file",
         shell=True,  # nosec: B604
     )
