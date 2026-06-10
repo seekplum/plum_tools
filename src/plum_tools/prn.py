@@ -141,11 +141,12 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         identityfile: str,
         src: str,
         dest: str,
-        exclude: list[str],
+        exclude: list[str] | None,
         delete: int,
         is_download: bool = False,
         is_debug: bool = False,
         ignore_rsync_path: bool = False,
+        ignore_exclude: bool = False,
     ):
         """文件上传功能
 
@@ -181,6 +182,9 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
 
         :param ignore_rsync_path 是否忽略 rsync-path 参数
         :example ignore_rsync_path False
+
+        :param ignore_exclude 是否忽略 exclude 参数
+        :example ignore_exclude False
         """
         self._hostname = hostname
         self._user = user
@@ -188,11 +192,12 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         self._identity_file = identityfile
         self._src = src
         self._dest = dest
-        self._exclude = exclude
+        self._exclude = exclude or []
         self._delete = delete
         self._is_download = is_download
         self._is_debug = is_debug
         self._ignore_rsync_path = ignore_rsync_path
+        self._ignore_exclude = ignore_exclude
         self._is_localhost = hostname == LOCAL_HOST
 
     @property
@@ -229,8 +234,9 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             option.append(f'-e \'{ssh_cmd} -i {self._identity_file} -o "{known_host}" -o "{host_key}" -o "{timeout}"\'')
         if self._delete:
             option.append(" --delete")
-        for item in set(self._exclude):
-            option.append(f"--exclude '{item}'")
+        if not self._ignore_exclude:
+            for item in set(self._exclude):
+                option.append(f"--exclude '{item}'")
         return " ".join(option)
 
     def translate(self) -> None:
@@ -280,6 +286,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
     is_download: bool = False,
     is_debug: bool = False,
     ignore_rsync_path: bool = False,
+    ignore_exclude: bool = False,
 ) -> None:
     """上传文件到服务器上
 
@@ -317,6 +324,9 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
 
     :param ignore_rsync_path 是否忽略 rsync-path 参数
     :example ignore_rsync_path False
+
+    :param ignore_exclude 是否忽略 exclude 参数
+    :example ignore_exclude False
     """
     for host in host_list:
         if host == LOCAL_HOST:
@@ -328,6 +338,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
                 "is_download": is_download,
                 "is_debug": is_debug,
                 "ignore_rsync_path": ignore_rsync_path,
+                "ignore_exclude": ignore_exclude,
             }
         )
         for pro_conf in projects_conf:
@@ -458,6 +469,14 @@ def main() -> None:  # pylint: disable=R0914
         default=False,
         help="ignore rsync-path option",
     )
+    parser.add_argument(
+        "--ignore-exclude",
+        action="store_true",
+        required=False,
+        dest="ignore_exclude",
+        default=False,
+        help="ignore exclude option",
+    )
 
     args = parser.parse_args()
     host_list, host_type, projects = args.servers, args.type, args.projects
@@ -472,7 +491,7 @@ def main() -> None:  # pylint: disable=R0914
     user, port, identity_file = args.user, args.port, args.identity_file
 
     is_download, is_debug = args.download, args.debug
-    ignore_rsync_path = args.ignore_rsync_path
+    ignore_rsync_path, ignore_exclude = args.ignore_rsync_path, args.ignore_exclude
 
     projects_conf = [get_project_conf(project, src, dest, delete, exclude, is_download) for project in projects]
     sync_files(
@@ -484,5 +503,6 @@ def main() -> None:  # pylint: disable=R0914
         projects_conf,
         is_download,
         is_debug,
-        ignore_rsync_path,
+        ignore_rsync_path=ignore_rsync_path,
+        ignore_exclude=ignore_exclude,
     )

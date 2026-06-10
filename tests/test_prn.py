@@ -236,6 +236,7 @@ def test_main_uses_localhost_when_servers_not_provided() -> None:
         exclude=[],
         debug=True,
         ignore_rsync_path=True,
+        ignore_exclude=False,
         version=False,
         type="default",
     )
@@ -252,7 +253,16 @@ def test_main_uses_localhost_when_servers_not_provided() -> None:
 
     mock_project.assert_called_once_with("python", ["/local"], ["/remote"], None, [], True)
     mock_sync.assert_called_once_with(
-        [LOCAL_HOST], "default", "", 0, "", [{"src": ["/local"], "dest": ["/remote"]}], True, True, True
+        [LOCAL_HOST],
+        "default",
+        "",
+        0,
+        "",
+        [{"src": ["/local"], "dest": ["/remote"]}],
+        True,
+        True,
+        ignore_rsync_path=True,
+        ignore_exclude=False,
     )
 
 
@@ -354,6 +364,7 @@ def test_main() -> None:
         exclude=[],
         debug=False,
         ignore_rsync_path=False,
+        ignore_exclude=False,
         version=False,
     )
     mock_project_conf = mock.Mock()
@@ -486,10 +497,20 @@ def test_main() -> None:
                     default=False,
                     help="ignore rsync-path option",
                 ),
+                mock.call(
+                    "--ignore-exclude",
+                    action="store_true",
+                    required=False,
+                    dest="ignore_exclude",
+                    default=False,
+                    help="ignore exclude option",
+                ),
             ]
         )
         mock_parser.parse_args.assert_called_once_with()
+        assert mock_parser.add_argument.call_count == 14
         mock_project.assert_has_calls([mock.call(project, "", "", None, [], False) for project in ["test", "python"]])
+        assert mock_project.call_count == 2
         mock_sync.assert_called_once_with(
             ["test", "dev"],
             mock_args.type,
@@ -499,7 +520,8 @@ def test_main() -> None:
             [mock_project_conf, mock_project_conf],
             False,
             False,
-            False,
+            ignore_rsync_path=False,
+            ignore_exclude=False,
         )
 
 
@@ -519,6 +541,7 @@ def test_main_with_ignore_rsync_path() -> None:
         exclude=[],
         debug=False,
         ignore_rsync_path=True,
+        ignore_exclude=False,
         version=False,
         type="default",
     )
@@ -541,5 +564,6 @@ def test_main_with_ignore_rsync_path() -> None:
         [{}],
         False,
         False,
-        True,
+        ignore_rsync_path=True,
+        ignore_exclude=False,
     )
