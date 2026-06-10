@@ -4,7 +4,7 @@ authors = [
 ]
 readme = "README.md"
 name = "plum_tools"
-version = "0.6.2"
+version = "0.6.3"
 description = "linux下常用的工具包"
 license = { text = "MIT" }
 dependencies = [
@@ -261,7 +261,7 @@ sort_by_size = true
 verbose = false
 
 [tool.bumpversion]
-current_version = "0.6.2"
+current_version = "0.6.3"
 parse = "(?P<major>\\d+)\\.(?P<minor>\\d+)\\.(?P<patch>\\d+)"
 serialize = ["{major}.{minor}.{patch}"]
 search = "{current_version}"
