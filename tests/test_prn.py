@@ -203,7 +203,7 @@ def test_translate_download_debug_and_localhost_paths(capsys: pytest.CaptureFixt
 
     mock_subprocess_call.assert_called_once_with(
         # flake8: noqa: E501
-        "rsync -rtv '--rsync-path=mkdir -p /local && rsync'  --delete --exclude '.git' /remote/a/ /remote/b /local/file",
+        "rsync -rtv '--rsync-path=mkdir -p /local && rsync' --delete --exclude '.git' /remote/a/ /remote/b /local/file",
         shell=True,  # nosec: B604
     )
     captured = capsys.readouterr()
@@ -234,6 +234,7 @@ def test_main_uses_localhost_when_servers_not_provided() -> None:
         remote=["/remote"],
         delete=None,
         exclude=[],
+        include=[],
         debug=True,
         ignore_rsync_path=True,
         ignore_exclude=False,
@@ -263,6 +264,7 @@ def test_main_uses_localhost_when_servers_not_provided() -> None:
         True,
         ignore_rsync_path=True,
         ignore_exclude=False,
+        include=[],
     )
 
 
@@ -362,6 +364,7 @@ def test_main() -> None:
         remote="",
         delete=None,
         exclude=[],
+        include=[],
         debug=False,
         ignore_rsync_path=False,
         ignore_exclude=False,
@@ -482,6 +485,15 @@ def test_main() -> None:
                     help="exclude file",
                 ),
                 mock.call(
+                    "--include",
+                    action="store",
+                    nargs="+",
+                    required=False,
+                    dest="include",
+                    default=[],
+                    help="include file",
+                ),
+                mock.call(
                     "--debug",
                     action="store_true",
                     required=False,
@@ -508,7 +520,7 @@ def test_main() -> None:
             ]
         )
         mock_parser.parse_args.assert_called_once_with()
-        assert mock_parser.add_argument.call_count == 14
+        assert mock_parser.add_argument.call_count == 15
         mock_project.assert_has_calls([mock.call(project, "", "", None, [], False) for project in ["test", "python"]])
         assert mock_project.call_count == 2
         mock_sync.assert_called_once_with(
@@ -522,6 +534,7 @@ def test_main() -> None:
             False,
             ignore_rsync_path=False,
             ignore_exclude=False,
+            include=[],
         )
 
 
@@ -539,6 +552,7 @@ def test_main_with_ignore_rsync_path() -> None:
         remote="",
         delete=None,
         exclude=[],
+        include=[],
         debug=False,
         ignore_rsync_path=True,
         ignore_exclude=False,
@@ -556,14 +570,5 @@ def test_main_with_ignore_rsync_path() -> None:
 
     mock_project.assert_called_once_with("python", "", "", None, [], False)
     mock_sync.assert_called_once_with(
-        ["test"],
-        "default",
-        "",
-        0,
-        "",
-        [{}],
-        False,
-        False,
-        ignore_rsync_path=True,
-        ignore_exclude=False,
+        ["test"], "default", "", 0, "", [{}], False, False, ignore_rsync_path=True, ignore_exclude=False, include=[]
     )

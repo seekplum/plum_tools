@@ -17,7 +17,6 @@ from unittest import mock
 import pytest
 
 from plum_tools.conf import OsCommand, PathConfig
-from plum_tools.exceptions import SystemTypeError
 from plum_tools.utils.utils import GlobalConf, SSHConf, YmlConfig, ensure_str, get_file_abspath
 
 
@@ -26,6 +25,7 @@ def test_global_conf_get_data_merges_dynamic_data() -> None:
         default_ssh_conf=SSHConf(user="root", port=22, identityfile="~/.ssh/id_rsa"),
         ipmi_interval=100,
         projects=[],
+        default_exclude=[],
         host_type_default=cast(Any, "10.0.0"),
     )
 
@@ -33,6 +33,7 @@ def test_global_conf_get_data_merges_dynamic_data() -> None:
         "default_ssh_conf": {"user": "root", "port": 22, "identityfile": "~/.ssh/id_rsa"},
         "ipmi_interval": 100,
         "projects": [],
+        "default_exclude": [],
         "host_type_default": "10.0.0",
     }
 
@@ -49,6 +50,7 @@ def test_global_conf_validates_dynamic_data(kwargs: dict[str, Any], message: str
         default_ssh_conf=SSHConf(user="root", port=22, identityfile="~/.ssh/id_rsa"),
         ipmi_interval=100,
         projects=[],
+        default_exclude=[],
         **kwargs,
     )
 
@@ -126,7 +128,6 @@ def test_get_file_abspath_parses_linux_stat_output() -> None:
     with (
         mock.patch("plum_tools.utils.utils.os.path.exists", return_value=False),
         mock.patch("plum_tools.utils.utils.run_cmd", return_value="  File: /tmp/demo file\n") as mock_run_cmd,
-        mock.patch("plum_tools.utils.utils.platform.system", return_value="Linux"),
     ):
         assert get_file_abspath("/tmp/demo file") == "/tmp/demo\\ file"
 
@@ -140,26 +141,14 @@ def test_get_file_abspath_parses_darwin_stat_output() -> None:
             "plum_tools.utils.utils.run_cmd",
             return_value='" 1 2 3 /tmp/demo file\n',
         ),
-        mock.patch("plum_tools.utils.utils.platform.system", return_value="Darwin"),
     ):
         assert get_file_abspath("/tmp/demo file") == "/tmp/demo\\ file"
-
-
-def test_get_file_abspath_rejects_unsupported_system() -> None:
-    with (
-        mock.patch("plum_tools.utils.utils.os.path.exists", return_value=False),
-        mock.patch("plum_tools.utils.utils.run_cmd", return_value=""),
-        mock.patch("plum_tools.utils.utils.platform.system", return_value="Windows"),
-    ):
-        with pytest.raises(SystemTypeError, match=r"此项功能仅支持 Linux / Darwin\(mac\)"):
-            get_file_abspath("/tmp/demo")
 
 
 def test_get_file_abspath_raises_when_path_cannot_be_found() -> None:
     with (
         mock.patch("plum_tools.utils.utils.os.path.exists", return_value=False),
         mock.patch("plum_tools.utils.utils.run_cmd", return_value="no match"),
-        mock.patch("plum_tools.utils.utils.platform.system", return_value="Linux"),
     ):
         with pytest.raises(FileNotFoundError, match="文件: /tmp/demo 不存在"):
             get_file_abspath("/tmp/demo")
@@ -169,7 +158,6 @@ def test_get_file_abspath_preserves_escaped_space_in_missing_path() -> None:
     with (
         mock.patch("plum_tools.utils.utils.os.path.exists", return_value=False),
         mock.patch("plum_tools.utils.utils.run_cmd", return_value="no match"),
-        mock.patch("plum_tools.utils.utils.platform.system", return_value="Linux"),
     ):
         with pytest.raises(FileNotFoundError, match=r"文件: /tmp/demo\\ file 不存在"):
             get_file_abspath("/tmp/demo file")

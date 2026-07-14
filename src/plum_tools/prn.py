@@ -67,6 +67,7 @@ def get_project_conf(  # noqa: C901
     }
     """
     yml_data = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
+    default_exclude = yml_data.get("default_exclude", [])
     data = {}
     try:
         data = dict(yml_data["projects"][project])
@@ -78,6 +79,7 @@ def get_project_conf(  # noqa: C901
     # 设置默认值
     data.setdefault("exclude", [])
     data.setdefault("delete", 0)
+    data["exclude"].extend(default_exclude)
 
     # 从命令行中更新对应值
     if src:
@@ -102,7 +104,7 @@ def get_project_conf(  # noqa: C901
     if delete is not None:  # 默认值为None
         data["delete"] = delete
     if exclude:
-        data["exclude"] = exclude
+        data["exclude"].extend(exclude)
 
     return data
 
@@ -147,6 +149,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         is_debug: bool = False,
         ignore_rsync_path: bool = False,
         ignore_exclude: bool = False,
+        include: list[str] | None = None,
     ):
         """文件上传功能
 
@@ -185,6 +188,9 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
 
         :param ignore_exclude 是否忽略 exclude 参数
         :example ignore_exclude False
+
+        :param include 包含的目录
+        :example include ["pkg"]
         """
         self._hostname = hostname
         self._user = user
@@ -193,6 +199,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         self._src = src
         self._dest = dest
         self._exclude = exclude or []
+        self._include = set(include or [])
         self._delete = delete
         self._is_download = is_download
         self._is_debug = is_debug
@@ -233,9 +240,13 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         if not self._is_localhost:
             option.append(f'-e \'{ssh_cmd} -i {self._identity_file} -o "{known_host}" -o "{host_key}" -o "{timeout}"\'')
         if self._delete:
-            option.append(" --delete")
+            option.append("--delete")
         if not self._ignore_exclude:
-            for item in set(self._exclude):
+            exists = set()
+            for item in self._exclude:
+                if item in self._include or item in exists:
+                    continue
+                exists.add(item)
                 option.append(f"--exclude '{item}'")
         return " ".join(option)
 
@@ -287,6 +298,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
     is_debug: bool = False,
     ignore_rsync_path: bool = False,
     ignore_exclude: bool = False,
+    include: list[str] | None = None,
 ) -> None:
     """上传文件到服务器上
 
@@ -327,6 +339,9 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
 
     :param ignore_exclude 是否忽略 exclude 参数
     :example ignore_exclude False
+
+    :param include 包含的目录
+    :example include ["pkg"]
     """
     for host in host_list:
         if host == LOCAL_HOST:
@@ -339,6 +354,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
                 "is_debug": is_debug,
                 "ignore_rsync_path": ignore_rsync_path,
                 "ignore_exclude": ignore_exclude,
+                "include": include,
             }
         )
         for pro_conf in projects_conf:
@@ -454,6 +470,15 @@ def main() -> None:  # pylint: disable=R0914
         help="exclude file",
     )
     parser.add_argument(
+        "--include",
+        action="store",
+        nargs="+",
+        required=False,
+        dest="include",
+        default=[],
+        help="include file",
+    )
+    parser.add_argument(
         "--debug",
         action="store_true",
         required=False,
@@ -491,7 +516,7 @@ def main() -> None:  # pylint: disable=R0914
     user, port, identity_file = args.user, args.port, args.identity_file
 
     is_download, is_debug = args.download, args.debug
-    ignore_rsync_path, ignore_exclude = args.ignore_rsync_path, args.ignore_exclude
+    ignore_rsync_path, ignore_exclude, include = args.ignore_rsync_path, args.ignore_exclude, args.include
 
     projects_conf = [get_project_conf(project, src, dest, delete, exclude, is_download) for project in projects]
     sync_files(
@@ -505,4 +530,5 @@ def main() -> None:  # pylint: disable=R0914
         is_debug,
         ignore_rsync_path=ignore_rsync_path,
         ignore_exclude=ignore_exclude,
+        include=include,
     )

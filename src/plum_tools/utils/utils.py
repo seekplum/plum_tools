@@ -11,7 +11,6 @@
 """
 
 import os
-import platform
 import re
 import signal
 import subprocess
@@ -22,7 +21,7 @@ from typing import Any
 import yaml
 
 from ..conf import OsCommand, PathConfig
-from ..exceptions import RunCmdError, RunCmdTimeout, SystemTypeError
+from ..exceptions import RunCmdError, RunCmdTimeout
 from .printer import print_error, print_text
 
 
@@ -70,14 +69,21 @@ class GlobalConf:
     default_ssh_conf: SSHConf
     ipmi_interval: int
     projects: list[ProjectConf]
+    default_exclude: list[str]
     dynamic_data: dict
 
     def __init__(
-        self, default_ssh_conf: SSHConf, ipmi_interval: int, projects: list[ProjectConf], **kwargs: dict[str, str]
+        self,
+        default_ssh_conf: SSHConf,
+        ipmi_interval: int,
+        projects: list[ProjectConf],
+        default_exclude: list[str] | None = None,
+        **kwargs: dict[str, str],
     ) -> None:
         self.default_ssh_conf = default_ssh_conf
         self.ipmi_interval = ipmi_interval
         self.projects = projects
+        self.default_exclude = default_exclude or []
         self.dynamic_data = kwargs
 
     def __post_init__(self) -> None:
@@ -238,16 +244,9 @@ def get_file_abspath(path: str) -> str:
     cmd = OsCommand.STAT_COMMAND % path
     output = run_cmd(cmd)
 
-    # 获取操作系统类型
-    system_type = platform.system()
-    if system_type == "Linux":
-        pattern = re.compile(r"File: (.*)")
-    # mac系统
-    elif system_type == "Darwin":
-        pattern = re.compile(r'"\s+\d+\s+\d+\s+\d+(.*)$')
-    else:
-        raise SystemTypeError("此项功能仅支持 Linux / Darwin(mac)")
-    match = pattern.search(output)
-    if match:
-        return replace_path(match.group(1).strip())
+    patterns = [re.compile(r"File: (.*)"), re.compile(r'"\s+\d+\s+\d+\s+\d+(.*)$')]  # linux系统  # mac系统
+    for pattern in patterns:
+        match = pattern.search(output)
+        if match:
+            return replace_path(match.group(1).strip())
     raise FileNotFoundError(f"文件: {path} 不存在")
