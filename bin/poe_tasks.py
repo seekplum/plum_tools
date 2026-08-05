@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import re
 import shlex
-import subprocess
+import subprocess  # nosec B404
 import sys
 import typing as t
 from collections.abc import Iterable, Sequence
@@ -70,7 +70,7 @@ def _resolve_sources(sources: str | Sequence[str] | None = None) -> tuple[str, .
     if isinstance(sources, str):
         parsed_sources = tuple(shlex.split(sources))
     elif isinstance(sources, (list, tuple)):
-        parsed_sources = tuple(sources)
+        parsed_sources = tuple(shlex.split(" ".join(sources)))
     else:
         parsed_sources = (str(sources),)
 
@@ -180,7 +180,7 @@ def lint_pylint(sources: str = "") -> None:
 
 
 def lint_ruff(sources: str = "") -> None:
-    _run(("ruff", "check", *_source_args(sources), "--fix"))
+    _run(("ruff", "check", *_source_args(sources)))
 
 
 def lint_bandit(sources: str = "") -> None:
@@ -230,6 +230,7 @@ def format_black(sources: str = "") -> None:
 
 
 def format_ruff(sources: str = "") -> None:
+    _run(("ruff", "check", *_source_args(sources), "--fix", "--unsafe-fixes"))
     _run(("ruff", "format", *_source_args(sources)))
 
 

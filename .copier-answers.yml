@@ -1,0 +1,15 @@
+# Changes here will be overwritten by Copier; NEVER EDIT MANUALLY
+_commit: e1620fa
+_src_path: ../cookiecutter-python-package
+author: seekplum
+description: linux下常用的工具包
+email: 1131909224m@sina.cn
+pip_index_url: https://mirrors.aliyun.com/pypi/simple
+project_name: plum_tools
+project_slug: plum_tools
+project_tag: plum_tools
+use_docker: false
+use_drone_ci: false
+use_github_ci: true
+use_gitlab_ci: false
+version: 0.6.4

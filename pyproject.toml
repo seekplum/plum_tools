@@ -252,7 +252,7 @@ ignore-regex = '\bla vie\b'
 ignore-words-list = 'ans'
 
 [tool.vulture]
-exclude = ["dos/", "examples/", ".venv/", ".git/"]
+exclude = ["dos/", ".venv/", ".git/"]
 ignore_decorators = []
 ignore_names = []
 make_whitelist = true
@@ -283,3 +283,8 @@ replace = 'version = "{new_version}"'
 filename = "src/plum_tools/conf.py"
 search = 'VERSION = "{current_version}"'
 replace = 'VERSION = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = ".copier-answers.yml"
+search = 'version: {current_version}'
+replace = 'version: {new_version}'
