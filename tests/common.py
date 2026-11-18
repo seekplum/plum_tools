@@ -18,6 +18,9 @@ class MockPool:
         assert isinstance(targets, list)
         return [func(target) for target in targets]
 
+    def imap_unordered(self, func: Callable, targets: list[str]) -> Generator[Any, None, None]:
+        yield from self.map(func, targets)
+
     def __enter__(self) -> "MockPool":
         return self
 

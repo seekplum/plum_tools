@@ -70,19 +70,69 @@ bumpversion minor
 
 ## gitrepo
 
-查找指定路径下所有被改动的 git 仓库
+使用默认的 `check` 子命令查找有未提交修改、分支差异或 stash 的 Git 仓库，
+省略子命令时兼容原有用法：
 
 ```bash
-➜  ~ gitrepo -h
-usage: gitrepo [-h] [-p--path PATH [PATH ...]] [-d--detail] [-t--test]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -p--path PATH [PATH ...]
-                        The directory path to check
-  -d--detail            display error details
-  -t--test              run the test function
+gitrepo -p ~/PythonProjects -d -s
+gitrepo check -p ~/PythonProjects -d -s
 ```
+
+使用 `scan` 子命令扫描并通过 Rich 表格聚合展示仓库，默认扫描家目录，
+按远程主机分表，例如 `github.com`、`gitlab.com` 各一张表。
+表内默认按完整远程地址合并同一仓库的多个目录：
+
+```bash
+# 扫描多个目录，按远程主机分表、远程地址合并仓库
+gitrepo scan -p ~/PythonProjects ~/work
+
+# 按远程主机分表、仓库目录名合并仓库
+gitrepo scan -p ~/PythonProjects --group-by name
+
+# 仅展示包含重复克隆的分组
+gitrepo scan -p ~/PythonProjects --duplicates
+
+# 更新远程引用后检查
+gitrepo scan -p ~/PythonProjects --fetch
+
+# 按目录名跳过不需要遍历的子目录，check 同样支持
+gitrepo scan -p ~/PythonProjects --exclude node_modules .venv
+```
+
+远程地址优先选择名为 `upstream` 的 remote，其次选择 `origin`，
+Git 不记录 remote 的添加时间，其余 remote 按名称排序选择第一个。
+分支的 upstream 指各分支配置的跟踪目标，
+独立于用于分组的 remote。
+
+远程分组将同一主机及仓库路径的 SSH、HTTPS 地址和 `.git` 后缀规范化，
+保留仓库路径大小写及非默认端口。本地路径与 `file://` 地址按实际路径聚合，
+SSH 主机别名不会自动解析为相同主机。
+同一远程地址对应多个独立仓库时标记为重复克隆；worktree 逐个展示，
+共用 Git 数据的目录不计为独立克隆。
+两种模式使用相同布局：同一仓库的名称仅在首行显示，后续行留空，
+仓库组之间加分隔线，形成纵向合并效果；每个目录保留自己的分支、remote 名称和状态。
+`--group-by name` 按同一主机下的目录名合并，并逐行保留远程地址，
+同名但远程不同的仓库会单独标记。非默认端口仍用于区分远程仓库，
+相同主机不同端口的仓库放在同一张表。
+本地远程路径和无远程 / 无法识别的仓库分别集中到独立表格。
+`--duplicates` 先筛选包含重复克隆的仓库组，再按主机汇总展示，
+重复克隆仍依据完整远程地址判断。
+
+扫描支持普通仓库、嵌套仓库、worktree、子模块和裸仓库；
+重叠扫描路径会去重，扫描时跳过 `.git` 内部目录，不递归跟随目录符号链接。
+两个子命令都显示目录发现和仓库检查进度、耗时及检查失败数量，
+输出重定向时关闭动态进度条。默认不排除其他目录，
+可通过 `--exclude` 按名称跳过子目录，显式指定的扫描根目录仍会检查。
+`scan` 在发现仓库后立即提交有界并发检查，合并工作区、当前分支和 stash 查询，
+同一仓库的 worktree 共用分支读取及 fetch；`check` 按仓库数量和 CPU 数限制进程数。
+表格同时展示暂存、未暂存、未跟踪、冲突及 stash 数量，
+并检查所有本地分支的领先、落后、无 upstream、upstream 失效及游离 HEAD 状态。
+无远程、空仓库、读取失败及远程更新失败也会显示。
+
+默认检查依据本地缓存的远程引用。`--fetch` 会更新所有已配置远程的引用，
+并可能触发 Git 的身份认证；更新失败时会标记错误并依据现有引用检查。
+upstream 失效表示对应的本地跟踪引用不存在，
+远程分支的删除是否反映到本地取决于 Git 的 fetch 清理配置。
 
 ## pssh
 

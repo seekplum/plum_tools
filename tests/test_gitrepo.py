@@ -11,6 +11,7 @@
 """
 
 import os
+from pathlib import Path
 from unittest import mock
 
 import pytest
@@ -25,13 +26,13 @@ from tests.common import MockPool
     side_effect=[True, True, False, True, True],
 )
 def test_find_git_project_for_python(mock_check: mock.MagicMock) -> None:
-    mock_os_result = [(f"/tmp/{i + 1}", None, None) for i in range(5)]
+    mock_os_result: list[tuple[str, list[str], list[str]]] = [(f"/tmp/{i + 1}", [], []) for i in range(5)]
 
-    with mock.patch("plum_tools.gitrepo.os") as mock_os:
-        mock_os.walk.return_value = mock_os_result
+    with mock.patch("plum_tools.git_scan.os.walk") as mock_walk:
+        mock_walk.return_value = mock_os_result
         result = list(find_git_project_for_python("/tmp"))
         assert result == ["/tmp/1", "/tmp/2", "/tmp/4", "/tmp/5"]
-    mock_os.walk.assert_called_once_with("/tmp")
+    mock_walk.assert_called_once_with(Path("/tmp").resolve(), onerror=mock.ANY)
     mock_check.assert_has_calls(
         [
             mock.call("/tmp/1"),
@@ -91,11 +92,11 @@ def test_check_project_with_modify() -> None:
     side_effect=[True, True, False, True, True],
 )
 def test_check_projects(mock_check: mock.MagicMock, capsys: pytest.CaptureFixture) -> None:
-    mock_os_result = [(f"/tmp/{i + 1}", None, None) for i in range(5)]
+    mock_os_result: list[tuple[str, list[str], list[str]]] = [(f"/tmp/{i + 1}", [], []) for i in range(5)]
 
     with (
         mock.patch("plum_tools.gitrepo.Pool", return_value=MockPool()) as mock_pool,
-        mock.patch("plum_tools.gitrepo.os") as mock_os,
+        mock.patch("plum_tools.git_scan.os.walk") as mock_walk,
         mock.patch(
             "plum_tools.gitrepo.check_repository_modify_status",
             side_effect=[
@@ -110,10 +111,10 @@ def test_check_projects(mock_check: mock.MagicMock, capsys: pytest.CaptureFixtur
             side_effect=[(True, "test5"), (False, "test6")],
         ) as mock_stash,
     ):
-        mock_os.walk.return_value = mock_os_result
+        mock_walk.return_value = mock_os_result
         check_projects(["/tmp"], True)
-    mock_pool.assert_called_once_with(processes=100)
-    mock_os.walk.assert_called_once_with("/tmp")
+    mock_pool.assert_called_once_with(processes=min(4, os.cpu_count() or 2))
+    mock_walk.assert_called_once_with(Path("/tmp").resolve(), onerror=mock.ANY)
     mock_check.assert_has_calls(
         [
             mock.call("/tmp/1"),
@@ -147,11 +148,11 @@ def test_check_projects(mock_check: mock.MagicMock, capsys: pytest.CaptureFixtur
     side_effect=[True, True, False, True, True],
 )
 def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pytest.CaptureFixture) -> None:
-    mock_os_result = [(f"/tmp/{i + 1}", None, None) for i in range(5)]
+    mock_os_result: list[tuple[str, list[str], list[str]]] = [(f"/tmp/{i + 1}", [], []) for i in range(5)]
 
     with (
         mock.patch("plum_tools.gitrepo.Pool", return_value=MockPool()) as mock_pool,
-        mock.patch("plum_tools.gitrepo.os") as mock_os,
+        mock.patch("plum_tools.git_scan.os.walk") as mock_walk,
         mock.patch(
             "plum_tools.gitrepo.check_repository_modify_status",
             side_effect=[
@@ -166,10 +167,10 @@ def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pyte
             side_effect=[(True, "test5"), (False, "test6")],
         ) as mock_stash,
     ):
-        mock_os.walk.return_value = mock_os_result
+        mock_walk.return_value = mock_os_result
         check_projects(["/tmp"], False)
-    mock_pool.assert_called_once_with(processes=100)
-    mock_os.walk.assert_called_once_with("/tmp")
+    mock_pool.assert_called_once_with(processes=min(4, os.cpu_count() or 2))
+    mock_walk.assert_called_once_with(Path("/tmp").resolve(), onerror=mock.ANY)
     mock_check.assert_has_calls(
         [
             mock.call("/tmp/1"),
@@ -200,7 +201,7 @@ def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pyte
 
 def test_main() -> None:
     mock_parser = mock.Mock()
-    mock_args = mock.Mock(path="/tmp/test111", detail=True, stash=False)
+    mock_args = mock.Mock(path="/tmp/test111", detail=True, stash=False, command="check", exclude=[])
     mock_parser.parse_args.return_value = mock_args
     with (
         mock.patch("plum_tools.gitrepo.get_base_parser", return_value=mock_parser) as mock_argparse,
