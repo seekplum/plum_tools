@@ -1274,6 +1274,7 @@ dependencies = [
     { name = "paramiko" },
     { name = "pynacl" },
     { name = "pyyaml" },
+    { name = "rich" },
 ]
 
 [package.dev-dependencies]
@@ -1308,6 +1309,7 @@ requires-dist = [
     { name = "paramiko" },
     { name = "pynacl", specifier = ">=1.6.2" },
     { name = "pyyaml" },
+    { name = "rich" },
 ]
 
 [package.metadata.requires-dev]
