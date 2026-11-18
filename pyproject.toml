@@ -4,7 +4,7 @@ authors = [
 ]
 readme = "README.md"
 name = "plum_tools"
-version = "0.6.5"
+dynamic = ["version"]
 description = "linux下常用的工具包"
 license = { text = "MIT" }
 dependencies = [
@@ -33,10 +33,11 @@ exclude = [
 packages = ["src/plum_tools"]
 
 [tool.hatch.version]
-source = "vcs"
+path = "src/plum_tools/_version.py"
+pattern = '^VERSION = "(?P<version>[^"]+)"$'
 
 [build-system]
-requires = ["hatchling", "hatch-vcs"]
+requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
@@ -277,14 +278,15 @@ pre_commit_hooks = [
 ]
 
 [[tool.bumpversion.files]]
-filename = "pyproject.toml"
-search = 'version = "{current_version}"'
-replace = 'version = "{new_version}"'
-
-[[tool.bumpversion.files]]
-filename = "src/plum_tools/conf.py"
+filename = "src/plum_tools/_version.py"
 search = 'VERSION = "{current_version}"'
 replace = 'VERSION = "{new_version}"'
+
+[[tool.bumpversion.files]]
+filename = "src/plum_tools/_version.py"
+search = '(?m)^RELEASE_DATE = "[^"]*"$'
+replace = 'RELEASE_DATE = "{now:%Y-%m-%d}"'
+regex = true
 
 [[tool.bumpversion.files]]
 filename = ".copier-answers.yml"

@@ -13,8 +13,12 @@
 import os
 from enum import IntEnum, StrEnum
 
-VERSION = "0.6.5"
+from . import _version
 
+# 兼容此前从 conf 导入版本号的调用。
+VERSION = _version.VERSION
+# 兼容此前从 conf 导入发布日期的调用。
+RELEASE_DATE = _version.RELEASE_DATE
 
 STASH_UUID = "plum123456789987654321plum"
 COMMAND_TIMEOUT = 3  # 执行命令超时时间

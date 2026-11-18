@@ -60,13 +60,28 @@ uv run poe lint
 
 ## 更新版本
 
+版本号、发布日期和构建提交集中维护在 `src/plum_tools/_version.py`，
+Hatch 直接从该文件读取包版本。使用 `bump-my-version` 同步更新版本号与发布日期，
+日期采用执行环境的本地日期（`YYYY-MM-DD`），并按现有配置创建提交和标签。
+
 ```bash
 # 小版本
-bumpversion patch
+uv run bump-my-version bump patch
 
 # 中版本
-bumpversion minor
+uv run bump-my-version bump minor
 ```
+
+发布 workflow 在构建前将当前检出提交的完整 ID 写入 `COMMIT_ID`，
+随 wheel 和 sdist 一起打包。所有使用公共参数解析器的命令均通过 `--version`
+展示版本、发布日期及提交前 12 位，例如：
+
+```text
+pcompare Version: 0.6.6 (2026-11-19) Commit: a1b2c3d4e5f6
+```
+
+尚未记录日期时显示 `development`，下次升版时自动填入日期。
+未注入提交信息的本地源码版本不显示 `Commit` 字段；提交信息不改变 PyPI 包版本号。
 
 ## gitrepo
 

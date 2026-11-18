@@ -4,6 +4,7 @@ from unittest import mock
 import pytest
 
 from plum_tools.utils.parser import add_extra_argument, get_base_parser
+from plum_tools.utils.printer import get_green
 
 
 def test_get_base_parser() -> None:
@@ -22,6 +23,34 @@ def test_get_base_parser() -> None:
             help="Show program's version number and exit.",
         )._get_kwargs(),
     ]
+
+
+@pytest.mark.parametrize("option", ["--version", "-v"])
+@pytest.mark.parametrize(("release_date", "display_date"), [("", "development"), ("2030-01-02", "2030-01-02")])
+@pytest.mark.parametrize("commit_id", ["", "0123456789abcdef0123456789abcdef01234567"])
+def test_version_prints_release_date_and_handles_unrecorded_versions(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+    option: str,
+    release_date: str,
+    display_date: str,
+    commit_id: str,
+) -> None:
+    monkeypatch.setattr("sys.argv", ["example"])
+    monkeypatch.setattr("plum_tools.utils.parser.VERSION", "1.2.3")
+    monkeypatch.setattr("plum_tools.utils.parser.RELEASE_DATE", release_date)
+    monkeypatch.setattr("plum_tools.utils.parser.COMMIT_ID", commit_id)
+
+    with pytest.raises(SystemExit) as error:
+        get_base_parser().parse_args([option])
+
+    captured = capsys.readouterr()
+    assert error.value.code == 0
+    expected = f"example Version: 1.2.3 ({display_date})"
+    if commit_id:
+        expected += " Commit: 0123456789ab"
+    assert captured.out.strip() == get_green(expected)
+    assert captured.err == ""
 
 
 def test_add_extra_argument_parses_key_value_pairs() -> None:

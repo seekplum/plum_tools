@@ -292,7 +292,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             print_error(f"{text}失败, 失败原因: {e.err_msg}")
 
 
-def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-arguments
+def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-arguments,too-many-locals
     host_list: list[str],
     host_type: str,
     user: str,

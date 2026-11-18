@@ -23,16 +23,25 @@ jobs:
         with:
           version: ${{ env.UV_VERSION }}
 
-      # See https://peps.python.org/pep-0440/#local-version-identifiers
-      - name: Omit local version for publishing to test.pypi.org
-        if: github.ref == 'refs/heads/master'
-        # HACK: https://github.com/ofek/hatch-vcs/issues/43
+      - name: 写入构建提交信息
+        id: build_metadata
         run: |
-          cat << EOF >> pyproject.toml
+          uv run --no-project python - <<'PY'
+          import re
+          import subprocess
+          from pathlib import Path
 
-          [tool.hatch.version.raw-options]
-          local_scheme = "no-local-version"
-          EOF
+          commit_id = subprocess.check_output(["git", "rev-parse", "HEAD"], text=True).strip()
+          path = Path("src/plum_tools/_version.py")
+          source, count = re.subn(
+              r'(?m)^COMMIT_ID = "[^"]*"$',
+              f'COMMIT_ID = "{commit_id}"',
+              path.read_text(encoding="utf-8"),
+          )
+          if count != 1:
+              raise SystemExit("版本文件必须包含唯一的 COMMIT_ID 字段")
+          path.write_text(source, encoding="utf-8")
+          PY
 
       - name: Build project for distribution
         run: uv build

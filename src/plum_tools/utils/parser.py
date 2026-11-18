@@ -1,7 +1,7 @@
 import argparse
 import typing as t
 
-from plum_tools.conf import VERSION
+from plum_tools._version import COMMIT_ID, RELEASE_DATE, VERSION
 
 from .printer import get_green
 
@@ -30,12 +30,16 @@ class ExtraAction(argparse.Action):
 
 
 def get_base_parser() -> argparse.ArgumentParser:
+    """创建包含版本、发布日期及构建提交选项的公共参数解析器。"""
     _parser = argparse.ArgumentParser()
+    version = f"%(prog)s Version: {VERSION} ({RELEASE_DATE or 'development'})"
+    if COMMIT_ID:
+        version += f" Commit: {COMMIT_ID[:12]}"
     _parser.add_argument(
         "-v",
         "--version",
         action="version",
-        version=get_green(f"%(prog)s Version: {VERSION}"),
+        version=get_green(version),
         help="Show program's version number and exit.",
     )
     return _parser
