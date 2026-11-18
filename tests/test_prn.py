@@ -220,6 +220,122 @@ def test_translate_reports_run_cmd_error(capsys: pytest.CaptureFixture[str]) -> 
     assert "上传 /tmp/src 到 user@1.1.1.1 服务器(端口: 22) /tmp/dest 失败, 失败原因: boom" in captured.out
 
 
+@pytest.mark.parametrize("is_debug", [False, True])
+@pytest.mark.parametrize("is_download", [False, True])
+@pytest.mark.parametrize("hostname", [LOCAL_HOST, "1.1.1.1"])
+def test_translate_dry_run_prints_command_without_syncing(
+    capsys: pytest.CaptureFixture[str], hostname: str, is_download: bool, is_debug: bool
+) -> None:
+    """预览上传、下载及本地同步命令，并确保 debug 模式不会触发执行。"""
+    sync = SyncFiles(
+        hostname,
+        "user",
+        22,
+        "id_rsa",
+        "/local/project",
+        "/remote/project",
+        [".git", "node_modules"],
+        1,
+        is_download=is_download,
+        is_debug=is_debug,
+        include=["node_modules"],
+        dry_run=True,
+    )
+
+    with (
+        mock.patch("plum_tools.prn.os.path.isdir", return_value=True),
+        mock.patch("plum_tools.prn.run_cmd") as mock_run_cmd,
+        mock.patch("plum_tools.prn.subprocess.call") as mock_subprocess_call,
+    ):
+        sync.translate()
+
+    mock_run_cmd.assert_not_called()
+    mock_subprocess_call.assert_not_called()
+    directory = "/local" if is_download else "/remote"
+    ssh_option = ""
+    user_prefix = ""
+    if hostname != LOCAL_HOST:
+        ssh_option = (
+            ' -e \'ssh -p 22 -i id_rsa -o "UserKnownHostsFile=/dev/null" '
+            '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\''
+        )
+        user_prefix = "user@1.1.1.1:"
+    paths = (
+        f"{user_prefix}/remote/project /local/project"
+        if is_download
+        else f"/local/project/ {user_prefix}/remote/project"
+    )
+    assert capsys.readouterr().out == (
+        f"rsync -rtv '--rsync-path=mkdir -p {directory} && rsync'{ssh_option} --delete --exclude '.git' {paths}\n"
+    )
+
+
+@pytest.mark.parametrize("dry_run", [False, True])
+def test_main_parses_dry_run(dry_run: bool) -> None:
+    """使用真实参数解析器校验预览选项的默认值及传递。"""
+    argv = ["prn", "--dry-run"] if dry_run else ["prn"]
+    project_conf = {"src": ["/local"], "dest": ["/remote"]}
+    with (
+        mock.patch("sys.argv", argv),
+        mock.patch("plum_tools.prn.get_project_conf", return_value=project_conf),
+        mock.patch("plum_tools.prn.sync_files") as mock_sync,
+    ):
+        main()
+
+    mock_sync.assert_called_once_with(
+        [LOCAL_HOST],
+        "default",
+        "",
+        0,
+        "",
+        [project_conf],
+        False,
+        False,
+        ignore_rsync_path=False,
+        ignore_exclude=False,
+        include=[],
+        dry_run=dry_run,
+    )
+
+
+@pytest.mark.parametrize("debug_args", [[], ["--debug"]])
+def test_main_dry_run_previews_all_hosts_and_projects(
+    capsys: pytest.CaptureFixture[str], debug_args: list[str]
+) -> None:
+    """从 CLI 入口校验多主机、多项目均只预览，且支持忽略 rsync-path。"""
+    argv = ["prn", "--dry-run", "--ignore-rsync-path", "-s", LOCAL_HOST, "dev", "-p", "first", "second", *debug_args]
+    projects_conf = [
+        {"src": ["/local/a"], "dest": ["/remote/a"], "exclude": [], "delete": 0},
+        {"src": ["/local/b"], "dest": ["/remote/b"], "exclude": [".git"], "delete": 1},
+    ]
+    with (
+        mock.patch("sys.argv", argv),
+        mock.patch("plum_tools.prn.get_project_conf", side_effect=projects_conf),
+        mock.patch(
+            "plum_tools.prn.merge_ssh_config",
+            return_value={"hostname": "10.0.0.1", "user": "root", "port": 22, "identityfile": "id_rsa"},
+        ) as mock_merge,
+        mock.patch("plum_tools.prn.os.path.isdir", return_value=False),
+        mock.patch("plum_tools.prn.run_cmd") as mock_run_cmd,
+        mock.patch("plum_tools.prn.subprocess.call") as mock_subprocess_call,
+    ):
+        main()
+
+    mock_merge.assert_called_once_with("dev", "default", "", 0, "")
+    mock_run_cmd.assert_not_called()
+    mock_subprocess_call.assert_not_called()
+    ssh_option = (
+        '-e \'ssh -p 22 -i id_rsa -o "UserKnownHostsFile=/dev/null" '
+        '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\''
+    )
+    assert capsys.readouterr().out.splitlines() == [
+        "rsync -rtv /local/a /remote/a",
+        "rsync -rtv --delete --exclude '.git' /local/b /remote/b",
+        f"rsync -rtv {ssh_option} /local/a root@10.0.0.1:/remote/a",
+        f"rsync -rtv {ssh_option} --delete --exclude '.git' /local/b root@10.0.0.1:/remote/b",
+    ]
+
+
 def test_main_uses_localhost_when_servers_not_provided() -> None:
     mock_parser = mock.Mock()
     mock_args = mock.Mock(
@@ -236,6 +352,7 @@ def test_main_uses_localhost_when_servers_not_provided() -> None:
         exclude=[],
         include=[],
         debug=True,
+        dry_run=False,
         ignore_rsync_path=True,
         ignore_exclude=False,
         version=False,
@@ -265,6 +382,7 @@ def test_main_uses_localhost_when_servers_not_provided() -> None:
         ignore_rsync_path=True,
         ignore_exclude=False,
         include=[],
+        dry_run=False,
     )
 
 
@@ -283,6 +401,7 @@ def test_main_rejects_multiple_local_and_remote_paths() -> None:
         delete=None,
         exclude=[],
         debug=False,
+        dry_run=False,
         ignore_rsync_path=False,
         version=False,
         type="default",
@@ -366,6 +485,7 @@ def test_main() -> None:
         exclude=[],
         include=[],
         debug=False,
+        dry_run=False,
         ignore_rsync_path=False,
         ignore_exclude=False,
         version=False,
@@ -502,6 +622,14 @@ def test_main() -> None:
                     help="debug output from parser",
                 ),
                 mock.call(
+                    "--dry-run",
+                    action="store_true",
+                    required=False,
+                    dest="dry_run",
+                    default=False,
+                    help="仅打印将要执行的命令",
+                ),
+                mock.call(
                     "--ignore-rsync-path",
                     action="store_true",
                     required=False,
@@ -520,7 +648,7 @@ def test_main() -> None:
             ]
         )
         mock_parser.parse_args.assert_called_once_with()
-        assert mock_parser.add_argument.call_count == 15
+        assert mock_parser.add_argument.call_count == 16
         mock_project.assert_has_calls([mock.call(project, "", "", None, [], False) for project in ["test", "python"]])
         assert mock_project.call_count == 2
         mock_sync.assert_called_once_with(
@@ -535,6 +663,7 @@ def test_main() -> None:
             ignore_rsync_path=False,
             ignore_exclude=False,
             include=[],
+            dry_run=False,
         )
 
 
@@ -554,6 +683,7 @@ def test_main_with_ignore_rsync_path() -> None:
         exclude=[],
         include=[],
         debug=False,
+        dry_run=False,
         ignore_rsync_path=True,
         ignore_exclude=False,
         version=False,
@@ -570,5 +700,16 @@ def test_main_with_ignore_rsync_path() -> None:
 
     mock_project.assert_called_once_with("python", "", "", None, [], False)
     mock_sync.assert_called_once_with(
-        ["test"], "default", "", 0, "", [{}], False, False, ignore_rsync_path=True, ignore_exclude=False, include=[]
+        ["test"],
+        "default",
+        "",
+        0,
+        "",
+        [{}],
+        False,
+        False,
+        ignore_rsync_path=True,
+        ignore_exclude=False,
+        include=[],
+        dry_run=False,
     )

@@ -150,6 +150,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         ignore_rsync_path: bool = False,
         ignore_exclude: bool = False,
         include: list[str] | None = None,
+        dry_run: bool = False,
     ):
         """文件上传功能
 
@@ -203,6 +204,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         self._delete = delete
         self._is_download = is_download
         self._is_debug = is_debug
+        self._dry_run = dry_run
         self._ignore_rsync_path = ignore_rsync_path
         self._ignore_exclude = ignore_exclude
         self._is_localhost = hostname == LOCAL_HOST
@@ -273,6 +275,9 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
 
         rsync = self._get_sync_option()
         cmd = f"{rsync} {src} {dest}"
+        if self._dry_run:
+            print_text(cmd)
+            return
         try:
             if self._is_debug:
                 print_text(cmd)
@@ -299,6 +304,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
     ignore_rsync_path: bool = False,
     ignore_exclude: bool = False,
     include: list[str] | None = None,
+    dry_run: bool = False,
 ) -> None:
     """上传文件到服务器上
 
@@ -355,6 +361,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
                 "ignore_rsync_path": ignore_rsync_path,
                 "ignore_exclude": ignore_exclude,
                 "include": include,
+                "dry_run": dry_run,
             }
         )
         for pro_conf in projects_conf:
@@ -487,6 +494,14 @@ def main() -> None:  # pylint: disable=R0914
         help="debug output from parser",
     )
     parser.add_argument(
+        "--dry-run",
+        action="store_true",
+        required=False,
+        dest="dry_run",
+        default=False,
+        help="仅打印将要执行的命令",
+    )
+    parser.add_argument(
         "--ignore-rsync-path",
         action="store_true",
         required=False,
@@ -531,4 +546,5 @@ def main() -> None:  # pylint: disable=R0914
         ignore_rsync_path=ignore_rsync_path,
         ignore_exclude=ignore_exclude,
         include=include,
+        dry_run=args.dry_run,
     )
