@@ -14,19 +14,19 @@ def test_get_base_parser() -> None:
             option_strings=["-h", "--help"],
             dest="help",
             default=argparse.SUPPRESS,
-            help="show this help message and exit",
+            help="显示帮助信息并退出",
         )._get_kwargs(),
         argparse._VersionAction(  # pylint: disable=protected-access
             option_strings=["-v", "--version"],
             dest="version",
             default="==SUPPRESS==",
-            help="Show program's version number and exit.",
+            help="显示版本、发布日期及构建提交并退出",
         )._get_kwargs(),
     ]
 
 
 @pytest.mark.parametrize("option", ["--version", "-v"])
-@pytest.mark.parametrize(("release_date", "display_date"), [("", "development"), ("2030-01-02", "2030-01-02")])
+@pytest.mark.parametrize(("release_date", "display_date"), [("", "开发版"), ("2030-01-02", "2030-01-02")])
 @pytest.mark.parametrize("commit_id", ["", "0123456789abcdef0123456789abcdef01234567"])
 def test_version_prints_release_date_and_handles_unrecorded_versions(
     monkeypatch: pytest.MonkeyPatch,
@@ -46,9 +46,9 @@ def test_version_prints_release_date_and_handles_unrecorded_versions(
 
     captured = capsys.readouterr()
     assert error.value.code == 0
-    expected = f"example Version: 1.2.3 ({display_date})"
+    expected = f"example 版本: 1.2.3（{display_date}）"
     if commit_id:
-        expected += " Commit: 0123456789ab"
+        expected += " 提交: 0123456789ab"
     assert captured.out.strip() == get_green(expected)
     assert captured.err == ""
 

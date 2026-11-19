@@ -66,7 +66,7 @@ def test_main() -> None:
         mock_argparse.assert_called_once_with()
         mock_parser.add_argument.assert_has_calls(
             [
-                mock.call(dest="host", action="store", help="specify server"),
+                mock.call(dest="host", action="store", help="服务器 IP、IP 简写或 ~/.ssh/config 中的主机别名"),
                 mock.call(
                     "-t",
                     "--type",
@@ -74,7 +74,7 @@ def test_main() -> None:
                     required=False,
                     dest="type",
                     default="default",
-                    help="host type",
+                    help="主机类型，默认 default；可选值由配置中的 host_type_<类型> 决定",
                 ),
                 mock.call(
                     "-i",
@@ -83,7 +83,7 @@ def test_main() -> None:
                     required=False,
                     dest="identityfile",
                     default="",
-                    help="ssh login identityfile path",
+                    help="SSH 私钥路径，默认读取 SSH 配置",
                 ),
                 mock.call(
                     "-u",
@@ -92,7 +92,7 @@ def test_main() -> None:
                     required=False,
                     dest="user",
                     default="",
-                    help="ssh login username",
+                    help="SSH 登录用户名，默认读取 SSH 配置",
                 ),
                 mock.call(
                     "-p",
@@ -102,7 +102,7 @@ def test_main() -> None:
                     dest="port",
                     type=int,
                     default=0,
-                    help="ssh login port",
+                    help="SSH 登录端口，默认读取 SSH 配置",
                 ),
             ]
         )

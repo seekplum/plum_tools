@@ -302,7 +302,7 @@ def test_main_reports_invalid_input_to_stderr(
     captured = capsys.readouterr()
     assert error.value.code == 2
     assert captured.out == ""
-    assert ("比较失败" if invalid_input != "none" else "usage:") in captured.err
+    assert ("比较失败" if invalid_input != "none" else "用法：") in captured.err
 
 
 def test_main_version_includes_release_date(
@@ -316,4 +316,4 @@ def test_main_version_includes_release_date(
         main()
 
     assert error.value.code == 0
-    assert "pcompare Version: 1.2.3 (2030-01-02)" in capsys.readouterr().out
+    assert "pcompare 版本: 1.2.3（2030-01-02）" in capsys.readouterr().out

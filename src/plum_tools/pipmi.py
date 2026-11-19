@@ -59,7 +59,7 @@ class PSSHClient(paramiko.SSHClient):
         out_msg = ensure_str(stdout.read())
         err_msg = ensure_str(stderr.read())
         if is_raise_exception and err_msg:
-            message = f"[{self.host}] run cmd `{cmd}` fail"
+            message = f"[{self.host}] 执行命令 `{cmd}` 失败"
             raise RunCmdError(message, out_msg=out_msg, err_msg=err_msg)
         return out_msg
 
@@ -245,13 +245,21 @@ def get_args() -> argparse.Namespace:
     :return 命令行参数
     """
     parser = get_base_parser()
+    parser.description = "通过 SSH 登录跳板机，对指定服务器执行 IPMI 命令。"  # noqa
+    parser.epilog = (
+        "示例：\n"
+        "  pipmi -l 192.168.1.10 -s 20 21 -c 'power status'\n"
+        "  pipmi -l 10 -s 20 -t default -U ADMIN -c 'chassis status'\n\n"
+        "配置：IP 简写和默认 SSH 参数读取 ~/.plum_tools.yaml；\n"
+        "IPMI 地址根据主机类型的网段及 ipmi_interval 偏移计算。"
+    )
     parser.add_argument(
         "-l",
         "--login",
         required=True,
         action="store",
         dest="host",
-        help="specify login ip",
+        help="跳板机 IP 或 IP 简写，必填",
     )
     parser.add_argument(
         "-s",
@@ -260,7 +268,7 @@ def get_args() -> argparse.Namespace:
         action="store",
         dest="servers",
         nargs="+",
-        help="specify server",
+        help="目标服务器 IP 或 IP 简写，必填，可指定多个；IPMI 地址按配置偏移计算",
     )
     parser.add_argument(
         "-u",
@@ -269,7 +277,7 @@ def get_args() -> argparse.Namespace:
         action="store",
         dest="user",
         default="root",
-        help="specify username",
+        help="SSH 登录用户名，默认 root",
     )
     parser.add_argument(
         "-pass",
@@ -278,7 +286,7 @@ def get_args() -> argparse.Namespace:
         action="store",
         dest="password",
         default="",
-        help="specify password",
+        help="SSH 登录密码，默认为空，使用私钥认证",
     )
     parser.add_argument(
         "-p",
@@ -288,7 +296,7 @@ def get_args() -> argparse.Namespace:
         dest="port",
         type=int,
         default=0,
-        help="ssh login port",
+        help="SSH 登录端口，默认读取 SSH 配置",
     )
     parser.add_argument(
         "-i",
@@ -297,7 +305,7 @@ def get_args() -> argparse.Namespace:
         required=False,
         dest="identityfile",
         default="",
-        help="ssh login identityfile path",
+        help="SSH 私钥路径，默认读取 SSH 配置",
     )
     parser.add_argument(
         "-t",
@@ -306,7 +314,7 @@ def get_args() -> argparse.Namespace:
         required=False,
         dest="type",
         default="default",
-        help="host type",
+        help="主机类型，默认 default；可选值由配置中的 host_type_<类型> 决定",
     )
     parser.add_argument(
         "-U",
@@ -315,7 +323,7 @@ def get_args() -> argparse.Namespace:
         action="store",
         dest="Username",
         default="ADMIN",
-        help="specify ipmi username",
+        help="IPMI 登录用户名，默认 ADMIN",
     )
     parser.add_argument(
         "-c",
@@ -324,7 +332,7 @@ def get_args() -> argparse.Namespace:
         action="store",
         dest="command",
         default="power on",
-        help="specify ipmi command",
+        help="IPMI 命令，默认 'power on'；例如 'power status'、'power off'，支持 ipmitool 子命令",
     )
     parser.add_argument(
         "-P",
@@ -333,7 +341,7 @@ def get_args() -> argparse.Namespace:
         action="store",
         dest="Password",
         default="12345678",
-        help="specify ipmi password",
+        help="IPMI 登录密码，默认 12345678",
     )
 
     return parser.parse_args()
@@ -402,10 +410,10 @@ def main() -> None:
             # 对每台机器执行 ipmi 命令
             for short_ip in p.parser_ip_list():
                 cmd = OsCommand.IPMI_COMMAND % p.parser_ipmi_auth(short_ip)
-                print_text(f"cmd: {cmd}")
+                print_text(f"命令：{cmd}")
                 try:
                     output = ssh.run_cmd(cmd, timeout=COMMAND_TIMEOUT)
-                    print_text(f"output: {output}\n")
+                    print_text(f"输出：{output}\n")
                 except TimeoutError:
                     print_error(f"执行命令: {cmd} 超时，超时时间为: {COMMAND_TIMEOUT}秒")
                 except RunCmdError as e:

@@ -77,21 +77,27 @@ uv run bump-my-version bump minor
 展示版本、发布日期及提交前 12 位，例如：
 
 ```text
-pcompare Version: 0.6.6 (2026-11-19) Commit: a1b2c3d4e5f6
+pcompare 版本: 0.6.6（2026-11-19） 提交: a1b2c3d4e5f6
 ```
 
-尚未记录日期时显示 `development`，下次升版时自动填入日期。
-未注入提交信息的本地源码版本不显示 `Commit` 字段；提交信息不改变 PyPI 包版本号。
+尚未记录日期时显示 `开发版`，下次升版时自动填入日期。
+未注入提交信息的本地源码版本不显示 `提交` 字段；提交信息不改变 PyPI 包版本号。
+
+所有命令的 `--help` 均使用中文说明，并提供示例命令。存在默认值或可选值的参数会说明其取值或配置来源。
+参数名、JSON 字段和枚举值保持原样；外部命令及系统的原始诊断保留原文。
 
 ## gitrepo
 
-使用默认的 `check` 子命令查找有未提交修改、分支差异或 stash 的 Git 仓库，
-省略子命令时兼容原有用法：
+必须指定 `check` 或 `scan` 子命令，业务参数统一放在子命令后。
+使用 `check` 查找有未提交修改、分支差异或 stash 的 Git 仓库：
 
 ```bash
-gitrepo -p ~/PythonProjects -d -s
-gitrepo check -p ~/PythonProjects -d -s
+gitrepo check -p ~/PythonProjects -d
 ```
+
+`check` 使用 Rich 表格展示异常仓库，`-d` 展示详细状态；检查失败的原因始终显示。
+工作区修改和 stash 同时存在时，详细状态保留两者的信息。
+所有仓库正常且无目录扫描错误时不输出表格。
 
 使用 `scan` 子命令扫描并通过 Rich 表格聚合展示仓库，默认扫描家目录，
 按远程主机分表，例如 `github.com`、`gitlab.com` 各一张表。
@@ -112,7 +118,57 @@ gitrepo scan -p ~/PythonProjects --fetch
 
 # 按目录名跳过不需要遍历的子目录，check 同样支持
 gitrepo scan -p ~/PythonProjects --exclude node_modules .venv
+
+# 只展示匹配主机的表格，多个通配模式用 | 分隔
+gitrepo scan -p ~/PythonProjects --host '*.xxx.net|github.com'
+
+# 使用正则完整匹配主机，与 --host 互斥
+gitrepo scan -p ~/PythonProjects --host-regex '.*\.xxx\.net|github\.com'
+
+# 忽略 stash，check 同样支持
+gitrepo scan -p ~/PythonProjects --ignore-stash
+gitrepo check -p ~/PythonProjects --ignore-stash
 ```
+
+主机筛选不区分大小写、不含端口，依据优先选定的 remote，
+两种 `--group-by` 模式均适用。`--host` 支持 `*`、`?`、`[]` 通配符。
+启用筛选后不展示本地远程路径及无远程 / 无法识别的仓库表格；
+筛选仅影响展示，所有仓库仍会扫描，统计保留扫描总数。
+无效的 `--host-regex` 在扫描前报错。
+
+`check` 和 `scan` 默认检查并展示 stash，使用 `--ignore-stash` 跳过 stash 查询和展示，
+stash 不再计入异常，其他工作区和分支检查照常执行。
+不再接受 `-s/--stash`、省略子命令的写法或放在子命令前的业务参数。
+
+`check`、`scan` 均支持 `--json`：
+
+```bash
+gitrepo check -p ~/PythonProjects --json
+gitrepo check -p ~/PythonProjects --json --ignore-stash
+gitrepo scan -p ~/PythonProjects --json --host '*.xxx.net|github.com'
+gitrepo scan -p ~/PythonProjects --json --duplicates | jq '.repositories[].path'
+```
+
+JSON 模式的 stdout 只输出一个 JSON 对象，进度条写入 stderr；stderr 不是终端时关闭动态进度。
+顶层包含 `schema_version`（当前为 `1`）、`command`（`check` 或 `scan`）、
+`options`、`summary`、`repositories` 和 `directory_errors`。
+无结果时两个数组为空，目录扫描错误逐条保留 `path` 和 `reason`。
+
+`check` 的 `repositories` 包含全部已检查仓库，每项提供 `path`、`has_issues`、`failed`、`output`。
+JSON 中的详情不受 `-d` 限制；正常仓库的 `output` 为空字符串。
+`scan` 的每项提供 `path`、`common_dir`、`remote_name`、规范化的 `remote_url`、`branch`、
+`bare`、`worktree`、`issues`、`errors`，以及 `host`、`group_key`、`kind`、
+`duplicate_clone`、`has_issues`、`failed`。
+`kind` 为 `normal`、`bare` 或 `worktree`；`host` 不含端口，
+本地及无远程仓库的 `host` 分别为 `本地路径`、`无远程 / 无法识别`。
+`issues`、`errors` 和 `check` 的 `output` 是可读消息；仓库检查失败或扫描到错误目录后仍会输出其余结果。
+
+`summary` 的 `repository_count`、`issue_repository_count`、`failed_repository_count`、
+`directory_error_count` 是全量扫描统计，`shown_repository_count` 对应 JSON 中的仓库条目数。
+`scan` 另有 `independent_repository_count`、`group_count`、`shown_group_count` 和 `duplicate_remote_count`。
+`scan` 的 `repositories` 沿用主机过滤、重复克隆筛选及分组规则，
+`--group-by name --duplicates` 会保留重复克隆所在同名组的所有成员。
+`options.stash_checked` 表示是否启用 stash 检查；`scan` 另记录 `group_by`、`duplicates_only`、`fetch`。
 
 远程地址优先选择名为 `upstream` 的 remote，其次选择 `origin`，
 Git 不记录 remote 的添加时间，其余 remote 按名称排序选择第一个。
@@ -149,6 +205,41 @@ SSH 主机别名不会自动解析为相同主机。
 upstream 失效表示对应的本地跟踪引用不存在，
 远程分支的删除是否反映到本地取决于 Git 的 fetch 清理配置。
 
+## pfind_imports
+
+扫描 Python 项目的绝对导入，通过 Rich 表格展示导入名、映射后的包名和分类，
+默认仅展示第三方库。文件发现与解析进度显示在 stderr，包含文件数、错误数及耗时；
+stderr 不是终端时关闭动态进度。
+
+```bash
+# 扫描项目中的第三方库
+pfind_imports -p ./project
+
+# 展示标准库和第三方库
+pfind_imports -p ./project --mode all
+
+# 精确忽略指定 Python 文件，并添加导入名到包名的映射
+pfind_imports -p ./project -i ./project/ignored.py -e custom=custom-package
+
+# 使用 JSON 结果提取包名
+pfind_imports -p ./project --json | jq -r '.modules[].package_name'
+```
+
+`--mode` 支持 `std`、`3rd-party`、`all`。同一顶层导入名仅保留首次发现的记录，
+排除相对导入、项目根目录和 `src` 下的本地模块名，跳过 `.venv`、`__pycache__`。
+内置 `PIL → pillow`、`grpc → grpcio` 映射，优先于 `--extra/-e`；
+同一包有多个导入名时仍按导入名分别展示。
+
+`--json` 的 stdout 只输出一个 JSON 对象，包含 `schema_version`（当前为 `1`）、
+`project_dir`（绝对路径）、`mode`、`summary`、`modules`、`errors`。
+每个模块包含 `name`（顶层导入名）、`origin_name`（原始模块名）、
+`type`（`import` 或 `from`）、`mode`、`package_name`（映射后的包名）。
+`summary` 提供 `file_count`（排除后发现的 Python 文件数）、
+`scanned_file_count`（已处理文件数，包含解析失败的文件）、`module_count`、`error_count`。
+无匹配模块时 `modules` 为空数组，无错误时 `errors` 为空数组；
+错误逐条保留 `path` 和 `reason`，单个文件失败后继续处理其他文件。
+普通输出使用独立表格展示错误，调用方可通过 JSON 的 `errors` 判断扫描是否完整。
+
 ## pcompare
 
 比较两个及以上目录或文件，通过 Rich 表格分别展示一致、不一致的条目。
@@ -176,114 +267,77 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 
 ## pssh
 
-通过 ip 简写或别名快速登录机器
+通过 IP、IP 简写或 SSH 主机别名快速登录服务器：
 
 ```bash
-➜  ~ pssh -h
-usage: pssh [-h] [-t--type TYPE] [-i--identityfile IDENTITYFILE]
-            [-u--username USER] [-p--port PORT]
-            host
-
-positional arguments:
-  host                  specify server
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -t--type TYPE         host type
-  -i--identityfile IDENTITYFILE
-                        ssh login identityfile path
-  -u--username USER     ssh login username
-  -p--port PORT         ssh login port
+pssh 192.168.1.10
+pssh dev -u root -p 2222
+pssh 10 -t default
+pssh --help
 ```
+
+主机类型默认 `default`，可选值由 `~/.plum_tools.yaml` 中的
+`host_type_<类型>` 配置决定。SSH 参数优先使用命令行值，其次读取
+`~/.ssh/config` 中的主机别名配置，最后使用 `default_ssh_conf`。
 
 ## gitstash
 
-外部传入一个 branch，保存本地未提交的修改，然后切换到 branch，将上次该 branch 保存的未提交的结果 stash pop 出来
+切换分支前保存当前分支的本地修改，切换后恢复目标分支上次保存的修改。
+在 Git 仓库内指定目标分支执行：
 
 ```bash
-➜  ~ gitstash -h
-usage: gitstash [-h] branch
-
-positional arguments:
-  branch      specify branch
-
-optional arguments:
-  -h, --help  show this help message and exit
+gitstash master
+gitstash release-1.0.0
+gitstash --help
 ```
 
 ## pipmi
 
-对指定机器进行远程执行 ipmitool 相关操作
+通过 SSH 登录跳板机，对指定服务器执行 IPMI 命令：
 
 ```bash
-➜  ~ pipmi -h
-usage: pipmi [-h] -l HOST -s SERVERS [SERVERS ...] [-u USER] [-pass PASSWORD]
-             [-p--port PORT] [-i--identityfile IDENTITYFILE] [-t--type TYPE]
-             [-U USERNAME] [-c COMMAND] [-P PASSWORD]
-
-optional arguments:
-  -h, --help            show this help message and exit
-  -l HOST, --login HOST
-                        specify login ip
-  -s SERVERS [SERVERS ...], --servers SERVERS [SERVERS ...]
-                        specify server
-  -u USER, --username USER
-                        specify username
-  -pass PASSWORD, --password PASSWORD
-                        specify password
-  -p--port PORT         ssh login port
-  -i--identityfile IDENTITYFILE
-                        ssh login identityfile path
-  -t--type TYPE         host type
-  -U USERNAME, --Username USERNAME
-                        specify ipmi username
-  -c COMMAND, --command COMMAND
-                        specify ipmi command
-  -P PASSWORD, --Password PASSWORD
-                        specify ipmi password
+pipmi -l 192.168.1.10 -s 20 21 -c 'power status'
+pipmi -l 10 -s 20 -t default -U ADMIN -c 'chassis status'
+pipmi --help
 ```
+
+`-l` 指定跳板机，`-s` 支持多个服务器 IP 或 IP 简写；IPMI 地址按配置的
+`ipmi_interval` 偏移计算。SSH 用户名默认 `root`，端口和私钥默认读取配置。
+IPMI 用户名默认 `ADMIN`，密码默认 `12345678`，命令默认 `power on`；
+可用 `-c` 指定其他 ipmitool 子命令。
 
 ## prn
 
-上传文件到服务器
+通过 rsync 上传、下载或在本机同步项目文件：
 
 ```bash
-➜  ~ prn -h
-usage: prn [-h] -s SERVERS [SERVERS ...] [-p PROJECT] [-t--type TYPE]
-           [-i--identityfile IDENTITYFILE] [-u--username USER] [-p--port PORT]
-           [-l--local LOCAL] [-r--remote REMOTE] [-d--delete DELETE]
-           [-e--exclude EXCLUDE [EXCLUDE ...]]
+# 查看上传命令
+prn -s dev -p default --dry-run
 
-optional arguments:
-  -h, --help            show this help message and exit
-  -s SERVERS [SERVERS ...], --servers SERVERS [SERVERS ...]
-                        specify server
-  -p PROJECT, --project PROJECT
-                        specify project
-  -t--type TYPE         host type
-  -i--identityfile IDENTITYFILE
-                        ssh login identityfile path
-  -u--username USER     ssh login username
-  -p--port PORT         ssh login port
-  -l--local LOCAL       local path
-  -r--remote REMOTE     remote path
-  -d--delete DELETE     delete remote path other file
-  -e--exclude EXCLUDE [EXCLUDE ...]
-                        exclude file
+# 指定路径并查看同步命令
+prn -s dev -l ./src -r /srv/app --dry-run
+
+# 下载配置项目的文件
+prn -s dev -p default --download
+prn --help
 ```
+
+项目名默认 `default`，可选值由 `projects` 配置决定；未指定服务器时在本机同步。
+本地路径、远端路径和排除规则默认读取项目配置。`--delete 0` 保留目标端多余文件，
+`--delete 1` 删除；未传入时读取项目配置，未配置时为 `0`。
 
 ## pping
 
-ping 指定网段所有 ip 是否能 ping 通
+并发探测指定网段内 1 至 254 号地址，输出可达 IP：
 
 ```bash
-➜  ~ pping -h
-usage: pping [-h] [-t--type TYPE]
-
-optional arguments:
-  -h, --help     show this help message and exit
-  -t--type TYPE  host type
+pping -p 192.168.1
+pping -t default
+pping --help
 ```
+
+`-p` 指定网段前三段；未传入时读取主机类型对应的网段配置。
+主机类型默认 `default`，可选值由 `host_type_<类型>` 配置决定。
 
 ## 详细文档
 

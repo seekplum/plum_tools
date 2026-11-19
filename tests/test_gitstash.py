@@ -31,7 +31,7 @@ def test_main() -> None:
     ):
         main()
         mock_argparse.assert_called_once_with()
-        mock_parser.add_argument.assert_called_once_with(dest="branch", action="store", help="specify branch")
+        mock_parser.add_argument.assert_called_once_with(dest="branch", action="store", help="目标分支名，必填")
         mock_parser.parse_args.assert_called_once_with()
         mock_current_branch.assert_called_once_with()
         mock_git_stash.assert_called_once_with("master", "test")
@@ -163,4 +163,4 @@ def test_main_exits_when_not_in_git_repository() -> None:
             main()
 
     assert exc_info.value.code == 1
-    mock_print_warn.assert_called_once_with("当前目录不是一个git仓库")
+    mock_print_warn.assert_called_once_with("当前目录不是一个 Git 仓库")

@@ -107,7 +107,7 @@ def get_prefix_host_ip(host_type: str) -> str:
         yml_config = YmlConfig.parse_config_yml(PathConfig.PLUM_YML_PATH)
         prefix_host = yml_config[type_key]
     except KeyError:
-        print_error(f"yml文件: {PathConfig.PLUM_YML_PATH} 中缺少key: {type_key}")
+        print_error(f"yml文件: {PathConfig.PLUM_YML_PATH} 中缺少配置项: {type_key}")
         sys.exit(1)
     return prefix_host
 
