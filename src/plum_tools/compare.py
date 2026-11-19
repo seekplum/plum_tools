@@ -188,6 +188,13 @@ def main() -> None:
     """解析路径参数并展示结果；退出码 0 表示一致，1 表示差异，2 表示错误。"""
     parser = get_base_parser()
     parser.description = "比较两个及以上目录或文件，使用 Rich 表格分开展示一致和不一致的条目。"  # noqa
+    parser.epilog = (
+        "示例：\n"
+        "  pcompare ./old ./new\n"
+        "  pcompare ./a.txt ./b.txt ./c.txt\n\n"
+        "目录递归比较，文件按内容比较，符号链接仅比较链接目标。\n"
+        "退出码：0 内容一致，1 存在差异，2 输入或读取失败。"
+    )
     parser.add_argument("paths", nargs="+", type=Path, metavar="路径", help="要比较的目录或文件，至少两个")
     args = parser.parse_args()
     try:

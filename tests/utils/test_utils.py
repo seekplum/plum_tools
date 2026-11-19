@@ -41,8 +41,8 @@ def test_global_conf_get_data_merges_dynamic_data() -> None:
 @pytest.mark.parametrize(
     ("kwargs", "message"),
     [
-        ({"type_default": cast(Any, "10.0.0")}, "key: type_default 必须以 type_ 开头"),
-        ({"host_type_default": cast(Any, 123)}, "key:host_type_default value: 123 必须为字符串"),
+        ({"type_default": cast(Any, "10.0.0")}, "配置项 type_default 必须以 host_type_ 开头"),
+        ({"host_type_default": cast(Any, 123)}, "配置项 host_type_default 的值 123 必须为字符串"),
     ],
 )
 def test_global_conf_validates_dynamic_data(kwargs: dict[str, Any], message: str) -> None:
@@ -113,7 +113,7 @@ def test_ensure_str_supports_str_and_bytes() -> None:
     assert ensure_str("abc") == "abc"
     assert ensure_str(b"abc") == "abc"
 
-    with pytest.raises(TypeError, match="not expecting type"):
+    with pytest.raises(TypeError, match="不支持的类型"):
         ensure_str(1)
 
 

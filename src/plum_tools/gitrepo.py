@@ -16,14 +16,22 @@ from collections.abc import Generator
 from multiprocessing import Pool
 
 from rich.console import Console
+from rich.table import Table
 from rich.text import Text
 
 from .conf import PROCESSES_NUMBER
 from .exceptions import RunCmdError, RunCmdTimeout
-from .git_scan import RepositoryProgress, add_scan_parser, scan_projects, walk_directories
+from .git_scan import (
+    DirectoryScanError,
+    RepositoryProgress,
+    add_scan_parser,
+    print_directory_errors,
+    scan_projects,
+    walk_directories,
+    write_json_result,
+)
 from .utils.git import check_is_git_repository, check_repository_modify_status, check_repository_stash
 from .utils.parser import get_base_parser
-from .utils.printer import print_error, print_warn
 
 
 def find_git_project_for_python(path: str) -> Generator[str, None, None]:
@@ -39,95 +47,123 @@ def check_project(path: str, stash: bool = True) -> dict:
         "path": path,
         "status": False,
     }
+    outputs = []
     try:
         status_result, status_out = check_repository_modify_status(path)
         if status_result:
-            result["status"] = True
-            result["output"] = status_out
-            return result
+            outputs.append(status_out)
         if stash:
             stash_result, stash_out = check_repository_stash(path)
             if stash_result:
-                result["status"] = True
-                result["output"] = stash_out
+                outputs.append(stash_out)
     except (RunCmdError, RunCmdTimeout, OSError) as exc:
-        result.update(status=True, output=f"检查失败：{exc}", error=True)
+        result["error"] = True
+        outputs.append(f"检查失败：{exc}")
+    if outputs:
+        result.update(status=True, output="\n".join(outputs))
     return result
 
 
-def check_projects(projects: list[str], detail: bool, stash: bool = True, exclude: tuple[str, ...] = ()) -> None:
-    """检查 projects 下的普通仓库，可排除目录；按 detail、stash 控制详细输出与储藏检查。"""
-    console = Console()
-    errors: list[str] = []
+def _collect_check_results(
+    projects: list[str], stash: bool, exclude: tuple[str, ...], progress: RepositoryProgress
+) -> tuple[list[dict], list[DirectoryScanError]]:
+    errors: list[DirectoryScanError] = []
     result: list[dict] = []
-    with RepositoryProgress(console) as progress:
-        targets = []
-        for root, _, _ in walk_directories(projects, errors, exclude):
-            found = check_is_git_repository(root)
-            progress.discovered(found)
-            if found:
-                targets.append(root)
-        progress.finish_discovery()
-        if targets:
-            # 旧检查通过 cd 改变进程工作目录，需要进程隔离，且不应为少量仓库启动百个进程。
-            workers = min(PROCESSES_NUMBER, 16, os.cpu_count() or 2, len(targets))
-            with Pool(processes=workers) as pool:
-                for item in pool.imap_unordered(functools.partial(check_project, stash=stash), targets):
-                    result.append(item)
-                    progress.checked(bool(item.get("error")))
+    targets = []
+    for root, _, _ in walk_directories(projects, errors, exclude):
+        found = check_is_git_repository(root)
+        progress.discovered(found)
+        if found:
+            targets.append(root)
+    progress.finish_discovery()
+    if targets:
+        # 检查函数通过 cd 改变工作目录，需要进程隔离，并限制少量仓库的启动开销。
+        workers = min(PROCESSES_NUMBER, 16, os.cpu_count() or 2, len(targets))
+        with Pool(processes=workers) as pool:
+            for item in pool.imap_unordered(functools.partial(check_project, stash=stash), targets):
+                result.append(item)
+                progress.checked(bool(item.get("error")))
     result.sort(key=lambda item: item["path"])
-    for item in result:
-        # 仓库中文件没有被改动而且没有文件被储藏了
-        if not item["status"]:
-            continue
-        print_warn(item["path"])
+    return result, errors
 
-        # 打印详细错误信息
-        if not detail and not item.get("error"):
-            continue
-        print_error(item["output"])
-    for error in errors:
-        console.print(Text(error, style="red"))
+
+def _print_check_results(console: Console, result: list[dict], errors: list[DirectoryScanError], detail: bool) -> None:
+    affected = [item for item in result if item["status"]]
+    if affected:
+        failures = sum(bool(item.get("error")) for item in affected)
+        table = Table(
+            title=Text("仓库检查结果", style="bold cyan"),
+            caption=Text(f"检查 {len(result)} 个仓库 · 异常 {len(affected)} 个 · 检查失败 {failures} 个"),
+            expand=True,
+        )
+        table.add_column("目录", ratio=2, overflow="fold")
+        table.add_column("状态", min_width=8)
+        if detail or failures:
+            table.add_column("详细信息", ratio=3, overflow="fold")
+        for item in affected:
+            failed = bool(item.get("error"))
+            cells = [
+                Text(item["path"]),
+                Text("检查失败" if failed else "存在差异", style="red" if failed else "yellow"),
+            ]
+            if detail or failures:
+                cells.append(Text(item.get("output", "") if detail or failed else ""))
+            table.add_row(*cells)
+        console.print(table)
+    print_directory_errors(console, errors)
+
+
+def check_projects(
+    projects: list[str], detail: bool, stash: bool = True, exclude: tuple[str, ...] = (), *, json_output: bool = False
+) -> None:
+    """检查 projects 下的普通仓库，按 detail、stash 和 exclude 控制检查与展示。
+    json_output 启用时输出全部仓库的 JSON，进度写入 stderr。
+    """
+    console = Console()
+    with RepositoryProgress(Console(stderr=True) if json_output else console) as progress:
+        result, errors = _collect_check_results(projects, stash, exclude, progress)
+    if json_output:
+        repositories = [
+            {
+                "path": item["path"],
+                "has_issues": bool(item["status"]),
+                "failed": bool(item.get("error")),
+                "output": item.get("output", ""),
+            }
+            for item in result
+        ]
+        write_json_result(
+            "check",
+            {
+                "repository_count": len(result),
+                "shown_repository_count": len(result),
+                "issue_repository_count": sum(bool(item["status"]) for item in result),
+                "failed_repository_count": sum(bool(item.get("error")) for item in result),
+                "directory_error_count": len(errors),
+            },
+            repositories,
+            errors,
+            {"stash_checked": stash},
+        )
+        return
+    _print_check_results(console, result, errors, detail)
 
 
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()
-    parser.add_argument(
-        "-p",
-        "--path",
-        action="store",
-        required=False,
-        dest="path",
-        nargs="+",
-        default=[os.environ["HOME"]],
-        help="The directory path to check",
-    )
-    parser.add_argument(
-        "-d",
-        "--detail",
-        action="store_true",
-        required=False,
-        dest="detail",
-        default=False,
-        help="display staged details",
-    )
-    parser.add_argument(
-        "-s",
-        "--stash",
-        action="store_true",
-        required=False,
-        dest="stash",
-        default=False,
-        help="display stash details",
-    )
-    parser.add_argument("--exclude", nargs="+", default=[], help="按目录名跳过子目录，例如 node_modules .venv")
     add_scan_parser(parser)
     args = parser.parse_args()
     if args.command == "scan":
-        scan_projects(args.path, args.group_by, args.duplicates, args.fetch, tuple(args.exclude))
+        scan_projects(
+            args.path,
+            args.group_by,
+            args.duplicates,
+            args.fetch,
+            tuple(args.exclude),
+            stash=args.stash,
+            host_filter=args.host_filter,
+            json_output=args.json_output,
+        )
         return
-    if args.exclude:
-        check_projects(args.path, args.detail, args.stash, tuple(args.exclude))
-        return
-    check_projects(args.path, args.detail, args.stash)
+    check_projects(args.path, args.detail, args.stash, tuple(args.exclude), json_output=args.json_output)

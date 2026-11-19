@@ -94,13 +94,17 @@ class GitCheckoutStash:
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()
-    parser.add_argument(dest="branch", action="store", help="specify branch")
+    parser.description = "切换 Git 分支前保存本地修改，切换后恢复目标分支上次保存的修改。"  # noqa
+    parser.epilog = (
+        "示例：\n  gitstash master\n  gitstash release-1.0.0\n\n请在 Git 仓库内执行，目标分支须可由 git checkout 切换。"
+    )
+    parser.add_argument(dest="branch", action="store", help="目标分支名，必填")
     args = parser.parse_args()
     new_branch = args.branch
     try:
         current_branch = get_current_branch_name()
     except RunCmdError:
-        print_warn("当前目录不是一个git仓库")
+        print_warn("当前目录不是一个 Git 仓库")
         sys.exit(1)
     stash = GitCheckoutStash(current_branch, new_branch)
     stash.checkout()

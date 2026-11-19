@@ -48,7 +48,7 @@ def test_pssh_client_run_cmd_raises_on_stderr() -> None:
     stderr.read.return_value = b"boom"
 
     with mock.patch.object(client, "exec_command", return_value=(stdin, stdout, stderr)):
-        with pytest.raises(RunCmdError, match="run cmd `hostname` fail") as exc_info:
+        with pytest.raises(RunCmdError, match="执行命令 `hostname` 失败") as exc_info:
             client.run_cmd("hostname")
 
     assert exc_info.value.out_msg == "partial"
@@ -176,12 +176,24 @@ def test_get_args_registers_expected_cli_options() -> None:
     mock_get_base_parser.assert_called_once_with()
     mock_parser.add_argument.assert_has_calls(
         [
-            mock.call("-l", "--login", required=True, action="store", dest="host", help="specify login ip"),
+            mock.call("-l", "--login", required=True, action="store", dest="host", help="跳板机 IP 或 IP 简写，必填"),
             mock.call(
-                "-s", "--servers", required=True, action="store", dest="servers", nargs="+", help="specify server"
+                "-s",
+                "--servers",
+                required=True,
+                action="store",
+                dest="servers",
+                nargs="+",
+                help="目标服务器 IP 或 IP 简写，必填，可指定多个；IPMI 地址按配置偏移计算",
             ),
             mock.call(
-                "-u", "--username", required=False, action="store", dest="user", default="root", help="specify username"
+                "-u",
+                "--username",
+                required=False,
+                action="store",
+                dest="user",
+                default="root",
+                help="SSH 登录用户名，默认 root",
             ),
             mock.call(
                 "-pass",
@@ -190,10 +202,17 @@ def test_get_args_registers_expected_cli_options() -> None:
                 action="store",
                 dest="password",
                 default="",
-                help="specify password",
+                help="SSH 登录密码，默认为空，使用私钥认证",
             ),
             mock.call(
-                "-p", "--port", action="store", required=False, dest="port", type=int, default=0, help="ssh login port"
+                "-p",
+                "--port",
+                action="store",
+                required=False,
+                dest="port",
+                type=int,
+                default=0,
+                help="SSH 登录端口，默认读取 SSH 配置",
             ),
             mock.call(
                 "-i",
@@ -202,9 +221,17 @@ def test_get_args_registers_expected_cli_options() -> None:
                 required=False,
                 dest="identityfile",
                 default="",
-                help="ssh login identityfile path",
+                help="SSH 私钥路径，默认读取 SSH 配置",
             ),
-            mock.call("-t", "--type", action="store", required=False, dest="type", default="default", help="host type"),
+            mock.call(
+                "-t",
+                "--type",
+                action="store",
+                required=False,
+                dest="type",
+                default="default",
+                help="主机类型，默认 default；可选值由配置中的 host_type_<类型> 决定",
+            ),
             mock.call(
                 "-U",
                 "--Username",
@@ -212,7 +239,7 @@ def test_get_args_registers_expected_cli_options() -> None:
                 action="store",
                 dest="Username",
                 default="ADMIN",
-                help="specify ipmi username",
+                help="IPMI 登录用户名，默认 ADMIN",
             ),
             mock.call(
                 "-c",
@@ -221,7 +248,7 @@ def test_get_args_registers_expected_cli_options() -> None:
                 action="store",
                 dest="command",
                 default="power on",
-                help="specify ipmi command",
+                help="IPMI 命令，默认 'power on'；例如 'power status'、'power off'，支持 ipmitool 子命令",
             ),
             mock.call(
                 "-P",
@@ -230,7 +257,7 @@ def test_get_args_registers_expected_cli_options() -> None:
                 action="store",
                 dest="Password",
                 default="12345678",
-                help="specify ipmi password",
+                help="IPMI 登录密码，默认 12345678",
             ),
         ]
     )
@@ -306,10 +333,10 @@ def test_main_runs_commands_for_each_server() -> None:
     )
     mock_print_text.assert_has_calls(
         [
-            mock.call("cmd: ipmitool -I lanplus -H 10.0.0.2 -U ADMIN -P 123 power on"),
-            mock.call("output: ok-1\n"),
-            mock.call("cmd: ipmitool -I lanplus -H 10.0.0.3 -U ADMIN -P 123 power on"),
-            mock.call("output: ok-2\n"),
+            mock.call("命令：ipmitool -I lanplus -H 10.0.0.2 -U ADMIN -P 123 power on"),
+            mock.call("输出：ok-1\n"),
+            mock.call("命令：ipmitool -I lanplus -H 10.0.0.3 -U ADMIN -P 123 power on"),
+            mock.call("输出：ok-2\n"),
         ]
     )
 

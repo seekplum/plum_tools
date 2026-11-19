@@ -75,7 +75,16 @@ def login(host: str, host_type: str, user: str, port: int, identityfile: str) ->
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()
-    parser.add_argument(dest="host", action="store", help="specify server")
+    parser.description = "通过 IP、IP 简写或 SSH 主机别名登录服务器。"  # noqa
+    parser.epilog = (
+        "示例：\n"
+        "  pssh 192.168.1.10\n"
+        "  pssh dev -u root -p 2222\n"
+        "  pssh 10 -t default\n\n"
+        "配置：IP 简写读取 ~/.plum_tools.yaml 的 host_type_<类型>；\n"
+        "SSH 参数优先使用命令行值，其次为主机别名配置，最后为 default_ssh_conf。"
+    )
+    parser.add_argument(dest="host", action="store", help="服务器 IP、IP 简写或 ~/.ssh/config 中的主机别名")
 
     parser.add_argument(
         "-t",
@@ -84,7 +93,7 @@ def main() -> None:
         required=False,
         dest="type",
         default="default",
-        help="host type",
+        help="主机类型，默认 default；可选值由配置中的 host_type_<类型> 决定",
     )
     parser.add_argument(
         "-i",
@@ -93,7 +102,7 @@ def main() -> None:
         required=False,
         dest="identityfile",
         default="",
-        help="ssh login identityfile path",
+        help="SSH 私钥路径，默认读取 SSH 配置",
     )
     parser.add_argument(
         "-u",
@@ -102,7 +111,7 @@ def main() -> None:
         required=False,
         dest="user",
         default="",
-        help="ssh login username",
+        help="SSH 登录用户名，默认读取 SSH 配置",
     )
     parser.add_argument(
         "-p",
@@ -112,7 +121,7 @@ def main() -> None:
         dest="port",
         type=int,
         default=0,
-        help="ssh login port",
+        help="SSH 登录端口，默认读取 SSH 配置",
     )
 
     args = parser.parse_args()

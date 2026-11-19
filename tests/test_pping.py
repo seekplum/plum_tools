@@ -68,7 +68,7 @@ def test_main() -> None:
                     required=False,
                     dest="type",
                     default="default",
-                    help="host type",
+                    help="主机类型，默认 default；可选值由配置中的 host_type_<类型> 决定",
                 ),
                 mock.call(
                     "-p",
@@ -77,7 +77,7 @@ def test_main() -> None:
                     required=False,
                     dest="prefix_host",
                     default=None,
-                    help="host prefix",
+                    help="网段前三段，例如 192.168.1；默认读取所选主机类型的网段配置",
                 ),
             ]
         )

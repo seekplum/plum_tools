@@ -1,14 +1,18 @@
 """扫描 Git 仓库，按远程地址或目录名聚合展示本地状态。"""
 
 import argparse
+import fnmatch
+import json
 import os
 import re
 import shutil
 import subprocess
+import sys
 from collections import defaultdict
 from collections.abc import Generator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
-from dataclasses import dataclass, field
+from dataclasses import asdict, dataclass, field
+from functools import partial
 from pathlib import Path
 from threading import Lock
 from urllib.parse import unquote, urlsplit
@@ -102,6 +106,67 @@ class GitScanError(RuntimeError):
     """表示 Git 命令失败或超时，避免单个仓库中断整次扫描。"""
 
 
+@dataclass
+class DirectoryScanError:
+    """分别保存出错路径和原始原因，供目录扫描错误分组展示。"""
+
+    path: str
+    reason: str
+
+
+@dataclass
+class _ScanReport:
+    """保存两种输出共用的已筛选仓库组、重复标记和全量统计。"""
+
+    groups: dict[str, dict[str, list[Repository]]]
+    duplicates: set[str]
+    summary: dict[str, int]
+
+
+def write_json_result(
+    command: str,
+    summary: dict[str, int],
+    repositories: list[dict],
+    errors: list[DirectoryScanError],
+    options: dict[str, object],
+) -> None:
+    """将 command 的仓库、目录错误、统计及选项以版本化 JSON 写入 stdout。"""
+    json.dump(
+        {
+            "schema_version": 1,
+            "command": command,
+            "options": options,
+            "summary": summary,
+            "repositories": repositories,
+            "directory_errors": [asdict(error) for error in errors],
+        },
+        sys.stdout,
+        ensure_ascii=False,
+        indent=2,
+    )
+    sys.stdout.write("\n")
+
+
+def print_directory_errors(console: Console, errors: list[DirectoryScanError]) -> None:
+    """将 errors 按原因分组合并展示到 console；无错误时不输出。"""
+    if not errors:
+        return
+    grouped: dict[str, list[str]] = defaultdict(list)
+    for error in errors:
+        grouped[error.reason].append(error.path)
+    table = Table(
+        title=Text("目录扫描错误", style="bold red"),
+        caption=Text(f"{len(grouped)} 种原因 · {len(errors)} 个目录"),
+        expand=True,
+    )
+    table.add_column("出错原因", ratio=1, overflow="fold", style="red")
+    table.add_column("目录", ratio=3, overflow="fold")
+    for reason, paths in sorted(grouped.items()):
+        for index, path in enumerate(sorted(paths)):
+            table.add_row(Text(reason if index == 0 else ""), Text(path), end_section=index == len(paths) - 1)
+    console.print(table)
+
+
 def _git(path: str, *args: str, allowed_codes: tuple[int, ...] = (0,)) -> str:
     executable = shutil.which("git")
     if not executable:
@@ -128,22 +193,23 @@ def _git(path: str, *args: str, allowed_codes: tuple[int, ...] = (0,)) -> str:
 
 
 def walk_directories(
-    paths: list[str], errors: list[str], exclude: tuple[str, ...] = ()
+    paths: list[str], errors: list[DirectoryScanError], exclude: tuple[str, ...] = ()
 ) -> Generator[tuple[str, list[str], list[str]], None, None]:
     """遍历 paths 中不重复的目录并剪枝；按目录名排除 exclude，错误追加至 errors。"""
     visited: set[str] = set()
 
     def record_error(exc: OSError) -> None:
-        errors.append(f"无法扫描 {exc.filename}：{exc.strerror}")
+        errors.append(DirectoryScanError(str(exc.filename or "未知目录"), exc.strerror or str(exc)))
 
     for path in paths:
         try:
             base = Path(path).expanduser().resolve()
         except (OSError, RuntimeError) as exc:
-            errors.append(f"无法解析扫描路径 {path}：{exc}")
+            reason = (exc.strerror if isinstance(exc, OSError) else None) or str(exc)
+            errors.append(DirectoryScanError(path, reason))
             continue
         if not base.is_dir():
-            errors.append(f"扫描路径不是目录：{base}")
+            errors.append(DirectoryScanError(str(base), "扫描路径不是目录"))
             continue
         for root, dirs, files in os.walk(base, onerror=record_error):
             if root in visited:
@@ -155,7 +221,10 @@ def walk_directories(
 
 
 def iter_repositories(
-    paths: list[str], errors: list[str], exclude: tuple[str, ...] = (), progress: RepositoryProgress | None = None
+    paths: list[str],
+    errors: list[DirectoryScanError],
+    exclude: tuple[str, ...] = (),
+    progress: RepositoryProgress | None = None,
 ) -> Generator[str, None, None]:
     """遍历 paths，按目录名排除 exclude，逐个返回仓库路径。
     遍历错误追加至 errors，通过 progress 更新发现数量。
@@ -227,13 +296,13 @@ def _identify_repository(path: str) -> Repository:
     return repo
 
 
-def _read_worktree(repo: Repository) -> None:
+def _read_worktree(repo: Repository, stash: bool = True) -> None:
     output = _git(
         repo.path,
         "status",
         "--porcelain=v2",
         "--branch",
-        "--show-stash",
+        *(("--show-stash",) if stash else ()),
         "-z",
         "--untracked-files=all",
         "--ignore-submodules=none",
@@ -248,7 +317,7 @@ def _read_worktree(repo: Repository) -> None:
             commit = entry.removeprefix("# branch.oid ")[:7]
         elif entry.startswith("# branch.head "):
             repo.branch = entry.removeprefix("# branch.head ")
-        elif entry.startswith("# stash "):
+        elif entry.startswith("# stash ") and stash:
             repo.issues.append(f"stash {entry.removeprefix('# stash ')}")
         elif entry.startswith("? "):
             counts["未跟踪"] += 1
@@ -287,16 +356,16 @@ def _read_branches(repo: Repository, output: str) -> None:
             repo.issues.append(f"{name} → {upstream_name}：{summary}")
 
 
-def _read_bare_status(repo: Repository) -> None:
+def _read_bare_status(repo: Repository, stash: bool = True) -> None:
     repo.branch = _git(repo.path, "symbolic-ref", "--quiet", "--short", "HEAD", allowed_codes=(0, 1)).strip()
     if not repo.branch:
         repo.branch = f"HEAD@{_git(repo.path, 'rev-parse', '--short', 'HEAD').strip()}"
         repo.issues.append("游离 HEAD")
     # 裸仓库没有工作区，直接读取 stash 引用的 reflog。
-    if _git(repo.path, "rev-parse", "--verify", "--quiet", "refs/stash", allowed_codes=(0, 1)):
-        stash = len(_git(repo.path, "reflog", "show", "--format=%gd", "refs/stash").splitlines())
-        if stash:
-            repo.issues.append(f"stash {stash}")
+    if stash and _git(repo.path, "rev-parse", "--verify", "--quiet", "refs/stash", allowed_codes=(0, 1)):
+        stash_count = len(_git(repo.path, "reflog", "show", "--format=%gd", "refs/stash").splitlines())
+        if stash_count:
+            repo.issues.append(f"stash {stash_count}")
 
 
 def _read_shared_refs(repo: Repository, fetch: bool) -> tuple[str | None, list[str]]:
@@ -315,7 +384,11 @@ def _read_shared_refs(repo: Repository, fetch: bool) -> tuple[str | None, list[s
 
 
 def _scan_repository(
-    path: str, fetch: bool, shared: dict[str, Future[tuple[str | None, list[str]]]], lock: Lock
+    path: str,
+    fetch: bool,
+    shared: dict[str, Future[tuple[str | None, list[str]]]],
+    lock: Lock,
+    stash: bool = True,
 ) -> Repository:
     repo = _identify_repository(path)
     if not repo.common_dir:
@@ -334,9 +407,9 @@ def _scan_repository(
     repo.errors.extend(errors)
     try:
         if repo.bare:
-            _read_bare_status(repo)
+            _read_bare_status(repo, stash)
         else:
-            _read_worktree(repo)
+            _read_worktree(repo, stash)
     except GitScanError as exc:
         repo.errors.append(str(exc))
     if branches is not None:
@@ -430,14 +503,14 @@ def _print_host_table(
 
 def _collect_repositories(
     paths: list[str],
-    errors: list[str],
+    errors: list[DirectoryScanError],
     fetch: bool,
     exclude: tuple[str, ...] = (),
     progress: RepositoryProgress | None = None,
+    stash: bool = True,
 ) -> list[Repository]:
     repos: list[Repository] = []
-    shared: dict[str, Future[tuple[str | None, list[str]]]] = {}
-    lock = Lock()
+    scan_repository = partial(_scan_repository, fetch=fetch, shared={}, lock=Lock(), stash=stash)
 
     def report(future: Future[Repository]) -> None:
         if progress is not None:
@@ -449,7 +522,7 @@ def _collect_repositories(
     with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
         pending: set[Future[Repository]] = set()
         for path in iter_repositories(paths, errors, exclude, progress):
-            future = pool.submit(_scan_repository, path, fetch, shared, lock)
+            future = pool.submit(scan_repository, path)
             future.add_done_callback(report)
             pending.add(future)
             done = {future for future in pending if future.done()}
@@ -467,73 +540,200 @@ def _collect_repositories(
     return sorted(repos, key=lambda repo: repo.path)
 
 
-def _print_scan_results(
-    console: Console,
+def _build_scan_report(
     repos: list[Repository],
-    errors: list[str],
+    errors: list[DirectoryScanError],
     group_by: str,
     duplicates_only: bool,
-    fetch: bool,
-) -> None:
+    host_filter: re.Pattern[str] | None,
+) -> _ScanReport:
     grouped = _group_repositories(repos, group_by)
     duplicates = _duplicate_remotes(repos)
-    console.print(
-        "已启用远程更新；更新失败的仓库按缓存检查。" if fetch else "远程差异依据本地缓存引用；使用 --fetch 可先更新。"
-    )
-    shown = 0
+    selected = {}
     for host in sorted(grouped):
-        selected = {
+        if host_filter is not None and (
+            host in ("本地路径", "无远程 / 无法识别") or host_filter.fullmatch(host) is None
+        ):
+            continue
+        groups = {
             key: group
             for key, group in grouped[host].items()
             if not duplicates_only or any(repo.remote_url in duplicates for repo in group)
         }
-        if not selected:
-            continue
-        _print_host_table(console, host, selected, group_by, duplicates)
-        shown += len(selected)
-    for error in errors:
-        console.print(Text(error, style="red"))
-    console.print(
-        f"扫描 {len(repos)} 个目录，{len({repo.common_dir for repo in repos if repo.common_dir})} 个独立仓库；"
-        f"展示 {shown}/{sum(len(groups) for groups in grouped.values())} 个仓库组，重复远程 {len(duplicates)} 组，"
-        f"异常仓库目录 {sum(bool(repo.issues or repo.errors) for repo in repos)} 个，"
-        f"检查失败 {sum(bool(repo.errors) for repo in repos)} 个，扫描错误 {len(errors)} 个。"
+        if groups:
+            selected[host] = groups
+    return _ScanReport(
+        selected,
+        duplicates,
+        {
+            "repository_count": len(repos),
+            "shown_repository_count": sum(len(group) for groups in selected.values() for group in groups.values()),
+            "independent_repository_count": len({repo.common_dir for repo in repos if repo.common_dir}),
+            "group_count": sum(len(groups) for groups in grouped.values()),
+            "shown_group_count": sum(len(groups) for groups in selected.values()),
+            "duplicate_remote_count": len(duplicates),
+            "issue_repository_count": sum(bool(repo.issues or repo.errors) for repo in repos),
+            "failed_repository_count": sum(bool(repo.errors) for repo in repos),
+            "directory_error_count": len(errors),
+        },
     )
 
 
-def scan_projects(
+def _scan_json_repositories(report: _ScanReport) -> list[dict]:
+    return [
+        {
+            **asdict(repo),
+            "host": host,
+            "group_key": key,
+            "kind": "bare" if repo.bare else "worktree" if repo.worktree else "normal",
+            "duplicate_clone": repo.remote_url in report.duplicates,
+            "has_issues": bool(repo.issues or repo.errors),
+            "failed": bool(repo.errors),
+        }
+        for host, groups in report.groups.items()
+        for key, group in sorted(groups.items())
+        for repo in sorted(group, key=lambda item: item.path)
+    ]
+
+
+def _print_scan_results(
+    console: Console,
+    repos: list[Repository],
+    errors: list[DirectoryScanError],
+    group_by: str,
+    duplicates_only: bool,
+    fetch: bool,
+    host_filter: re.Pattern[str] | None = None,
+) -> None:
+    report = _build_scan_report(repos, errors, group_by, duplicates_only, host_filter)
+    console.print(
+        "已启用远程更新；更新失败的仓库按缓存检查。" if fetch else "远程差异依据本地缓存引用；使用 --fetch 可先更新。"
+    )
+    for host, groups in report.groups.items():
+        _print_host_table(console, host, groups, group_by, report.duplicates)
+    print_directory_errors(console, errors)
+    summary = report.summary
+    console.print(
+        f"扫描 {summary['repository_count']} 个目录，{summary['independent_repository_count']} 个独立仓库；"
+        f"展示 {summary['shown_group_count']}/{summary['group_count']} 个仓库组，"
+        f"重复远程 {summary['duplicate_remote_count']} 组，异常仓库目录 {summary['issue_repository_count']} 个，"
+        f"检查失败 {summary['failed_repository_count']} 个，扫描错误 {summary['directory_error_count']} 个。"
+    )
+
+
+def scan_projects(  # pylint: disable=too-many-arguments
     paths: list[str],
     group_by: str = "remote",
     duplicates_only: bool = False,
     fetch: bool = False,
     exclude: tuple[str, ...] = (),
+    stash: bool = True,
+    host_filter: re.Pattern[str] | None = None,
+    *,
+    json_output: bool = False,
 ) -> None:
-    """扫描 paths，按远程主机分表、group_by 合并展示；可筛选重复克隆或先 fetch。"""
+    """扫描 paths，按 group_by 合并并用 host_filter 筛选展示主机。
+    默认检查 stash，可筛选重复克隆、先 fetch，或用 json_output 输出 JSON。
+    """
     console = Console()
-    errors: list[str] = []
-    with RepositoryProgress(console) as progress:
-        repos = _collect_repositories(paths, errors, fetch, exclude, progress)
-    _print_scan_results(console, repos, errors, group_by, duplicates_only, fetch)
+    errors: list[DirectoryScanError] = []
+    with RepositoryProgress(Console(stderr=True) if json_output else console) as progress:
+        repos = _collect_repositories(paths, errors, fetch, exclude, progress, stash)
+    if json_output:
+        report = _build_scan_report(repos, errors, group_by, duplicates_only, host_filter)
+        write_json_result(
+            "scan",
+            report.summary,
+            _scan_json_repositories(report),
+            errors,
+            {
+                "group_by": group_by,
+                "duplicates_only": duplicates_only,
+                "fetch": fetch,
+                "stash_checked": stash,
+            },
+        )
+        return
+    _print_scan_results(console, repos, errors, group_by, duplicates_only, fetch, host_filter)
+
+
+def _compile_host_glob(value: str) -> re.Pattern[str]:
+    return re.compile("|".join(fnmatch.translate(pattern) for pattern in value.split("|")), re.IGNORECASE)
+
+
+def _compile_host_regex(value: str) -> re.Pattern[str]:
+    try:
+        return re.compile(value, re.IGNORECASE)
+    except re.error as exc:
+        raise argparse.ArgumentTypeError(f"无效的主机正则表达式：{exc}") from exc
 
 
 def add_scan_parser(parser: argparse.ArgumentParser) -> None:
-    """添加默认 check 和聚合 scan 子命令，子命令参数不覆盖已提供的全局选项。"""
-    subparsers = parser.add_subparsers(dest="command")
-    parser.set_defaults(command="check")
-    check = subparsers.add_parser("check", help="检查有修改的仓库（默认，兼容原命令）")
-    scan = subparsers.add_parser("scan", help="扫描 Git 仓库，按远程主机分表并合并展示")
+    """为 parser 添加必选的 check、scan 子命令及各自参数，默认检查 stash。"""
+    parser.description = "递归检查 Git 仓库状态，查找重复克隆和本地差异。"  # noqa
+    parser.epilog = "示例：\n  gitrepo check -p ~/PythonProjects -d\n  gitrepo scan -p ~/PythonProjects --duplicates"
+    subparsers = parser.add_subparsers(dest="command", required=True, title="子命令", metavar="{check,scan}")
+    check = subparsers.add_parser(
+        "check",
+        help="检查有工作区修改、分支差异或 stash 的仓库",
+        description="检查 Git 仓库，展示有工作区修改、分支差异、stash 或检查错误的仓库。",
+        epilog="示例：\n  gitrepo check -p ~/PythonProjects -d\n  gitrepo check -p . --ignore-stash --json",
+    )
+    scan = subparsers.add_parser(
+        "scan",
+        help="扫描 Git 仓库，按远程主机分表并合并展示",
+        description="扫描 Git 仓库，按远程主机分表，合并展示同一仓库的多个本地克隆。",
+        epilog=(
+            "示例：\n"
+            "  gitrepo scan -p ~/PythonProjects --duplicates\n"
+            "  gitrepo scan -p . --group-by name\n"
+            "  gitrepo scan -p . --host '*.xxx.net|github.com'\n"
+            "  gitrepo scan -p . --host-regex '.*\\.xxx\\.net|github\\.com' --json\n\n"
+            "远程地址优先使用 upstream，其次 origin，其余按名称排序选取。\n"
+            "默认只与本地缓存的远程跟踪引用比较，可用 --fetch 更新引用。"
+        ),
+    )
     for command in (check, scan):
-        command.add_argument("-p", "--path", nargs="+", default=argparse.SUPPRESS, help="扫描目录，可指定多个")
         command.add_argument(
-            "--exclude", nargs="+", default=argparse.SUPPRESS, help="按目录名跳过子目录，例如 node_modules .venv"
+            "--json",
+            dest="json_output",
+            action="store_true",
+            help="以 JSON 输出结果，默认使用表格；进度条写入标准错误",
         )
-    check.add_argument("-d", "--detail", action="store_true", default=argparse.SUPPRESS, help="显示详细修改信息")
-    check.add_argument("-s", "--stash", action="store_true", default=argparse.SUPPRESS, help="检查 stash")
+        command.add_argument(
+            "--ignore-stash",
+            dest="stash",
+            action="store_false",
+            default=True,
+            help="跳过 stash 检查，默认检查 stash",
+        )
+        command.add_argument(
+            "-p", "--path", nargs="+", default=[str(Path.home())], help="扫描目录，可指定多个；默认用户主目录"
+        )
+        command.add_argument(
+            "--exclude", nargs="+", default=[], help="按目录名跳过子目录，例如 node_modules .venv；默认无额外排除目录"
+        )
+    check.add_argument(
+        "-d", "--detail", action="store_true", help="显示工作区、分支差异及 stash 的详细信息，默认仅展示摘要"
+    )
     scan.add_argument(
         "--group-by",
         choices=("remote", "name"),
         default="remote",
-        help="表内仓库合并依据：远程地址或目录名，默认 remote",
+        help="表内仓库合并依据：remote 远程地址、name 目录名；默认 remote",
     )
-    scan.add_argument("--duplicates", action="store_true", help="仅展示包含重复克隆的分组")
-    scan.add_argument("--fetch", action="store_true", help="先更新所有已配置远程的引用，再检查状态")
+    scan.add_argument("--duplicates", action="store_true", help="仅展示包含重复克隆的分组，默认展示全部分组")
+    scan.add_argument("--fetch", action="store_true", help="先更新所有已配置远程的引用，再检查状态；默认不更新引用")
+    hosts = scan.add_mutually_exclusive_group()
+    hosts.add_argument(
+        "--host",
+        dest="host_filter",
+        type=_compile_host_glob,
+        help="按通配符筛选展示主机，多个模式用 | 分隔，例如 '*.xxx.net|github.com'；默认不筛选",
+    )
+    hosts.add_argument(
+        "--host-regex",
+        dest="host_filter",
+        type=_compile_host_regex,
+        help="按正则完整匹配展示主机，默认不筛选，与 --host 互斥；两种匹配均不区分大小写",
+    )

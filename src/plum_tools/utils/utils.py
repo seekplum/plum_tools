@@ -91,9 +91,9 @@ class GlobalConf:
             return
         for key, value in self.dynamic_data.items():
             if not key.startswith("host_type_"):
-                raise TypeError(f"key: {key} 必须以 type_ 开头")
+                raise TypeError(f"配置项 {key} 必须以 host_type_ 开头")
             if not isinstance(value, str):
-                raise TypeError(f"key:{key} value: {value} 必须为字符串")
+                raise TypeError(f"配置项 {key} 的值 {value} 必须为字符串")
 
     def get_data(self) -> dict:
         self.__post_init__()
@@ -148,7 +148,7 @@ def ensure_str(s: Any, encoding: str = "utf-8", errors: str = "strict") -> str:
         return s
     if isinstance(s, bytes):
         return s.decode(encoding, errors)
-    raise TypeError(f"not expecting type '{type(s)}'")
+    raise TypeError(f"不支持的类型：'{type(s)}'，仅接受 str 或 bytes")
 
 
 def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: int | None = None) -> str:
@@ -171,11 +171,11 @@ def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: int | None = Non
 
     >>> run_cmd("aaa")
     Traceback (most recent call last):
-    RunCmdError: run `aaa` fail
+    RunCmdError: 执行命令 `aaa` 失败
 
     >>> run_cmd("bbb")
     Traceback (innermost last):
-    RunCmdError: run `bbb` fail
+    RunCmdError: 执行命令 `bbb` 失败
 
     :return 命令执行结果
     :example hostname
@@ -186,7 +186,7 @@ def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: int | None = Non
 
     def raise_timeout_exception(*_: Any) -> None:
         """通过抛出异常达到超时效果"""
-        raise RunCmdTimeout(f"run `{cmd}` timeout, timeout is {timeout}")
+        raise RunCmdTimeout(f"执行命令 `{cmd}` 超时，超时时间为 {timeout} 秒")
 
     # 设置指定时间后出发handler
     if timeout:
@@ -209,7 +209,7 @@ def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: int | None = Non
         signal.alarm(0)
 
     if is_raise_exception and exit_code != 0:
-        message = f"run `{cmd}` fail"
+        message = f"执行命令 `{cmd}` 失败"
         raise RunCmdError(message, out_msg=out_msg, err_msg=err_msg)
     try:
         return ensure_str(out_msg)
@@ -217,7 +217,7 @@ def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: int | None = Non
         try:
             return ensure_str(out_msg, encoding="unicode_escape")
         except UnicodeDecodeError:
-            print_text(f"Output: {out_msg!r}")
+            print_text(f"输出：{out_msg!r}")
             raise
 
 
