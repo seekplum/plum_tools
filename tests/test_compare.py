@@ -1,5 +1,6 @@
 """覆盖多路径比较、Rich 报告及命令行退出行为。"""
 
+import json
 import os
 from io import StringIO
 from pathlib import Path
@@ -9,7 +10,17 @@ from unittest import mock
 import pytest
 from rich.console import Console
 
-from plum_tools.compare import Entry, _file_md5, compare_paths, main, print_report
+from plum_tools.compare import (
+    Entry,
+    _decode_remote_tree,
+    _file_md5,
+    _load_trees,
+    _scan_remote,
+    _split_remote,
+    compare_paths,
+    main,
+    print_report,
+)
 
 
 @pytest.mark.parametrize(
@@ -317,3 +328,171 @@ def test_main_version_includes_release_date(
 
     assert error.value.code == 0
     assert "pcompare 版本: 1.2.3（2030-01-02）" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize(
+    ("path", "error"),
+    [
+        ("-bad:/path", "无效的远端路径"),
+        ("host:", "无效的远端路径"),
+        ("host:/a\x00b", "无效的远端路径"),
+    ],
+)
+def test_split_remote_rejects_invalid_inputs(path: str, error: str) -> None:
+    with pytest.raises(ValueError, match=error):
+        _split_remote(path)
+
+
+@pytest.mark.parametrize(
+    ("path", "expected"),
+    [
+        ("host:/path", ("host", "/path")),
+        ("user@host:/path", ("user@host", "/path")),
+        ("[::1]:/path", ("::1", "/path")),
+    ],
+)
+def test_split_remote_parses_valid_inputs(path: str, expected: tuple[str, str]) -> None:
+    assert _split_remote(path) == expected
+
+
+def test_split_remote_returns_none_for_local_path() -> None:
+    assert _split_remote("/local/path") is None
+    assert _split_remote("/local/path/with:colon") is None
+
+
+def test_decode_remote_tree_rejects_non_dict() -> None:
+    with pytest.raises(ValueError, match="缺少根条目"):
+        _decode_remote_tree("[]")
+
+
+def test_decode_remote_tree_rejects_missing_root() -> None:
+    with pytest.raises(ValueError, match="缺少根条目"):
+        _decode_remote_tree('{"sub": {}}')
+
+
+def test_decode_remote_tree_rejects_absolute_path() -> None:
+    payload = {".": _entry_dict(Path("."), "目录"), "/abs": _entry_dict(Path("."), "目录")}
+    with pytest.raises(ValueError, match="无效的相对路径"):
+        _decode_remote_tree(json.dumps(payload))
+
+
+def test_decode_remote_tree_rejects_parent_traversal() -> None:
+    payload = {".": _entry_dict(Path("."), "目录"), "../escape": _entry_dict(Path("."), "目录")}
+    with pytest.raises(ValueError, match="无效的相对路径"):
+        _decode_remote_tree(json.dumps(payload))
+
+
+def test_decode_remote_tree_rejects_invalid_kind() -> None:
+    payload = {".": _entry_dict(Path("."), "未知类型")}
+    with pytest.raises(ValueError, match="无效的条目类型"):
+        _decode_remote_tree(json.dumps(payload))
+
+
+def test_decode_remote_tree_rejects_invalid_size() -> None:
+    payload = {".": {"path": str(Path(".")), "kind": "文件", "size": -1, "target": "", "digest": None}}
+    with pytest.raises(ValueError, match="无效的文件大小"):
+        _decode_remote_tree(json.dumps(payload))
+
+
+def test_decode_remote_tree_rejects_missing_digest_for_file() -> None:
+    payload = {".": {"path": str(Path(".")), "kind": "文件", "size": 4, "target": "", "digest": None}}
+    with pytest.raises(ValueError, match="缺少有效的 MD5 摘要"):
+        _decode_remote_tree(json.dumps(payload))
+
+
+def test_decode_remote_tree_rejects_invalid_digest() -> None:
+    payload = {".": {"path": str(Path(".")), "kind": "文件", "size": 4, "target": "", "digest": "not-hex"}}
+    with pytest.raises(ValueError, match="缺少有效的 MD5 摘要"):
+        _decode_remote_tree(json.dumps(payload))
+
+
+def test_decode_remote_tree_rejects_missing_parent() -> None:
+    payload = {
+        ".": _entry_dict(Path("."), "目录"),
+        "child/grandchild": _entry_dict(Path("."), "目录"),
+    }
+    with pytest.raises(ValueError, match="缺少父目录条目"):
+        _decode_remote_tree(json.dumps(payload))
+
+
+def test_decode_remote_tree_parses_valid_payload() -> None:
+    payload = {
+        ".": _entry_dict(Path("."), "目录"),
+        "file.txt": {
+            "path": str(Path("/root") / "file.txt"),
+            "kind": "文件",
+            "size": 3,
+            "target": "",
+            "digest": "900150983cd24fb0d6963f7d28e17f72",
+        },
+        "link": {"path": str(Path("/root") / "link"), "kind": "链接", "size": 0, "target": "absent", "digest": None},
+    }
+    entries = _decode_remote_tree(json.dumps(payload))
+
+    assert set(entries) == {Path("."), Path("file.txt"), Path("link")}
+    assert entries[Path("file.txt")].digest == "900150983cd24fb0d6963f7d28e17f72"
+    assert entries[Path("link")].target == "absent"
+
+
+def test_scan_remote_raises_when_ssh_not_found(tmp_path: Path) -> None:
+    with mock.patch("plum_tools.compare.shutil.which", return_value=None):
+        with pytest.raises(OSError, match="找不到 ssh 命令"):
+            _scan_remote("host", "/path")
+
+
+def test_scan_remote_raises_on_ssh_failure(tmp_path: Path) -> None:
+    complete = mock.Mock(return_code=1, stdout="", stderr="connection refused")
+    with (
+        mock.patch("plum_tools.compare.shutil.which", return_value="/usr/bin/ssh"),
+        mock.patch("plum_tools.compare.subprocess.run", return_value=complete),
+    ):
+        with pytest.raises(OSError, match="远端读取失败"):
+            _scan_remote("host", "/path")
+
+
+def test_scan_remote_raises_on_invalid_output(tmp_path: Path) -> None:
+    complete = mock.Mock(returncode=0, stdout="not-json", stderr="")
+    with (
+        mock.patch("plum_tools.compare.shutil.which", return_value="/usr/bin/ssh"),
+        mock.patch("plum_tools.compare.subprocess.run", return_value=complete),
+    ):
+        with pytest.raises(ValueError, match="远端返回的文件清单无效"):
+            _scan_remote("host", "/path")
+
+
+def test_scan_remote_parses_valid_output(tmp_path: Path) -> None:
+    payload = {
+        ".": {"path": str(tmp_path), "kind": "目录", "size": 0, "target": "", "digest": None},
+    }
+    complete = mock.Mock(returncode=0, stdout=json.dumps(payload), stderr="")
+    with (
+        mock.patch("plum_tools.compare.shutil.which", return_value="/usr/bin/ssh"),
+        mock.patch("plum_tools.compare.subprocess.run", return_value=complete) as run,
+    ):
+        entries = _scan_remote("host", "/path")
+    assert Path(".") in entries
+    assert run.call_count == 1
+
+
+def test_load_trees_supports_remote_paths(tmp_path: Path) -> None:
+    remote_payload = {
+        ".": {"path": str(tmp_path), "kind": "目录", "size": 0, "target": "", "digest": None},
+    }
+    complete = mock.Mock(returncode=0, stdout=json.dumps(remote_payload), stderr="")
+    with (
+        mock.patch("plum_tools.compare.shutil.which", return_value="/usr/bin/ssh"),
+        mock.patch("plum_tools.compare.subprocess.run", return_value=complete),
+    ):
+        trees = _load_trees(["host:/path", str(tmp_path)])
+    assert len(trees) == 2
+    assert Path(".") in trees[0]
+    assert Path(".") in trees[1]
+
+
+def _entry_dict(path: Path, kind: str) -> dict:
+    digest = None
+    size = 0
+    if kind == "文件":
+        size = 4
+        digest = "900150983cd24fb0d6963f7d28e17f72"
+    return {"path": str(path), "kind": kind, "size": size, "target": "", "digest": digest}

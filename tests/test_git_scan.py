@@ -2,6 +2,7 @@
 
 import errno
 import json
+import subprocess
 from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
@@ -9,13 +10,28 @@ from unittest import mock
 
 import pytest
 from rich.console import Console
+from rich.text import Text
 
 from plum_tools.git_scan import (
     DirectoryScanError,
+    GitScanError,
     Repository,
     _compile_host_glob,
     _compile_host_regex,
+    _collect_repositories,
+    _git,
+    _group_label,
+    _identify_repository,
+    _read_bare_status,
+    _read_branches,
+    _read_shared_refs,
+    _read_worktree,
+    _remote_host,
+    _repository_cells,
+    _scan_repository,
+    _scan_json_repositories,
     _print_scan_results,
+    normalize_remote_url,
     print_directory_errors,
     scan_projects,
     walk_directories,
@@ -387,3 +403,440 @@ def test_directory_error_table_is_hidden_without_errors() -> None:
     output = StringIO()
     print_directory_errors(Console(file=output), [])
     assert output.getvalue() == ""
+
+
+def test_git_raises_when_executable_missing() -> None:
+    with mock.patch("plum_tools.git_scan.shutil.which", return_value=None):
+        with pytest.raises(GitScanError, match="未找到 git 可执行文件"):
+            _git("/path", "status")
+
+
+def test_git_raises_on_timeout() -> None:
+    with mock.patch("plum_tools.git_scan.shutil.which", return_value="/usr/bin/git"):
+        with mock.patch(
+            "plum_tools.git_scan.subprocess.run",
+            side_effect=subprocess.TimeoutExpired(cmd="git", timeout=30),
+        ):
+            with pytest.raises(GitScanError, match="超时"):
+                _git("/path", "status")
+
+
+def test_git_raises_on_oserror() -> None:
+    with mock.patch("plum_tools.git_scan.shutil.which", return_value="/usr/bin/git"):
+        with mock.patch(
+            "plum_tools.git_scan.subprocess.run",
+            side_effect=OSError(errno.ENOENT, "not found"),
+        ):
+            with pytest.raises(GitScanError, match="无法执行 git"):
+                _git("/path", "status")
+
+
+def test_git_raises_on_nonzero_exit() -> None:
+    result = mock.Mock(return_code=128, stdout="")
+    with mock.patch("plum_tools.git_scan.shutil.which", return_value="/usr/bin/git"):
+        with mock.patch("plum_tools.git_scan.subprocess.run", return_value=result):
+            with pytest.raises(GitScanError, match="git status 失败"):
+                _git("/path", "status")
+
+
+def test_git_accepts_allowed_codes() -> None:
+    result = mock.Mock(returncode=1, stdout="")
+    with mock.patch("plum_tools.git_scan.shutil.which", return_value="/usr/bin/git"):
+        with mock.patch("plum_tools.git_scan.subprocess.run", return_value=result):
+            assert _git("/path", "symbolic-ref", "--quiet", "--short", "HEAD", allowed_codes=(0, 1)) == ""
+
+
+def test_git_returns_stdout() -> None:
+    result = mock.Mock(returncode=0, stdout="main\n")
+    with mock.patch("plum_tools.git_scan.shutil.which", return_value="/usr/bin/git"):
+        with mock.patch("plum_tools.git_scan.subprocess.run", return_value=result):
+            assert _git("/path", "symbolic-ref", "--short", "HEAD") == "main\n"
+
+
+@pytest.mark.parametrize(
+    ("url", "repo_path", "expected"),
+    [
+        ("https://github.com/team/project.git", "/repo", "github.com/team/project"),
+        ("https://github.com/team/project", "/repo", "github.com/team/project"),
+        ("http://example.com:8080/team/project.git", "/repo", "example.com:8080/team/project"),
+        ("ssh://git@github.com/team/project.git", "/repo", "github.com/team/project"),
+        ("git@github.com:team/project.git", "/repo", "github.com/team/project"),
+        ("file:///local/project.git", "/repo", str(Path("/local/project.git").resolve())),
+        ("file://server/project.git", "/repo", "file://server/project.git"),
+        ("../project.git", "/home/user/work", str(Path("/home/user/project.git").resolve())),
+        ("/abs/project.git", "/repo", str(Path("/abs/project.git").resolve())),
+    ],
+)
+def test_normalize_remote_url(url: str, repo_path: str, expected: str) -> None:
+    assert normalize_remote_url(url, repo_path) == expected
+
+
+def test_normalize_remote_url_rejects_missing_host() -> None:
+    with pytest.raises(ValueError, match="远程 URL 缺少主机名"):
+        normalize_remote_url(":///path", "/repo")
+
+
+def test_normalize_remote_url_preserves_local_git_suffix() -> None:
+    result = normalize_remote_url("/local/project.git", "/repo")
+    assert result.endswith(".git")
+
+
+def test_identify_repository_collects_errors() -> None:
+    with (
+        mock.patch("plum_tools.git_scan._git", side_effect=GitScanError("git rev-parse 失败")) as git_call,
+    ):
+        repo = _identify_repository("/bad/repo")
+    assert repo.errors == ["git rev-parse 失败"]
+    assert not repo.issues
+    git_call.assert_called_once()
+
+
+def test_identify_repository_handles_value_error() -> None:
+    with (
+        mock.patch("plum_tools.git_scan._git", side_effect=ValueError("bad path")) as git_call,
+    ):
+        repo = _identify_repository("/bad/repo")
+    assert repo.errors == ["无法解析仓库路径或远程地址"]
+    git_call.assert_called_once()
+
+
+def test_identify_repository_sets_bare_and_worktree_flags() -> None:
+    responses = [
+        "true\n/repo/.git\n/repo/.git\n",
+        "origin\n",
+        "git@github.com:team/project.git\n",
+    ]
+    with mock.patch("plum_tools.git_scan._git", side_effect=responses):
+        repo = _identify_repository("/repo")
+    assert repo.bare is True
+    assert repo.worktree is False
+    assert repo.common_dir == str(Path("/repo/.git").resolve())
+    assert repo.remote_url == "github.com/team/project"
+
+
+def test_identify_repository_marks_worktree() -> None:
+    responses = [
+        "false\n/repo/.git\n/repo/.git/worktrees/wt\n",
+        "origin\n",
+        "git@github.com:team/project.git\n",
+    ]
+    with mock.patch("plum_tools.git_scan._git", side_effect=responses):
+        repo = _identify_repository("/repo")
+    assert repo.worktree is True
+
+
+def test_identify_repository_appends_no_remote_issue() -> None:
+    responses = ["false\n/repo/.git\n/repo/.git\n", ""]
+    with mock.patch("plum_tools.git_scan._git", side_effect=responses):
+        repo = _identify_repository("/repo")
+    assert "无远程" in repo.issues
+
+
+def test_identify_repository_raises_on_empty_remote_url() -> None:
+    responses = ["false\n/repo/.git\n/repo/.git\n", "origin\n", ""]
+    with mock.patch("plum_tools.git_scan._git", side_effect=responses):
+        repo = _identify_repository("/repo")
+    assert any("未配置地址" in error for error in repo.errors)
+
+
+def test_read_worktree_parses_status_entries() -> None:
+    repo = Repository("/repo")
+    output = (
+        "# branch.oid abcdef123\0"
+        "# branch.head main\0"
+        "1 M. file1\0"
+        "1 M. file2\0"
+        "1 .M file3\0"
+        "1 .M file4\0"
+        "? untracked.txt\0"
+        "u conflict.txt\0"
+    )
+    with mock.patch("plum_tools.git_scan._git", return_value=output):
+        _read_worktree(repo, stash=False)
+    assert repo.branch == "main"
+    assert "暂存 2" in repo.issues
+    assert "未暂存 2" in repo.issues
+    assert "未跟踪 1" in repo.issues
+    assert "冲突 1" in repo.issues
+
+
+def test_read_worktree_skips_rename_original_path() -> None:
+    repo = Repository("/repo")
+    output = "# branch.head main\02.R old.txt\0new.txt\0"
+    with mock.patch("plum_tools.git_scan._git", return_value=output):
+        _read_worktree(repo, stash=False)
+    assert not any("old.txt" in issue for issue in repo.issues)
+    assert not any("new.txt" in issue for issue in repo.issues)
+
+
+def test_read_worktree_skips_stash_when_disabled() -> None:
+    repo = Repository("/repo")
+    output = "# branch.head main\0# stash 2\0"
+    with mock.patch("plum_tools.git_scan._git", return_value=output):
+        _read_worktree(repo, stash=False)
+    assert not any("stash" in issue for issue in repo.issues)
+
+
+def test_read_worktree_detects_detached_head() -> None:
+    repo = Repository("/repo")
+    output = "# branch.oid abcdef123\0# branch.head (detached)\0"
+    with mock.patch("plum_tools.git_scan._git", return_value=output):
+        _read_worktree(repo, stash=False)
+    assert repo.branch == "HEAD@abcdef1"
+    assert "游离 HEAD" in repo.issues
+
+
+def test_read_worktree_parses_stash_issue() -> None:
+    repo = Repository("/repo")
+    output = "# branch.head main\0# stash 3\0"
+    with mock.patch("plum_tools.git_scan._git", return_value=output):
+        _read_worktree(repo, stash=True)
+    assert "stash 3" in repo.issues
+
+
+def test_read_worktree_propagates_git_error() -> None:
+    repo = Repository("/repo")
+    with mock.patch("plum_tools.git_scan._git", side_effect=GitScanError("git status 失败")):
+        with pytest.raises(GitScanError, match="git status 失败"):
+            _read_worktree(repo, stash=False)
+
+
+def test_read_branches_detects_issues() -> None:
+    repo = Repository("/repo", branch="main")
+    output = (
+        "main\0refs/remotes/origin/main\0origin/main\0ahead 2\0origin\n"
+        "feature\0\0\0\0\n"
+        "bugfix\0refs/remotes/origin/bugfix\0origin/bugfix\0gone\0origin\n"
+        "local\0refs/heads/other\0other\0\0.\n"
+    )
+    _read_branches(repo, output)
+    issues = repo.issues
+    assert "main → origin/main：领先 2" in issues
+    assert "feature：无 upstream" in issues
+    assert "bugfix：upstream 已失效（origin/bugfix）" in issues
+    assert "local：跟踪本地分支（other）" in issues
+
+
+def test_read_branches_appends_no_commit_issue() -> None:
+    repo = Repository("/repo")
+    _read_branches(repo, "")
+    assert "尚无提交" in repo.issues
+
+
+def test_read_branches_skips_no_commit_for_detached() -> None:
+    repo = Repository("/repo", branch="HEAD@abc")
+    _read_branches(repo, "")
+    assert "尚无提交" not in repo.issues
+
+
+def test_read_bare_status_detects_detached_head() -> None:
+    repo = Repository("/repo", bare=True)
+    with mock.patch("plum_tools.git_scan._git", side_effect=["", "abcdef123\n"]):
+        _read_bare_status(repo, stash=False)
+    assert repo.branch == "HEAD@abcdef123"
+    assert "游离 HEAD" in repo.issues
+
+
+def test_read_bare_status_parses_branch() -> None:
+    repo = Repository("/repo", bare=True)
+    with mock.patch("plum_tools.git_scan._git", side_effect=["main\n"]):
+        _read_bare_status(repo, stash=False)
+    assert repo.branch == "main"
+
+
+def test_read_bare_status_detects_stash() -> None:
+    repo = Repository("/repo", bare=True)
+    with mock.patch("plum_tools.git_scan._git", side_effect=["main\n", "refs/stash\n", "stash@{0}\nstash@{1}\n"]):
+        _read_bare_status(repo, stash=True)
+    assert "stash 2" in repo.issues
+
+
+def test_read_shared_refs_skips_fetch_when_disabled() -> None:
+    repo = Repository("/repo")
+    with mock.patch("plum_tools.git_scan._git", return_value="") as git_call:
+        refs, errors = _read_shared_refs(repo, fetch=False)
+    assert refs == ""
+    assert errors == []
+    assert git_call.call_count == 1
+
+
+def test_read_shared_refs_appends_fetch_error() -> None:
+    repo = Repository("/repo")
+    with mock.patch(
+        "plum_tools.git_scan._git",
+        side_effect=[GitScanError("fetch 失败"), ""],
+    ):
+        refs, errors = _read_shared_refs(repo, fetch=True)
+    assert refs == ""
+    assert len(errors) == 1
+    assert "远程更新失败" in errors[0]
+
+
+def test_read_shared_refs_appends_for_each_ref_error() -> None:
+    repo = Repository("/repo")
+    with mock.patch("plum_tools.git_scan._git", side_effect=GitScanError("for-each-ref 失败")):
+        refs, errors = _read_shared_refs(repo, fetch=False)
+    assert refs is None
+    assert errors == ["for-each-ref 失败"]
+
+
+def test_scan_repository_reuses_shared_future() -> None:
+    shared: dict = {}
+    lock = mock.MagicMock()
+    with (
+        mock.patch("plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [])) as refs,
+        mock.patch("plum_tools.git_scan._read_worktree"),
+    ):
+        repo1 = _scan_repository("/repo", fetch=False, shared=shared, lock=lock)
+        repo2 = _scan_repository("/repo", fetch=False, shared=shared, lock=lock)
+    assert refs.call_count == 1
+    assert repo1.errors == repo2.errors == []
+
+
+def test_scan_repository_returns_repo_without_common_dir() -> None:
+    shared: dict = {}
+    lock = mock.MagicMock()
+    with mock.patch("plum_tools.git_scan._identify_repository", return_value=Repository("/repo")):
+        repo = _scan_repository("/repo", fetch=False, shared=shared, lock=lock)
+    assert repo.common_dir == ""
+    assert not repo.errors
+
+
+def test_scan_repository_appends_read_errors() -> None:
+    shared: dict = {}
+    lock = mock.MagicMock()
+    with (
+        mock.patch("plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=(None, ["ref error"])),
+        mock.patch("plum_tools.git_scan._read_worktree", side_effect=GitScanError("status 失败")),
+    ):
+        repo = _scan_repository("/repo", fetch=False, shared=shared, lock=lock)
+    assert repo.errors == ["ref error", "status 失败"]
+
+
+@pytest.mark.parametrize(
+    ("url", "expected"),
+    [
+        ("", "无远程 / 无法识别"),
+        ("/local/path", "本地路径"),
+        ("file:///local", "本地路径"),
+        ("github.com/team/project", "github.com"),
+        ("git@github.com:team/project", "github.com"),
+    ],
+)
+def test_remote_host(url: str, expected: str) -> None:
+    assert _remote_host(url) == expected
+
+
+def test_group_label_adds_duplicate_note() -> None:
+    repos = [Repository("/repo", remote_url="github.com/team/project")]
+    label = _group_label("github.com/team/project", repos, "remote", {"github.com/team/project"})
+    assert "重复克隆" in label.plain
+
+
+def test_group_label_adds_same_name_note() -> None:
+    repos = [
+        Repository("/one/project", remote_url="github.com/a/project"),
+        Repository("/two/project", remote_url="gitlab.com/b/project"),
+    ]
+    label = _group_label("project", repos, "name", set())
+    assert "同名仓库（远程不同）" in label.plain
+
+
+def test_group_label_strips_host_prefix_for_remote_grouping() -> None:
+    repos = [Repository("/repo", remote_url="github.com/team/project")]
+    label = _group_label("github.com/team/project", repos, "remote", set())
+    assert label.plain == "team/project"
+
+
+def test_repository_cells_shows_bare_and_worktree_kinds() -> None:
+    repo = Repository("/repo", bare=True)
+    path_text, branch_text, remote_text, status_text = _repository_cells(repo, "remote")
+    assert "（裸仓库）" in path_text.plain
+
+    repo2 = Repository("/repo2", worktree=True)
+    path_text, *_ = _repository_cells(repo2, "remote")
+    assert "（worktree）" in path_text.plain
+
+
+def test_repository_cells_shows_clean_status() -> None:
+    repo = Repository("/repo", bare=False)
+    _, _, _, status_text = _repository_cells(repo, "remote")
+    assert "工作区干净" in status_text.plain
+
+
+def test_repository_cells_shows_bare_clean_status() -> None:
+    repo = Repository("/repo", bare=True)
+    _, _, _, status_text = _repository_cells(repo, "remote")
+    assert "与跟踪引用一致" in status_text.plain
+
+
+def test_repository_cells_shows_errors() -> None:
+    repo = Repository("/repo", errors=["git status 失败"])
+    _, _, _, status_text = _repository_cells(repo, "remote")
+    assert "检查失败" in status_text.plain
+
+
+def test_repository_cells_shows_remote_url_for_name_grouping() -> None:
+    repo = Repository("/repo", remote_name="origin", remote_url="github.com/team/project")
+    _, _, remote_text, _ = _repository_cells(repo, "name")
+    assert "github.com/team/project" in remote_text.plain
+
+
+def test_collect_repositories_processes_all_paths(tmp_path: Path) -> None:
+    repos = [Repository("/one/repo", common_dir="/one/.git"), Repository("/two/repo", common_dir="/two/.git")]
+    with (
+        mock.patch("plum_tools.git_scan.iter_repositories", return_value=iter(["/one/repo", "/two/repo"])),
+        mock.patch("plum_tools.git_scan._identify_repository", side_effect=repos),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [])),
+        mock.patch("plum_tools.git_scan._read_worktree"),
+    ):
+        result = _collect_repositories(["/projects"], [], fetch=False)
+    assert result == sorted(repos, key=lambda repo: repo.path)
+
+
+def test_collect_repositories_with_progress(tmp_path: Path) -> None:
+    repo = Repository("/one/repo", common_dir="/one/.git")
+    progress = mock.MagicMock()
+
+    def fake_iter(paths, errors, exclude, progress=None):
+        if progress is not None:
+            progress.discovered(True)
+        yield "/one/repo"
+
+    with (
+        mock.patch("plum_tools.git_scan.iter_repositories", side_effect=fake_iter),
+        mock.patch("plum_tools.git_scan._identify_repository", return_value=repo),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [])),
+        mock.patch("plum_tools.git_scan._read_worktree"),
+    ):
+        result = _collect_repositories(["/projects"], [], fetch=False, progress=progress)
+    assert result == [repo]
+    progress.discovered.assert_called_once_with(True)
+    progress.checked.assert_called_once_with(False)
+    progress.finish_discovery.assert_called_once()
+
+
+def test_scan_json_repositories_produces_enriched_rows() -> None:
+    from plum_tools.git_scan import _ScanReport
+
+    repos = [
+        Repository("/one/repo", common_dir="/one/.git", remote_url="github.com/team/project", bare=True, issues=["stash 1"]),
+        Repository("/two/repo", common_dir="/two/.git", remote_url="gitlab.com/team/repo", errors=["failed"]),
+    ]
+    grouped = {
+        "github.com": {"team/project": [repos[0]]},
+        "gitlab.com": {"team/repo": [repos[1]]},
+    }
+    report = _ScanReport(grouped, {"github.com/team/project"}, {})
+    rows = _scan_json_repositories(report)
+
+    assert len(rows) == 2
+    assert rows[0]["kind"] == "bare"
+    assert rows[0]["duplicate_clone"] is True
+    assert rows[0]["has_issues"] is True
+    assert rows[0]["failed"] is False
+    assert rows[1]["kind"] == "normal"
+    assert rows[1]["failed"] is True
+    assert rows[1]["host"] == "gitlab.com"
