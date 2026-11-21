@@ -312,9 +312,10 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 
 `--hide-identical` 默认开启，隐藏一致的目录、文件和链接条目；
 `--no-hide-identical` 恢复展示一致、不一致两张表。汇总始终保留两类条目数量，
-隐藏一致项不影响整体比较结果和退出码。
+隐藏一致项不影响整体比较结果和退出码；全部一致时不显示空的差异表格。
 
-默认按名称忽略 `.DS_Store`、`.idea`、`node_modules`、`.venv`、`__pycache__`，
+默认按名称忽略 `.DS_Store`、`.idea`、`.node_modules`、`node_modules`、`.venv`、
+`__pycache__`、`.mypy_cache`、`.pytest_cache`，
 可通过 `--no-default-excludes` 关闭。手动排除参数与内置规则合并，
 可重复传入，按字面精确匹配，不展开通配符：
 

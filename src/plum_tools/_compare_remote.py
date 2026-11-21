@@ -15,7 +15,16 @@ from pathlib import Path
 CHUNK_SIZE = 1024 * 1024
 
 # 默认跳过系统、编辑器及依赖环境生成的子项。
-DEFAULT_EXCLUDE_NAMES = (".DS_Store", ".idea", ".node_modules", "node_modules", ".venv", "__pycache__")
+DEFAULT_EXCLUDE_NAMES = (
+    ".DS_Store",
+    ".idea",
+    ".node_modules",
+    "node_modules",
+    ".venv",
+    "__pycache__",
+    ".mypy_cache",
+    ".pytest_cache",
+)
 
 
 @dataclass(frozen=True)
