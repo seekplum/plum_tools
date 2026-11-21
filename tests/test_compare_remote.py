@@ -188,7 +188,9 @@ def test_scan_does_not_follow_symlinked_directories(tmp_path: Path) -> None:
     assert Path("link/file.txt") not in entries
 
 
-def test_main_prints_json_scan_result(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+def test_main_prints_json_scan_result(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
     root = tmp_path / "root"
     root.mkdir()
     (root / "file.txt").write_bytes(b"abc")
@@ -202,7 +204,9 @@ def test_main_prints_json_scan_result(tmp_path: Path, monkeypatch: pytest.Monkey
     assert payload[str(Path("file.txt"))]["digest"] == "900150983cd24fb0d6963f7d28e17f72"
 
 
-def test_main_accepts_exclusion_arguments(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+def test_main_accepts_exclusion_arguments(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture
+) -> None:
     root = tmp_path / "root"
     (root / "skip").mkdir(parents=True)
     (root / "skip" / "file.txt").write_bytes(b"data")

@@ -19,7 +19,8 @@ from rich.text import Text
 from . import _compare_remote
 from ._compare_remote import CHUNK_SIZE as _CHUNK_SIZE
 from ._compare_remote import Entry
-from .utils.parser import get_base_parser
+from .utils.parser import add_compact_argument, get_base_parser
+from .utils.printer import compact_table
 
 
 @dataclass(frozen=True)
@@ -178,10 +179,12 @@ def compare_paths(
     return sorted(comparisons, key=lambda item: item.path)
 
 
-def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool) -> Table:
+def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool, *, compact: bool = False) -> Table:
     style = "green" if identical else "red"
     title = "一致的目录 / 文件" if identical else "不一致的目录 / 文件"
     table = Table(title=f"{title}（{len(rows)}）", header_style="bold", border_style=style)
+    if compact:
+        compact_table(table)
     table.add_column("相对路径", overflow="fold")
     for index in range(1, path_count + 1):
         table.add_column(f"[{index}]", overflow="fold")
@@ -194,7 +197,7 @@ def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool) 
                 labels.append(Text("缺失", style="yellow"))
                 continue
             group = row_groups.setdefault(identity, len(row_groups) + 1)
-            label = f"{entry.kind} · 组{group}"
+            label = f"{entry.kind}/组{group}" if compact else f"{entry.kind} · 组{group}"
             if entry.kind == "链接":
                 label += f" → {entry.target}"
             labels.append(Text(label))
@@ -203,9 +206,14 @@ def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool) 
 
 
 def print_report(
-    paths: Sequence[str | Path], comparisons: Sequence[Comparison], console: Console, *, hide_identical: bool = False
+    paths: Sequence[str | Path],
+    comparisons: Sequence[Comparison],
+    console: Console,
+    *,
+    hide_identical: bool = False,
+    compact: bool = False,
 ) -> None:
-    """向控制台输出比较表格，可隐藏一致条目；汇总始终包含全部比较结果。"""
+    """向 console 输出比较表格；hide_identical 隐藏一致项，compact 精简布局，汇总保留全量。"""
     for index, path in enumerate(paths, start=1):
         label = str(path) if _split_remote(path) is not None else str(Path(path).expanduser().absolute())
         console.print(Text(f"[{index}] {label}"))
@@ -214,7 +222,7 @@ def print_report(
         if identical and hide_identical:
             continue
         rows = [item for item in comparisons if (item.result == "一致") == identical]
-        console.print(_report_table(rows, len(paths), identical))
+        console.print(_report_table(rows, len(paths), identical, compact=compact))
     same = sum(item.result == "一致" for item in comparisons)
     different = len(comparisons) - same
     console.print(f"整体{'一致' if not different else '不一致'}：一致 {same} 项，不一致 {different} 项。")
@@ -223,6 +231,7 @@ def print_report(
 def main() -> None:
     """解析路径参数并展示结果；退出码 0 表示一致，1 表示差异，2 表示错误。"""
     parser = get_base_parser()
+    add_compact_argument(parser)
     parser.description = "比较两个及以上目录或文件，默认仅展示不一致的条目。"  # noqa
     parser.epilog = (
         "示例：\n"
@@ -259,7 +268,7 @@ def main() -> None:
     args = parser.parse_args()
     try:
         comparisons = compare_paths(args.paths, exclude_names=args.exclude_name, exclude_paths=args.exclude_path)
-        print_report(args.paths, comparisons, Console(), hide_identical=args.hide_identical)
+        print_report(args.paths, comparisons, Console(), hide_identical=args.hide_identical, compact=args.compact)
     except (OSError, ValueError) as exc:
         Console(stderr=True).print(Text(f"比较失败：{exc}", style="red"))
         raise SystemExit(2) from exc

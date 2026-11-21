@@ -6,31 +6,32 @@ import subprocess
 from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
+from typing import Any, Generator
 from unittest import mock
 
 import pytest
 from rich.console import Console
-from rich.text import Text
 
 from plum_tools.git_scan import (
     DirectoryScanError,
     GitScanError,
     Repository,
+    _collect_repositories,
     _compile_host_glob,
     _compile_host_regex,
-    _collect_repositories,
     _git,
     _group_label,
     _identify_repository,
+    _print_scan_results,
     _read_bare_status,
     _read_branches,
     _read_shared_refs,
     _read_worktree,
     _remote_host,
     _repository_cells,
-    _scan_repository,
     _scan_json_repositories,
-    _print_scan_results,
+    _scan_repository,
+    iter_repositories,
     normalize_remote_url,
     print_directory_errors,
     scan_projects,
@@ -482,9 +483,11 @@ def test_normalize_remote_url_preserves_local_git_suffix() -> None:
 
 
 def test_identify_repository_collects_errors() -> None:
+    # fmt: off
     with (
         mock.patch("plum_tools.git_scan._git", side_effect=GitScanError("git rev-parse 失败")) as git_call,
     ):
+        # fmt: on
         repo = _identify_repository("/bad/repo")
     assert repo.errors == ["git rev-parse 失败"]
     assert not repo.issues
@@ -492,9 +495,11 @@ def test_identify_repository_collects_errors() -> None:
 
 
 def test_identify_repository_handles_value_error() -> None:
+    # fmt: off
     with (
         mock.patch("plum_tools.git_scan._git", side_effect=ValueError("bad path")) as git_call,
     ):
+        # fmt: on
         repo = _identify_repository("/bad/repo")
     assert repo.errors == ["无法解析仓库路径或远程地址"]
     git_call.assert_called_once()
@@ -684,7 +689,9 @@ def test_scan_repository_reuses_shared_future() -> None:
     shared: dict = {}
     lock = mock.MagicMock()
     with (
-        mock.patch("plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")),
+        mock.patch(
+            "plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")
+        ),
         mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [])) as refs,
         mock.patch("plum_tools.git_scan._read_worktree"),
     ):
@@ -707,7 +714,9 @@ def test_scan_repository_appends_read_errors() -> None:
     shared: dict = {}
     lock = mock.MagicMock()
     with (
-        mock.patch("plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")),
+        mock.patch(
+            "plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")
+        ),
         mock.patch("plum_tools.git_scan._read_shared_refs", return_value=(None, ["ref error"])),
         mock.patch("plum_tools.git_scan._read_worktree", side_effect=GitScanError("status 失败")),
     ):
@@ -752,7 +761,7 @@ def test_group_label_strips_host_prefix_for_remote_grouping() -> None:
 
 def test_repository_cells_shows_bare_and_worktree_kinds() -> None:
     repo = Repository("/repo", bare=True)
-    path_text, branch_text, remote_text, status_text = _repository_cells(repo, "remote")
+    path_text, branch_text, remote_text, status_text = _repository_cells(repo, "remote")  # noqa
     assert "（裸仓库）" in path_text.plain
 
     repo2 = Repository("/repo2", worktree=True)
@@ -800,7 +809,12 @@ def test_collect_repositories_with_progress(tmp_path: Path) -> None:
     repo = Repository("/one/repo", common_dir="/one/.git")
     progress = mock.MagicMock()
 
-    def fake_iter(paths, errors, exclude, progress=None):
+    def fake_iter(
+        paths: list[str],
+        errors: list[DirectoryScanError],
+        exclude: tuple[str, ...],
+        progress: Any = None,
+    ) -> Generator[str]:
         if progress is not None:
             progress.discovered(True)
         yield "/one/repo"
@@ -822,7 +836,9 @@ def test_scan_json_repositories_produces_enriched_rows() -> None:
     from plum_tools.git_scan import _ScanReport
 
     repos = [
-        Repository("/one/repo", common_dir="/one/.git", remote_url="github.com/team/project", bare=True, issues=["stash 1"]),
+        Repository(
+            "/one/repo", common_dir="/one/.git", remote_url="github.com/team/project", bare=True, issues=["stash 1"]
+        ),
         Repository("/two/repo", common_dir="/two/.git", remote_url="gitlab.com/team/repo", errors=["failed"]),
     ]
     grouped = {
@@ -840,3 +856,140 @@ def test_scan_json_repositories_produces_enriched_rows() -> None:
     assert rows[1]["kind"] == "normal"
     assert rows[1]["failed"] is True
     assert rows[1]["host"] == "gitlab.com"
+
+
+def test_git_raises_timeout_error(tmp_path: Path) -> None:
+    """验证 _git 在超时时抛出 GitScanError。"""
+    with (
+        mock.patch("shutil.which", return_value="/usr/bin/git"),
+        mock.patch("subprocess.run", side_effect=subprocess.TimeoutExpired("git", 30)),
+    ):
+        with pytest.raises(GitScanError, match="超时"):
+            _git(str(tmp_path), "status")
+
+
+def test_git_raises_when_executable_not_found(tmp_path: Path) -> None:
+    """验证 _git 在未找到 git 可执行文件时抛出 GitScanError。"""
+    with mock.patch("shutil.which", return_value=None):
+        with pytest.raises(GitScanError, match="未找到 git"):
+            _git(str(tmp_path), "status")
+
+
+def test_git_raises_on_non_zero_exit(tmp_path: Path) -> None:
+    """验证 _git 在非零退出码时抛出 GitScanError。"""
+    mock_result = mock.MagicMock()
+    mock_result.returncode = 1
+    mock_result.stdout = ""
+    with (
+        mock.patch("shutil.which", return_value="/usr/bin/git"),
+        mock.patch("subprocess.run", return_value=mock_result),
+    ):
+        with pytest.raises(GitScanError, match="失败"):
+            _git(str(tmp_path), "status")
+
+
+def test_walk_directories_deduplicates_roots(tmp_path: Path) -> None:
+    """验证 walk_directories 对已访问的根目录去重。"""
+    # 创建嵌套目录结构，其中一个目录通过多次路径引用
+    (tmp_path / "sub1").mkdir()
+    (tmp_path / "sub1" / "sub2").mkdir()
+
+    results = list(walk_directories([str(tmp_path), str(tmp_path / "sub1")], []))
+    roots = [root for root, _, _ in results]
+
+    # sub1 只应出现一次
+    assert roots.count(str(tmp_path / "sub1")) == 1
+    assert str(tmp_path) in roots
+
+
+def test_iter_repositories_detects_bare_repo(tmp_path: Path) -> None:
+    """验证 iter_repositories 识别裸仓库（无 .git 但有 HEAD/config/objects）。"""
+    bare_repo = tmp_path / "bare.git"
+    bare_repo.mkdir()
+    (bare_repo / "HEAD").write_text("ref: refs/heads/main\n")
+    (bare_repo / "config").write_text("[core]\n\tbare = true\n")
+    (bare_repo / "objects").mkdir()
+
+    repos = list(iter_repositories([str(tmp_path)], []))
+
+    assert str(bare_repo) in repos
+
+
+def test_iter_repositories_updates_progress(tmp_path: Path) -> None:
+    """验证 iter_repositories 通过 progress 更新发现数量。"""
+    repo_dir = tmp_path / "repo"
+    repo_dir.mkdir()
+    (repo_dir / ".git").mkdir()
+
+    progress = mock.MagicMock()
+    repos = list(iter_repositories([str(tmp_path)], [], progress=progress))
+
+    assert str(repo_dir) in repos
+    # walk_directories 会遍历多个目录，discovered 会被多次调用
+    assert progress.discovered.call_count >= 1
+    assert mock.call(True) in progress.discovered.call_args_list
+
+
+def test_normalize_remote_url_handles_ipv6() -> None:
+    """验证 normalize_remote_url 正确处理 IPv6 地址。"""
+    url = "http://[2001:db8::1]:8080/team/project.git"
+    normalized = normalize_remote_url(url, "/repo")
+
+    assert normalized == "[2001:db8::1]:8080/team/project"
+
+
+def test_read_worktree_skips_rename_source(tmp_path: Path) -> None:
+    """验证 _read_worktree 跳过重命名源路径。"""
+    repo = Repository(str(tmp_path))
+    # -z 模式下重命名记录：状态码 2 + 新路径 + 旧路径，另加一个修改记录
+    output = "2  new_name\0old_name\01  modified\0"
+
+    with mock.patch("plum_tools.git_scan._git", return_value=output):
+        _read_worktree(repo)
+
+    # 应识别修改状态，跳过旧路径（不作为单独状态记录）
+    assert any("暂存" in issue for issue in repo.issues)
+    assert "old_name" not in " ".join(repo.issues)
+
+
+def test_read_shared_refs_propagates_exception(tmp_path: Path) -> None:
+    """验证共享 future 异常能被正确传递。"""
+    from threading import Lock
+
+    repo = Repository(str(tmp_path), common_dir="/shared/.git")
+    shared: dict = {}
+    lock = Lock()
+
+    with mock.patch("plum_tools.git_scan._identify_repository", return_value=repo):
+        with mock.patch("plum_tools.git_scan._read_shared_refs", side_effect=GitScanError("fetch 失败")):
+            with pytest.raises(GitScanError, match="fetch 失败"):
+                _scan_repository(str(tmp_path), True, shared, lock)
+
+    # 异常应设置到 future 中
+    assert shared["/shared/.git"].exception() is not None
+
+
+def test_remote_host_handles_invalid_url() -> None:
+    """验证 _remote_host 在 URL 解析失败时回退到简单分割。"""
+    # 构造一个可能引发 ValueError 的 URL
+    result = _remote_host("http://[invalid::ipv6::address/path")
+
+    # 应回退到简单分割，返回 scheme 部分
+    assert result == "http"
+
+
+def test_repository_cells_compact_mode_for_bare() -> None:
+    """验证 _repository_cells 紧凑模式下裸仓库状态文案。"""
+    repo = Repository("/repo", bare=True)
+    _, _, _, status_text = _repository_cells(repo, "remote", compact=True)
+
+    assert "跟踪一致" in status_text.plain
+    assert "工作区干净" not in status_text.plain
+
+
+def test_repository_cells_compact_mode_for_clean_repo() -> None:
+    """验证 _repository_cells 紧凑模式下干净仓库状态文案。"""
+    repo = Repository("/repo")
+    _, _, _, status_text = _repository_cells(repo, "remote", compact=True)
+
+    assert "干净 / 跟踪一致" in status_text.plain

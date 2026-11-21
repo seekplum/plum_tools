@@ -121,3 +121,8 @@ def add_extra_argument(parser: argparse.ArgumentParser) -> None:
         required=False,
         help="补充导入名到包名的映射，格式为 key=value；可重复传入，默认无额外映射",
     )
+
+
+def add_compact_argument(parser: argparse.ArgumentParser) -> None:
+    """为支持紧凑展示的命令注册 --compact，默认关闭。"""
+    parser.add_argument("--compact", action="store_true", help="紧凑展示结果，减少占用行数，默认关闭")

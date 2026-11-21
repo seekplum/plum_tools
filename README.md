@@ -86,6 +86,33 @@ pcompare 版本: 0.6.6（2026-11-19） 提交: a1b2c3d4e5f6
 所有命令的 `--help` 均使用中文说明，并提供示例命令。存在默认值或可选值的参数会说明其取值或配置来源。
 参数名、JSON 字段和枚举值保持原样；外部命令及系统的原始诊断保留原文。
 
+## 紧凑模式
+
+在宽终端中使用 `--compact` 减少结果占用的行数，默认关闭。
+支持 `gitrepo check`、`gitrepo scan`、`pfind_imports`、`pping`、
+`pcompare` 和 `pipmi`：
+
+```bash
+gitrepo scan -p ~/PythonProjects --compact
+gitrepo check -p ~/PythonProjects -d --compact
+pfind_imports -p . --compact
+pping -p 192.168.1 --compact
+pcompare ./backup_a ./backup_b --compact
+pipmi -l 192.168.1.10 -s 20 21 -c 'power status' --compact
+```
+
+Git 仓库和文件比较表格精简边框，仓库状态使用同行排列；
+`gitrepo check -d` 移除正常检查结果详情中的空行，检查失败详情完整保留。
+`pfind_imports` 按标准库、第三方库分组并分栏，导入名与包名不同时显示
+`导入名→包名`，相同时仅显示一次。`pping` 按 IP 地址顺序分栏。
+分栏数量随终端宽度调整，长路径和错误内容继续换行显示。
+`pipmi` 将主机、操作及单行结果合并展示，多行结果保留原有结构。
+
+`--compact` 只影响展示，不改变扫描、比较、执行操作或退出码。
+与 `--json` 同时使用时，JSON 内容和格式保持原样；
+`pping` 输出重定向或通过管道传递时，仍保持每行一个 IP。
+`prn`、`pssh` 和 `gitstash` 未提供紧凑模式。
+
 ## gitrepo
 
 必须指定 `check` 或 `scan` 子命令，业务参数统一放在子命令后。

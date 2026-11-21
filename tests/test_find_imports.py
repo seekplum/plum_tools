@@ -1,8 +1,7 @@
 """覆盖 Python import 扫描的解析、过滤、进度、错误收集及命令行输出。"""
 
 import json
-import os
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from pathlib import Path
 from unittest import mock
 
@@ -211,7 +210,9 @@ def test_collect_python_files_records_walk_errors(tmp_path: Path) -> None:
     report = ImportScanReport()
     error = OSError(13, "Permission denied", str(tmp_path / "locked"))
 
-    def walk_with_onerror(path, onerror=None):
+    def walk_with_onerror(
+        path: Path, onerror: Callable[[OSError], None] | None = None
+    ) -> Iterator[tuple[str, list[str], list[str]]]:
         if onerror is not None:
             onerror(error)
         return iter([])
@@ -291,16 +292,12 @@ def test_find_imports_updates_progress(tmp_path: Path) -> None:
         progress_cls.return_value.__enter__.return_value = progress
         list(find_imports(str(project_dir), report=report, progress=progress))
 
-    progress.add_task.assert_called_with(
-        "解析文件", total=1, summary="完成 0/1 · 错误 0"
-    )
-    progress.update.assert_any_call(
-        parse_task, advance=1, summary="完成 1/1 · 错误 0"
-    )
+    progress.add_task.assert_called_with("解析文件", total=1, summary="完成 0/1 · 错误 0")
+    progress.update.assert_any_call(parse_task, advance=1, summary="完成 1/1 · 错误 0")
 
 
 def test_map_modules_uses_builtin_pairs_and_extra() -> None:
-    modules = [
+    modules: list[ModuleDict] = [
         {"name": "PIL", "origin_name": "PIL", "type": "import", "mode": FindMode.THIRD_PARTY},
         {"name": "custom", "origin_name": "custom", "type": "import", "mode": FindMode.THIRD_PARTY},
         {"name": "os", "origin_name": "os", "type": "import", "mode": FindMode.STD},
@@ -308,7 +305,13 @@ def test_map_modules_uses_builtin_pairs_and_extra() -> None:
     result = _map_modules(modules, {"custom": "renamed"})
     assert result == [
         {"name": "PIL", "origin_name": "PIL", "type": "import", "mode": FindMode.THIRD_PARTY, "package_name": "pillow"},
-        {"name": "custom", "origin_name": "custom", "type": "import", "mode": FindMode.THIRD_PARTY, "package_name": "renamed"},
+        {
+            "name": "custom",
+            "origin_name": "custom",
+            "type": "import",
+            "mode": FindMode.THIRD_PARTY,
+            "package_name": "renamed",
+        },
         {"name": "os", "origin_name": "os", "type": "import", "mode": FindMode.STD, "package_name": "os"},
     ]
 
@@ -372,3 +375,57 @@ def test_main_outputs_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caps
         }
     ]
     assert payload["errors"] == []
+
+
+def test_print_results_compact_mode_with_modules(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证紧凑模式下按标准库/第三方库分组展示模块。"""
+    from plum_tools.find_imports import _print_results
+
+    modules = [
+        {"name": "sys", "package_name": "sys", "mode": FindMode.STD},
+        {"name": "os", "package_name": "os", "mode": FindMode.STD},
+        {"name": "requests", "package_name": "requests", "mode": FindMode.THIRD_PARTY},
+    ]
+    report = ImportScanReport(scanned_file_count=3, file_count=3)
+
+    _print_results(Console(), modules, report, compact=True)
+
+    rendered = capsys.readouterr().out
+    assert "导入模块" in rendered
+    assert "标准库（2）" in rendered
+    assert "第三方库（1）" in rendered
+    assert "sys" in rendered
+    assert "requests" in rendered
+
+
+def test_print_results_compact_mode_shows_package_mapping(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证紧凑模式下显示导入名到包名的映射。"""
+    from plum_tools.find_imports import _print_results
+
+    modules = [{"name": "bs4", "package_name": "beautifulsoup4", "mode": FindMode.THIRD_PARTY}]
+    report = ImportScanReport(scanned_file_count=1, file_count=1)
+
+    _print_results(Console(), modules, report, compact=True)
+
+    rendered = capsys.readouterr().out
+    assert "bs4→beautifulsoup4" in rendered
+
+
+def test_print_results_compact_mode_with_errors(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证紧凑模式下错误表格使用紧凑样式。"""
+    from plum_tools.find_imports import _print_results
+
+    modules: list[dict[str, str]] = []
+    report = ImportScanReport(
+        scanned_file_count=1,
+        file_count=2,
+        errors=[{"path": "/bad.py", "reason": "语法错误"}],
+    )
+
+    _print_results(Console(), modules, report, compact=True)
+
+    rendered = capsys.readouterr().out
+    assert "扫描错误" in rendered
+    assert "/bad.py" in rendered
+    assert "语法错误" in rendered
+    assert "扫描 1/2 个文件，展示 0 个模块，错误 1 个" in rendered

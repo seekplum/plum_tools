@@ -10,7 +10,27 @@
 #=============================================================================
 """
 
+from collections.abc import Sequence
 from typing import Any
+
+from rich.columns import Columns
+from rich.console import Console
+from rich.table import Table
+from rich.text import Text
+
+
+def compact_table(table: Table) -> None:
+    """将 table 调整为无边框的全宽紧凑表格，保留全部单元格内容。"""
+    table.box = None
+    table.pad_edge = False
+    table.collapse_padding = True
+    table.padding = (0, 1)
+    table.expand = True
+
+
+def print_columns(console: Console, items: Sequence[Text]) -> None:
+    """将 items 按 console 宽度分栏，从左到右排列，过长内容自动换行。"""
+    console.print(Columns(items, padding=(0, 2), equal=True, expand=True))
 
 
 def get_color(c: int, s: Any) -> str:
