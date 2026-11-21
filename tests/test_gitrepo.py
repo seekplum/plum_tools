@@ -500,3 +500,88 @@ def test_check_rich_table_preserves_literal_paths_and_failure_details(detail: bo
     assert "检查 3 个仓库 · 异常 2 个 · 检查失败 1 个" in rendered
     assert "目录扫描错误" in rendered
     assert "Permission denied" in rendered
+
+
+def test_check_project_catches_runcmd_error() -> None:
+    """验证 check_project 捕获 RunCmdError 并标记错误状态。"""
+    from plum_tools.exceptions import RunCmdError
+
+    with mock.patch(
+        "plum_tools.gitrepo.check_repository_modify_status",
+        side_effect=RunCmdError("git status 失败", out_msg="", err_msg="error"),
+    ):
+        result = check_project("/repo")
+
+    assert result["error"] is True
+    assert result["status"] is True
+    assert "检查失败" in result["output"]
+    assert "git status 失败" in result["output"]
+
+
+def test_check_project_catches_runcmd_timeout() -> None:
+    """验证 check_project 捕获 RunCmdTimeout。"""
+    from plum_tools.exceptions import RunCmdTimeout
+
+    with mock.patch(
+        "plum_tools.gitrepo.check_repository_modify_status",
+        side_effect=RunCmdTimeout("git status 超时"),
+    ):
+        result = check_project("/repo")
+
+    assert result["error"] is True
+    assert result["status"] is True
+    assert "检查失败" in result["output"]
+    assert "超时" in result["output"]
+
+
+def test_check_project_catches_oserror() -> None:
+    """验证 check_project 捕获 OSError。"""
+    with mock.patch(
+        "plum_tools.gitrepo.check_repository_modify_status",
+        side_effect=OSError("文件未找到"),
+    ):
+        result = check_project("/repo")
+
+    assert result["error"] is True
+    assert result["status"] is True
+    assert "检查失败" in result["output"]
+    assert "文件未找到" in result["output"]
+
+
+def test_print_check_results_compact_mode(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证紧凑模式下表格使用紧凑样式。"""
+    from plum_tools.gitrepo import _print_check_results
+
+    result = [
+        {"path": "/repo", "status": True, "output": "工作区有修改"},
+    ]
+
+    _print_check_results(Console(), result, [], detail=True, compact=True)
+
+    rendered = capsys.readouterr().out
+    assert "仓库检查结果" in rendered
+    assert "/repo" in rendered
+    assert "工作区有修改" in rendered
+
+
+def test_print_check_results_compact_mode_filters_empty_lines() -> None:
+    """验证紧凑模式下过滤详细信息中的空行。"""
+    from plum_tools.gitrepo import _print_check_results
+
+    output = StringIO()
+    result = [
+        {
+            "path": "/repo",
+            "status": True,
+            "output": "\n\n工作区修改\n\n未暂存变更\n\n",
+        },
+    ]
+
+    _print_check_results(Console(file=output, width=200), result, [], detail=True, compact=True)
+
+    rendered = output.getvalue()
+    # 紧凑模式下应过滤空行
+    assert "工作区修改" in rendered
+    assert "未暂存变更" in rendered
+    # 不应有连续多个换行（紧凑模式去除了空行）
+    assert "\n\n\n" not in rendered

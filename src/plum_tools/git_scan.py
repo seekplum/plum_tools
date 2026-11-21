@@ -22,6 +22,9 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
+from .utils.parser import add_compact_argument
+from .utils.printer import compact_table
+
 # 限制并发外部进程数，避免大型目录扫描耗尽系统资源。
 _MAX_WORKERS = 16
 # 单个 Git 命令的超时秒数，也约束网络更新等待时间。
@@ -147,8 +150,8 @@ def write_json_result(
     sys.stdout.write("\n")
 
 
-def print_directory_errors(console: Console, errors: list[DirectoryScanError]) -> None:
-    """将 errors 按原因分组合并展示到 console；无错误时不输出。"""
+def print_directory_errors(console: Console, errors: list[DirectoryScanError], *, compact: bool = False) -> None:
+    """将 errors 按原因分组展示到 console，compact 精简边框；无错误时不输出。"""
     if not errors:
         return
     grouped: dict[str, list[str]] = defaultdict(list)
@@ -161,9 +164,13 @@ def print_directory_errors(console: Console, errors: list[DirectoryScanError]) -
     )
     table.add_column("出错原因", ratio=1, overflow="fold", style="red")
     table.add_column("目录", ratio=3, overflow="fold")
+    if compact:
+        compact_table(table)
     for reason, paths in sorted(grouped.items()):
         for index, path in enumerate(sorted(paths)):
-            table.add_row(Text(reason if index == 0 else ""), Text(path), end_section=index == len(paths) - 1)
+            table.add_row(
+                Text(reason if index == 0 else ""), Text(path), end_section=not compact and index == len(paths) - 1
+            )
     console.print(table)
 
 
@@ -445,39 +452,53 @@ def _group_repositories(repos: list[Repository], group_by: str) -> dict[str, dic
     return grouped
 
 
-def _group_label(key: str, repos: list[Repository], group_by: str, duplicates: set[str]) -> Text:
+def _group_label(
+    key: str, repos: list[Repository], group_by: str, duplicates: set[str], *, compact: bool = False
+) -> Text:
     if group_by == "remote":
         key = key.removeprefix(f"{_remote_host(key)}/") if repos[0].remote_url else Path(key).name
     label = Text(key, style="bold cyan")
     if any(repo.remote_url in duplicates for repo in repos):
-        label.append("\n重复克隆", style="yellow")
+        label.append(" · 重复克隆" if compact else "\n重复克隆", style="yellow")
     if group_by == "name" and len({repo.remote_url for repo in repos if repo.remote_url}) > 1:
-        label.append("\n同名仓库（远程不同）", style="yellow")
+        label.append(" · 同名仓库（远程不同）" if compact else "\n同名仓库（远程不同）", style="yellow")
     return label
 
 
-def _repository_cells(repo: Repository, group_by: str) -> tuple[Text, Text, Text, Text]:
+def _repository_cells(repo: Repository, group_by: str, *, compact: bool = False) -> tuple[Text, Text, Text, Text]:
     kind = "（裸仓库）" if repo.bare else "（worktree）" if repo.worktree else ""
     remote = repo.remote_name or "—"
     if group_by == "name" and repo.remote_url:
-        remote = f"{remote}\n{repo.remote_url}"
-    status = Text("\n".join(repo.issues), style="yellow")
+        separator = " · " if compact else "\n"
+        remote = f"{remote}{separator}{repo.remote_url}"
+    status = Text((" · " if compact else "\n").join(repo.issues), style="yellow")
     for error in repo.errors:
         if status:
             status.append("\n")
         status.append(f"检查失败：{error}", style="red")
     if not repo.issues and not repo.errors:
-        status.append("工作区干净，与跟踪引用一致" if not repo.bare else "与跟踪引用一致", style="green")
+        clean = "工作区干净，与跟踪引用一致" if not repo.bare else "与跟踪引用一致"
+        if compact:
+            clean = "干净 / 跟踪一致" if not repo.bare else "跟踪一致"
+        status.append(clean, style="green")
     return Text(f"{repo.path}{kind}"), Text(repo.branch or "—"), Text(remote), status
 
 
 def _print_host_table(
-    console: Console, host: str, groups: dict[str, list[Repository]], group_by: str, duplicates: set[str]
+    console: Console,
+    host: str,
+    groups: dict[str, list[Repository]],
+    group_by: str,
+    duplicates: set[str],
+    *,
+    compact: bool = False,
 ) -> None:
     repos = [repo for group in groups.values() for repo in group]
     identities = {repo.common_dir for repo in repos if repo.common_dir}
     caption = f"{len(groups)} 个仓库组 · {len(repos)} 个目录 · {len(identities)} 个独立仓库"
     table = Table(title=Text(host, style="bold cyan"), caption=Text(caption), expand=True)
+    if compact:
+        compact_table(table)
     table.add_column("仓库", ratio=2, overflow="fold")
     table.add_column("目录", ratio=3, overflow="fold")
     table.add_column("当前分支", min_width=8, max_width=20, overflow="fold")
@@ -485,18 +506,18 @@ def _print_host_table(
         "远程",
         ratio=2 if group_by == "name" else None,
         max_width=None if group_by == "name" else 20,
-        no_wrap=group_by == "remote",
-        overflow="fold" if group_by == "name" else "ellipsis",
+        no_wrap=group_by == "remote" and not compact,
+        overflow="fold" if group_by == "name" or compact else "ellipsis",
     )
     table.add_column("本地 / 跟踪状态", ratio=3, overflow="fold")
     for key, group in sorted(groups.items()):
-        label = _group_label(key, group, group_by, duplicates)
+        label = _group_label(key, group, group_by, duplicates, compact=compact)
         for index, repo in enumerate(sorted(group, key=lambda item: item.path)):
-            # 组内留空仓库列且不加横线，只在仓库组末尾分隔，形成纵向合并效果。
+            # 组内留空仓库列形成纵向合并，紧凑模式取消组间横线以节省行数。
             table.add_row(
                 label if index == 0 else Text(""),
-                *_repository_cells(repo, group_by),
-                end_section=index == len(group) - 1,
+                *_repository_cells(repo, group_by, compact=compact),
+                end_section=not compact and index == len(group) - 1,
             )
     console.print(table)
 
@@ -596,7 +617,7 @@ def _scan_json_repositories(report: _ScanReport) -> list[dict]:
     ]
 
 
-def _print_scan_results(
+def _print_scan_results(  # pylint: disable=too-many-arguments
     console: Console,
     repos: list[Repository],
     errors: list[DirectoryScanError],
@@ -604,14 +625,16 @@ def _print_scan_results(
     duplicates_only: bool,
     fetch: bool,
     host_filter: re.Pattern[str] | None = None,
+    *,
+    compact: bool = False,
 ) -> None:
     report = _build_scan_report(repos, errors, group_by, duplicates_only, host_filter)
     console.print(
         "已启用远程更新；更新失败的仓库按缓存检查。" if fetch else "远程差异依据本地缓存引用；使用 --fetch 可先更新。"
     )
     for host, groups in report.groups.items():
-        _print_host_table(console, host, groups, group_by, report.duplicates)
-    print_directory_errors(console, errors)
+        _print_host_table(console, host, groups, group_by, report.duplicates, compact=compact)
+    print_directory_errors(console, errors, compact=compact)
     summary = report.summary
     console.print(
         f"扫描 {summary['repository_count']} 个目录，{summary['independent_repository_count']} 个独立仓库；"
@@ -631,9 +654,10 @@ def scan_projects(  # pylint: disable=too-many-arguments
     host_filter: re.Pattern[str] | None = None,
     *,
     json_output: bool = False,
+    compact: bool = False,
 ) -> None:
     """扫描 paths，按 group_by 合并并用 host_filter 筛选展示主机。
-    默认检查 stash，可筛选重复克隆、先 fetch，或用 json_output 输出 JSON。
+    compact 精简表格；json_output 输出 JSON 时忽略展示选项。
     """
     console = Console()
     errors: list[DirectoryScanError] = []
@@ -654,7 +678,7 @@ def scan_projects(  # pylint: disable=too-many-arguments
             },
         )
         return
-    _print_scan_results(console, repos, errors, group_by, duplicates_only, fetch, host_filter)
+    _print_scan_results(console, repos, errors, group_by, duplicates_only, fetch, host_filter, compact=compact)
 
 
 def _compile_host_glob(value: str) -> re.Pattern[str]:
@@ -694,6 +718,7 @@ def add_scan_parser(parser: argparse.ArgumentParser) -> None:
         ),
     )
     for command in (check, scan):
+        add_compact_argument(command)
         command.add_argument(
             "--json",
             dest="json_output",

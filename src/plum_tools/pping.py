@@ -14,11 +14,12 @@ from multiprocessing import Pool
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
+from rich.text import Text
 
 from .conf import PROCESSES_NUMBER, OsCommand
 from .exceptions import RunCmdError
-from .utils.parser import get_base_parser
-from .utils.printer import print_text
+from .utils.parser import add_compact_argument, get_base_parser
+from .utils.printer import print_columns, print_text
 from .utils.sshconf import get_prefix_host_ip
 from .utils.utils import run_cmd
 
@@ -37,9 +38,9 @@ def ping(ip: str) -> str | None:
     return ip
 
 
-def run(host_type: str, prefix_host: str) -> None:
+def run(host_type: str, prefix_host: str, *, compact: bool = False) -> None:
     """探测 prefix_host 指定网段，为空时读取 host_type 配置。
-    显示完成进度，按地址顺序打印可达 IP，无返回值。
+    按地址顺序输出可达 IP；compact 仅在终端分栏，重定向时保持逐行输出。
     """
     if not prefix_host:
         prefix_host = get_prefix_host_ip(host_type)
@@ -72,8 +73,12 @@ def run(host_type: str, prefix_host: str) -> None:
             if ip:
                 reachable.add(ip)
             progress.update(task, advance=1, reachable=len(reachable))
-    for ip in targets:
-        if ip in reachable:
+    addresses = [ip for ip in targets if ip in reachable]
+    output_console = Console()
+    if compact and output_console.is_terminal:
+        print_columns(output_console, [Text(ip) for ip in addresses])
+    else:
+        for ip in addresses:
             print_text(ip)
 
 
@@ -101,5 +106,9 @@ def main() -> None:
         help="网段前三段，例如 192.168.1；默认读取所选主机类型的网段配置",
     )
 
+    add_compact_argument(parser)
     args = parser.parse_args()
-    run(args.type, args.prefix_host)
+    if args.compact is True:
+        run(args.type, args.prefix_host, compact=True)
+    else:
+        run(args.type, args.prefix_host)

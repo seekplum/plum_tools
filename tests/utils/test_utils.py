@@ -218,11 +218,11 @@ def test_run_cmd_raises_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_run_cmd_raises_timeout_signal(monkeypatch: pytest.MonkeyPatch) -> None:
     captured_handler: list = []
 
-    def fake_signal(sig: int, handler: Any) -> Any:
+    def fake_signal(sig: int, handler: Any) -> Any:  # noqa
         captured_handler.append(handler)
         return lambda *_: None
 
-    def fake_alarm(seconds: int) -> int:
+    def fake_alarm(seconds: int) -> int:  # noqa
         if captured_handler:
             captured_handler[0](None, None)
         return 0
@@ -239,3 +239,40 @@ def test_run_cmd_raises_timeout_signal(monkeypatch: pytest.MonkeyPatch) -> None:
     with mock.patch("plum_tools.utils.utils.subprocess.Popen", return_value=process):
         with pytest.raises(RunCmdTimeout, match="超时"):
             run_cmd("sleep 10", timeout=1)
+
+
+def test_global_conf_empty_dynamic_data_returns_early() -> None:
+    """验证 GlobalConf 在 dynamic_data 为空时提前返回。"""
+    conf = GlobalConf(
+        default_ssh_conf=SSHConf(user="root", port=22, identityfile="~/.ssh/id_rsa"),
+        ipmi_interval=100,
+        projects=[],
+        default_exclude=[],
+    )
+
+    # 无 dynamic_data 时应正常返回，不抛出异常
+    data = conf.get_data()
+    assert "default_ssh_conf" in data
+    assert "ipmi_interval" in data
+    # 无 dynamic_data 时不应包含 host_type_* 配置
+    assert "host_type_default" not in data
+
+
+def test_run_cmd_raises_on_invalid_utf8_output() -> None:
+    """验证 run_cmd 在命令输出无法用 UTF-8 解码时抛出 UnicodeDecodeError。"""
+    # 构造无法用 UTF-8 解码的字节序列
+    invalid_bytes = b"\xff\xfe\x00\x01"
+
+    process = mock.MagicMock()
+    process.__enter__.return_value = process
+    process.stdout.read.return_value = invalid_bytes
+    process.stderr.read.return_value = b""
+    process.wait.return_value = 0
+
+    with (
+        mock.patch("plum_tools.utils.utils.signal.signal"),
+        mock.patch("plum_tools.utils.utils.signal.alarm"),
+        mock.patch("plum_tools.utils.utils.subprocess.Popen", return_value=process),
+    ):
+        with pytest.raises(UnicodeDecodeError):
+            run_cmd("echo test")

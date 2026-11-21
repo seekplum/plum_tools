@@ -22,7 +22,7 @@ import paramiko
 
 from .conf import COMMAND_TIMEOUT, OsCommand, PathConfig
 from .exceptions import RunCmdError, SSHException
-from .utils.parser import get_base_parser
+from .utils.parser import add_compact_argument, get_base_parser
 from .utils.printer import print_error, print_text
 from .utils.sshconf import get_host_ip
 from .utils.utils import YmlConfig, ensure_str, get_file_abspath
@@ -245,6 +245,7 @@ def get_args() -> argparse.Namespace:
     :return 命令行参数
     """
     parser = get_base_parser()
+    add_compact_argument(parser)
     parser.description = "通过 SSH 登录跳板机，对指定服务器执行 IPMI 命令。"  # noqa
     parser.epilog = (
         "示例：\n"
@@ -409,15 +410,24 @@ def main() -> None:
         with get_ssh(**p.parser_ssh_conf()) as ssh:
             # 对每台机器执行 ipmi 命令
             for short_ip in p.parser_ip_list():
-                cmd = OsCommand.IPMI_COMMAND % p.parser_ipmi_auth(short_ip)
-                print_text(f"命令：{cmd}")
+                auth = p.parser_ipmi_auth(short_ip)
+                cmd = OsCommand.IPMI_COMMAND % auth
+                context = f"[{auth['ip']}] {auth['command']}"
+                compact = args.compact is True
+                if not compact:
+                    print_text(f"命令：{cmd}")
                 try:
                     output = ssh.run_cmd(cmd, timeout=COMMAND_TIMEOUT)
-                    print_text(f"输出：{output}\n")
+                    if compact:
+                        output = output.rstrip("\r\n")
+                        separator = "\n" if "\n" in output or "\r" in output else " "
+                        print_text(f"{context}：{separator}{output}")
+                    else:
+                        print_text(f"输出：{output}\n")
                 except TimeoutError:
                     print_error(f"执行命令: {cmd} 超时，超时时间为: {COMMAND_TIMEOUT}秒")
                 except RunCmdError as e:
-                    print_error(e.err_msg)
+                    print_error(f"{context}：{e.err_msg}" if compact else e.err_msg)
     except SSHException as e:
         print_error(e.args[0])
         sys.exit(1)

@@ -12,7 +12,8 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
-from .utils.parser import add_extra_argument, get_base_parser
+from .utils.parser import add_compact_argument, add_extra_argument, get_base_parser
+from .utils.printer import compact_table, print_columns
 
 # 使用当前 Python 解释器提供的标准库模块集合。
 STD_LIB_MODULE_NAMES = sys.stdlib_module_names
@@ -187,20 +188,50 @@ def _map_modules(modules: list[ModuleDict], extra: dict[str, str]) -> list[dict[
     ]
 
 
-def _print_results(console: Console, modules: list[dict[str, str]], report: ImportScanReport) -> None:
-    table = Table(title="导入模块", expand=True)
-    table.add_column("导入名", overflow="fold")
-    table.add_column("包名", overflow="fold")
-    table.add_column("分类")
-    for module in modules:
-        table.add_row(
-            Text(module["name"]),
-            Text(module["package_name"]),
-            Text("标准库" if module["mode"] == FindMode.STD else "第三方库"),
+def _print_compact_modules(console: Console, modules: list[dict[str, str]]) -> None:
+    console.print(Text("导入模块", style="bold"))
+    for mode, label in ((FindMode.STD, "标准库"), (FindMode.THIRD_PARTY, "第三方库")):
+        group = [module for module in modules if module["mode"] == mode]
+        if not group:
+            continue
+        console.print(Text(f"{label}（{len(group)}）", style="bold cyan"))
+        print_columns(
+            console,
+            [
+                Text(
+                    (
+                        module["name"]
+                        if module["name"] == module["package_name"]
+                        else f"{module['name']}→{module['package_name']}"
+                    ),
+                    overflow="fold",
+                )
+                for module in group
+            ],
         )
-    console.print(table)
+
+
+def _print_results(
+    console: Console, modules: list[dict[str, str]], report: ImportScanReport, *, compact: bool = False
+) -> None:
+    if compact:
+        _print_compact_modules(console, modules)
+    else:
+        table = Table(title="导入模块", expand=True)
+        table.add_column("导入名", overflow="fold")
+        table.add_column("包名", overflow="fold")
+        table.add_column("分类")
+        for module in modules:
+            table.add_row(
+                Text(module["name"]),
+                Text(module["package_name"]),
+                Text("标准库" if module["mode"] == FindMode.STD else "第三方库"),
+            )
+        console.print(table)
     if report.errors:
         errors = Table(title="扫描错误", expand=True)
+        if compact:
+            compact_table(errors)
         errors.add_column("路径", overflow="fold", ratio=2)
         errors.add_column("原因", overflow="fold", ratio=3, style="red")
         for error in report.errors:
@@ -215,6 +246,7 @@ def _print_results(console: Console, modules: list[dict[str, str]], report: Impo
 def main() -> None:
     """解析命令行参数，扫描导入并输出 Rich 表格或 JSON，进度写入 stderr。"""
     parser = get_base_parser()
+    add_compact_argument(parser)
     parser.description = "扫描 Python 项目的导入语句，按模块分类输出包名及扫描错误。"  # noqa
     parser.epilog = (
         "示例：\n"
@@ -297,4 +329,4 @@ def main() -> None:
         )
         sys.stdout.write("\n")
         return
-    _print_results(Console(), modules, report)
+    _print_results(Console(), modules, report, compact=args.compact is True)

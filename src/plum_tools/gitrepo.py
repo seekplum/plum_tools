@@ -32,6 +32,7 @@ from .git_scan import (
 )
 from .utils.git import check_is_git_repository, check_repository_modify_status, check_repository_stash
 from .utils.parser import get_base_parser
+from .utils.printer import compact_table
 
 
 def find_git_project_for_python(path: str) -> Generator[str, None, None]:
@@ -87,7 +88,9 @@ def _collect_check_results(
     return result, errors
 
 
-def _print_check_results(console: Console, result: list[dict], errors: list[DirectoryScanError], detail: bool) -> None:
+def _print_check_results(
+    console: Console, result: list[dict], errors: list[DirectoryScanError], detail: bool, *, compact: bool = False
+) -> None:
     affected = [item for item in result if item["status"]]
     if affected:
         failures = sum(bool(item.get("error")) for item in affected)
@@ -97,6 +100,8 @@ def _print_check_results(console: Console, result: list[dict], errors: list[Dire
             expand=True,
         )
         table.add_column("目录", ratio=2, overflow="fold")
+        if compact:
+            compact_table(table)
         table.add_column("状态", min_width=8)
         if detail or failures:
             table.add_column("详细信息", ratio=3, overflow="fold")
@@ -107,17 +112,26 @@ def _print_check_results(console: Console, result: list[dict], errors: list[Dire
                 Text("检查失败" if failed else "存在差异", style="red" if failed else "yellow"),
             ]
             if detail or failures:
-                cells.append(Text(item.get("output", "") if detail or failed else ""))
+                output = item.get("output", "") if detail or failed else ""
+                if compact and not failed:
+                    output = "\n".join(line for line in output.splitlines() if line.strip())
+                cells.append(Text(output))
             table.add_row(*cells)
         console.print(table)
-    print_directory_errors(console, errors)
+    print_directory_errors(console, errors, compact=compact)
 
 
 def check_projects(
-    projects: list[str], detail: bool, stash: bool = True, exclude: tuple[str, ...] = (), *, json_output: bool = False
+    projects: list[str],
+    detail: bool,
+    stash: bool = True,
+    exclude: tuple[str, ...] = (),
+    *,
+    json_output: bool = False,
+    compact: bool = False,
 ) -> None:
     """检查 projects 下的普通仓库，按 detail、stash 和 exclude 控制检查与展示。
-    json_output 启用时输出全部仓库的 JSON，进度写入 stderr。
+    compact 精简展示；json_output 输出全部仓库的 JSON 时忽略展示选项。
     """
     console = Console()
     with RepositoryProgress(Console(stderr=True) if json_output else console) as progress:
@@ -146,7 +160,7 @@ def check_projects(
             {"stash_checked": stash},
         )
         return
-    _print_check_results(console, result, errors, detail)
+    _print_check_results(console, result, errors, detail, compact=compact)
 
 
 def main() -> None:
@@ -154,6 +168,7 @@ def main() -> None:
     parser = get_base_parser()
     add_scan_parser(parser)
     args = parser.parse_args()
+    display_options = {"compact": True} if args.compact else {}
     if args.command == "scan":
         scan_projects(
             args.path,
@@ -164,6 +179,9 @@ def main() -> None:
             stash=args.stash,
             host_filter=args.host_filter,
             json_output=args.json_output,
+            **display_options,
         )
         return
-    check_projects(args.path, args.detail, args.stash, tuple(args.exclude), json_output=args.json_output)
+    check_projects(
+        args.path, args.detail, args.stash, tuple(args.exclude), json_output=args.json_output, **display_options
+    )
