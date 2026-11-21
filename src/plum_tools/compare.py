@@ -262,7 +262,8 @@ def print_report(
         if identical and hide_identical:
             continue
         rows = [item for item in comparisons if (item.result == "一致") == identical]
-        console.print(_report_table(rows, len(paths), identical, compact=compact))
+        if identical or rows:
+            console.print(_report_table(rows, len(paths), identical, compact=compact))
     same = sum(item.result == "一致" for item in comparisons)
     different = len(comparisons) - same
     scope = "整体" if max_depth is None else "当前深度内"
