@@ -74,17 +74,29 @@ def _decode_remote_tree(output: str) -> dict[Path, Entry]:
 
 
 def _scan_remote(
-    host: str, path: str, exclude_names: Sequence[str] = (), exclude_paths: Sequence[str] = ()
+    host: str,
+    path: str,
+    exclude_names: Sequence[str] = (),
+    exclude_paths: Sequence[str] = (),
+    default_excludes: bool = True,
+    max_depth: int | None = None,
 ) -> dict[Path, Entry]:
     # 复用同一份标准库扫描代码，避免远端依赖安装及两端比较规则漂移。
     script = Path(_compare_remote.__file__).read_text(encoding="utf-8")
     ssh = shutil.which("ssh")
     if ssh is None:
         raise OSError("找不到 ssh 命令，请先安装 OpenSSH 客户端")
-    exclusions = json.dumps({"exclude_names": list(exclude_names), "exclude_paths": list(exclude_paths)})
+    options = json.dumps(
+        {
+            "exclude_names": list(exclude_names),
+            "exclude_paths": list(exclude_paths),
+            "default_excludes": default_excludes,
+            "max_depth": max_depth,
+        }
+    )
     # 本地按参数列表调用，远端路径单独转义，避免路径中的 shell 字符被执行。
     process = subprocess.run(  # nosec B603
-        [ssh, "-T", "-o", "ConnectTimeout=10", "--", host, shlex.join(["python3", "-", path, exclusions])],
+        [ssh, "-T", "-o", "ConnectTimeout=10", "--", host, shlex.join(["python3", "-", path, options])],
         input=script,
         capture_output=True,
         encoding="utf-8",
@@ -130,29 +142,52 @@ def _result(entries: tuple[Entry | None, ...], groups: tuple[int, ...]) -> str:
 
 
 def _load_trees(
-    paths: Sequence[str | Path], exclude_names: Sequence[str] = (), exclude_paths: Sequence[str] = ()
+    paths: Sequence[str | Path],
+    exclude_names: Sequence[str] = (),
+    exclude_paths: Sequence[str] = (),
+    default_excludes: bool = True,
+    max_depth: int | None = None,
 ) -> list[dict[Path, Entry]]:
     if len(paths) < 2:
         raise ValueError("至少需要两个路径")
+    if max_depth is not None and (isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 1):
+        raise ValueError("比较深度必须是大于等于 1 的整数")
     _compare_remote.exclusion_rules(exclude_names, exclude_paths)
     trees = []
     for path in paths:
         remote = _split_remote(path)
         if remote is not None:
-            trees.append(_scan_remote(*remote, exclude_names=exclude_names, exclude_paths=exclude_paths))
+            trees.append(_scan_remote(*remote, exclude_names, exclude_paths, default_excludes, max_depth))
         else:
             root = _compare_remote.read_entry(Path(path).expanduser().absolute())
-            trees.append(_compare_remote.scan(root, exclude_names=exclude_names, exclude_paths=exclude_paths))
+            trees.append(
+                _compare_remote.scan(
+                    root,
+                    exclude_names=exclude_names,
+                    exclude_paths=exclude_paths,
+                    default_excludes=default_excludes,
+                    max_depth=max_depth,
+                )
+            )
     if len({tree[Path(".")].kind == "目录" for tree in trees}) > 1:
         raise ValueError("不能混合比较目录和文件（符号链接按链接本身比较）")
     return trees
 
 
 def compare_paths(
-    paths: Sequence[str | Path], *, exclude_names: Sequence[str] = (), exclude_paths: Sequence[str] = ()
+    paths: Sequence[str | Path],
+    *,
+    exclude_names: Sequence[str] = (),
+    exclude_paths: Sequence[str] = (),
+    default_excludes: bool = True,
+    max_depth: int | None = None,
 ) -> list[Comparison]:
-    """比较本地或 host:path 路径，按名称及相对路径排除子项，返回排序后的结果。"""
-    trees = _load_trees(paths, exclude_names, exclude_paths)
+    """按排除规则及可选深度比较本地或 host:path 路径，返回排序后的范围内结果。"""
+    return _compare_trees(_load_trees(paths, exclude_names, exclude_paths, default_excludes, max_depth))
+
+
+def _compare_trees(trees: Sequence[dict[Path, Entry]]) -> list[Comparison]:
+    """自底向上比较已扫描的条目，将子项差异传递到父目录。"""
     relative_paths = set().union(*(tree.keys() for tree in trees))
     children: dict[Path, list[Path]] = defaultdict(list)
     for relative in sorted(relative_paths):
@@ -212,12 +247,17 @@ def print_report(
     *,
     hide_identical: bool = False,
     compact: bool = False,
+    max_depth: int | None = None,
 ) -> None:
-    """向 console 输出比较表格；hide_identical 隐藏一致项，compact 精简布局，汇总保留全量。"""
+    """向 console 输出比较表格及范围汇总，可隐藏一致项或精简布局；max_depth 标明扫描深度。"""
     for index, path in enumerate(paths, start=1):
         label = str(path) if _split_remote(path) is not None else str(Path(path).expanduser().absolute())
         console.print(Text(f"[{index}] {label}"))
-    console.print("同一行中组号相同表示内容一致；目录包含全部子项，. 表示根条目。")
+    if max_depth is None:
+        console.print("同一行中组号相同表示内容一致；目录包含全部子项，. 表示根条目。")
+    else:
+        console.print(f"比较范围：最多 {max_depth} 层（根目录为第 0 层），未检查更深层内容。")
+        console.print("同一行中组号相同表示当前深度内一致；目录仅包含范围内子项，. 表示根条目。")
     for identical in (True, False):
         if identical and hide_identical:
             continue
@@ -225,7 +265,8 @@ def print_report(
         console.print(_report_table(rows, len(paths), identical, compact=compact))
     same = sum(item.result == "一致" for item in comparisons)
     different = len(comparisons) - same
-    console.print(f"整体{'一致' if not different else '不一致'}：一致 {same} 项，不一致 {different} 项。")
+    scope = "整体" if max_depth is None else "当前深度内"
+    console.print(f"{scope}{'一致' if not different else '不一致'}：一致 {same} 项，不一致 {different} 项。")
 
 
 def main() -> None:
@@ -240,6 +281,8 @@ def main() -> None:
         "  pcompare ./a.txt ./b.txt ./c.txt\n"
         "  pcompare ./old ./new --exclude-name node_modules --exclude-name .venv\n"
         "  pcompare ./old ./new --exclude-path packages/web/dist --no-hide-identical\n\n"
+        "  pcompare ./old ./new --quick\n"
+        "  pcompare ./old ./new -L 3 --no-default-excludes\n\n"
         "目录递归比较，文件按内容比较，符号链接仅比较链接目标。\n"
         "远端路径使用 [user@]host:path，支持 SSH 别名；远端需要 Python 3.9+。\n"
         "退出码：0 内容一致，1 存在差异，2 输入或读取失败。"
@@ -265,10 +308,34 @@ def main() -> None:
         metavar="相对路径",
         help="按相对于各输入根目录的路径精确排除条目，可重复传入",
     )
+    parser.add_argument(
+        "--no-default-excludes",
+        dest="default_excludes",
+        action="store_false",
+        help="关闭默认名称排除：" + "、".join(_compare_remote.DEFAULT_EXCLUDE_NAMES),
+    )
+    parser.add_argument("--quick", action="store_true", help="快速比较，默认只扫描 2 层；可用 --max-depth 覆盖")
+    parser.add_argument("--max-depth", "-L", type=int, metavar="层数", help="限制扫描深度，至少为 1，根目录为第 0 层")
     args = parser.parse_args()
+    max_depth = args.max_depth if args.max_depth is not None else (2 if args.quick else None)
+    console = Console()
     try:
-        comparisons = compare_paths(args.paths, exclude_names=args.exclude_name, exclude_paths=args.exclude_path)
-        print_report(args.paths, comparisons, Console(), hide_identical=args.hide_identical, compact=args.compact)
+        with console.status("正在扫描并比较…", spinner="dots"):
+            comparisons = compare_paths(
+                args.paths,
+                exclude_names=args.exclude_name,
+                exclude_paths=args.exclude_path,
+                default_excludes=args.default_excludes,
+                max_depth=max_depth,
+            )
+        print_report(
+            args.paths,
+            comparisons,
+            console,
+            hide_identical=args.hide_identical,
+            compact=args.compact,
+            max_depth=max_depth,
+        )
     except (OSError, ValueError) as exc:
         Console(stderr=True).print(Text(f"比较失败：{exc}", style="red"))
         raise SystemExit(2) from exc

@@ -14,6 +14,9 @@ from pathlib import Path
 # 分块读取文件，避免大文件占用过多内存。
 CHUNK_SIZE = 1024 * 1024
 
+# 默认跳过系统、编辑器及依赖环境生成的子项。
+DEFAULT_EXCLUDE_NAMES = (".DS_Store", ".idea", ".node_modules", "node_modules", ".venv", "__pycache__")
+
 
 @dataclass(frozen=True)
 class Entry:
@@ -76,9 +79,15 @@ def scan(
     *,
     exclude_names: Sequence[str] = (),
     exclude_paths: Sequence[str] = (),
+    default_excludes: bool = True,
+    max_depth: int | None = None,
 ) -> dict[Path, Entry]:
-    """递归返回条目映射，按名称及相对路径排除子项，可同时计算文件摘要。"""
+    """按排除规则及可选深度扫描，返回条目映射，可同时计算文件摘要；根目录为第 0 层。"""
+    if max_depth is not None and (isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 1):
+        raise ValueError("比较深度必须是大于等于 1 的整数")
     names, paths = exclusion_rules(exclude_names, exclude_paths)
+    if default_excludes:
+        names.update(DEFAULT_EXCLUDE_NAMES)
     entries = {Path("."): root}
     pending = [Path(".")] if root.kind == "目录" else []
     while pending:
@@ -89,7 +98,7 @@ def scan(
             if child.name in names or key in paths:
                 continue
             entries[key] = read_entry(child)
-            if entries[key].kind == "目录":
+            if entries[key].kind == "目录" and (max_depth is None or len(key.parts) < max_depth):
                 pending.append(key)
     if hash_files:
         for relative, entry in entries.items():
