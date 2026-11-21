@@ -17,7 +17,8 @@ from unittest import mock
 import pytest
 
 from plum_tools.conf import OsCommand, PathConfig
-from plum_tools.utils.utils import GlobalConf, SSHConf, YmlConfig, ensure_str, get_file_abspath
+from plum_tools.exceptions import RunCmdError, RunCmdTimeout
+from plum_tools.utils.utils import GlobalConf, SSHConf, YmlConfig, cd, ensure_str, get_file_abspath, run_cmd
 
 
 def test_global_conf_get_data_merges_dynamic_data() -> None:
@@ -161,3 +162,80 @@ def test_get_file_abspath_preserves_escaped_space_in_missing_path() -> None:
     ):
         with pytest.raises(FileNotFoundError, match=r"文件: /tmp/demo\\ file 不存在"):
             get_file_abspath("/tmp/demo file")
+
+
+def test_global_conf_post_init_returns_when_no_dynamic_data() -> None:
+    conf = GlobalConf(
+        default_ssh_conf=SSHConf(user="root", port=22, identityfile="~/.ssh/id_rsa"),
+        ipmi_interval=100,
+        projects=[],
+        default_exclude=[],
+    )
+    assert conf.dynamic_data == {}
+
+
+def test_cd_context_manager_changes_and_restore_directory(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    original = Path.cwd()
+    monkeypatch.chdir(tmp_path)
+
+    with cd(str(tmp_path)):
+        assert Path.cwd() == tmp_path.resolve()
+
+    assert Path.cwd() == tmp_path.resolve()
+    monkeypatch.chdir(original)
+
+
+def test_run_cmd_returns_output(tmp_path: Path) -> None:
+    result = run_cmd("echo hello")
+    assert result.strip() == "hello"
+
+
+def test_run_cmd_raises_on_failure() -> None:
+    with pytest.raises(RunCmdError, match="执行命令"):
+        run_cmd("exit 1")
+
+
+def test_run_cmd_does_not_raise_when_disabled() -> None:
+    result = run_cmd("exit 1", is_raise_exception=False)
+    assert result == ""
+
+
+def test_run_cmd_raises_timeout(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr("plum_tools.utils.utils.signal.signal", mock.MagicMock())
+    alarm_mock = mock.MagicMock()
+    monkeypatch.setattr("plum_tools.utils.utils.signal.alarm", alarm_mock)
+    process = mock.MagicMock()
+    process.__enter__.return_value = process
+    process.stdout.read.return_value = b"output"
+    process.stderr.read.return_value = b""
+    process.wait.return_value = 0
+    with mock.patch("plum_tools.utils.utils.subprocess.Popen", return_value=process):
+        result = run_cmd("echo test", timeout=1)
+    assert result == "output"
+    alarm_mock.assert_has_calls([mock.call(1), mock.call(0)])
+
+
+def test_run_cmd_raises_timeout_signal(monkeypatch: pytest.MonkeyPatch) -> None:
+    captured_handler: list = []
+
+    def fake_signal(sig: int, handler: Any) -> Any:
+        captured_handler.append(handler)
+        return lambda *_: None
+
+    def fake_alarm(seconds: int) -> int:
+        if captured_handler:
+            captured_handler[0](None, None)
+        return 0
+
+    monkeypatch.setattr("plum_tools.utils.utils.signal.signal", fake_signal)
+    monkeypatch.setattr("plum_tools.utils.utils.signal.alarm", fake_alarm)
+
+    process = mock.MagicMock()
+    process.__enter__.return_value = process
+    process.stdout.read.return_value = b"partial"
+    process.stderr.read.return_value = b""
+    process.wait.return_value = 0
+
+    with mock.patch("plum_tools.utils.utils.subprocess.Popen", return_value=process):
+        with pytest.raises(RunCmdTimeout, match="超时"):
+            run_cmd("sleep 10", timeout=1)
