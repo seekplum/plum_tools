@@ -9,7 +9,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 - 包源码在 `src/plum_tools/`，测试在 `tests/`。
 - 构建后发布的 Python 包名是 `plum_tools`，wheel 包包含 `src/plum_tools`。
 - 项目使用 `uv` 管理依赖，`hatchling`/`hatch-vcs` 构建与版本推导，`poethepoet` 动态生成常用任务。
-- 支持 Python `>=3.10,<3.15`，CI 主要覆盖 Python 3.12、3.13、3.14。
+- 支持 Python `>=3.11,<3.15`，CI 覆盖 Python 3.11、3.12、3.13、3.14。
 
 ## 常用命令
 

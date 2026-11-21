@@ -11,7 +11,20 @@ import stat
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, replace
+from enum import IntEnum
 from pathlib import Path
+
+if sys.version_info >= (3, 11):
+    from enum import StrEnum
+else:
+    from enum import Enum
+
+    class StrEnum(str, Enum):
+        """兼容远端 Python 3.9/3.10，保持字符串枚举的输出及格式化行为。"""
+
+        __str__ = str.__str__
+        __format__ = str.__format__
+
 
 # 分块读取文件，避免大文件占用过多内存。
 CHUNK_SIZE = 1024 * 1024
@@ -29,6 +42,22 @@ DEFAULT_EXCLUDE_NAMES = (
 )
 
 
+class EntryKind(StrEnum):
+    """本地与远端共用的文件系统条目类型。"""
+
+    DIRECTORY = "目录"
+    FILE = "文件"
+    LINK = "链接"
+
+
+class CompareExitCode(IntEnum):
+    """比较命令及远端扫描脚本的退出状态。"""
+
+    IDENTICAL = 0
+    DIFFERENT = 1
+    ERROR = 2
+
+
 @dataclass(frozen=True)
 class Entry:
     """保存条目的路径、类型、大小、链接目标及可选的远端摘要。"""
@@ -44,11 +73,11 @@ def read_entry(path: Path) -> Entry:
     """读取路径的类型及元信息，返回条目；符号链接不跟随目标。"""
     info = path.lstat()
     if stat.S_ISLNK(info.st_mode):
-        return Entry(path, "链接", target=os.readlink(path))
+        return Entry(path, EntryKind.LINK, target=os.readlink(path))
     if stat.S_ISDIR(info.st_mode):
-        return Entry(path, "目录")
+        return Entry(path, EntryKind.DIRECTORY)
     if stat.S_ISREG(info.st_mode):
-        return Entry(path, "文件", size=info.st_size)
+        return Entry(path, EntryKind.FILE, size=info.st_size)
     raise ValueError(f"不支持的文件类型：{path}")
 
 
@@ -151,7 +180,7 @@ def scan(
     names = (*exclude_names, *(DEFAULT_EXCLUDE_NAMES if default_excludes else ()))
     is_excluded = exclusion_matcher(names, exclude_paths)
     entries = {Path("."): root}
-    pending = [Path(".")] if root.kind == "目录" else []
+    pending = [Path(".")] if root.kind == EntryKind.DIRECTORY else []
     while pending:
         relative = pending.pop()
         for child in entries[relative].path.iterdir():
@@ -160,11 +189,11 @@ def scan(
             if is_excluded(key):
                 continue
             entries[key] = read_entry(child)
-            if entries[key].kind == "目录" and (max_depth is None or len(key.parts) < max_depth):
+            if entries[key].kind == EntryKind.DIRECTORY and (max_depth is None or len(key.parts) < max_depth):
                 pending.append(key)
     if hash_files:
         for relative, entry in entries.items():
-            if entry.kind == "文件":
+            if entry.kind == EntryKind.FILE:
                 entries[relative] = replace(entry, digest=file_md5(entry))
     return entries
 
@@ -180,7 +209,7 @@ def main() -> None:
         print(json.dumps({str(key): {**asdict(entry), "path": str(entry.path)} for key, entry in entries.items()}))
     except (OSError, ValueError) as exc:
         print(f"远端扫描失败：{exc}", file=sys.stderr)
-        raise SystemExit(2) from exc
+        raise SystemExit(CompareExitCode.ERROR) from exc
 
 
 if __name__ == "__main__":

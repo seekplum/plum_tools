@@ -1,6 +1,5 @@
 """递归比较多个目录或文件，使用 Rich 分开展示一致和不一致的条目。"""
 
-import argparse
 import json
 import os
 import re
@@ -9,7 +8,7 @@ import shutil
 import subprocess
 from collections import Counter, defaultdict
 from collections.abc import Sequence
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from rich.console import Console
@@ -18,10 +17,31 @@ from rich.text import Text
 
 from . import _compare_remote
 from ._compare_remote import CHUNK_SIZE as _CHUNK_SIZE
-from ._compare_remote import Entry
+from ._compare_remote import CompareExitCode, Entry, EntryKind, StrEnum
 from .utils.cli import cli_entry, run_process
 from .utils.parser import add_compact_argument, get_base_parser
 from .utils.printer import compact_table
+
+
+class ShowMode(StrEnum):
+    """比较报告的条目展示范围。"""
+
+    ALL = "all"
+    IDENTICAL = "identical"
+    DIFFERENT = "different"
+
+
+class CompareResult(StrEnum):
+    """条目比较状态及报告汇总结果。"""
+
+    IDENTICAL = "一致"
+    DIFFERENT = "不一致"
+    MISSING = "缺失"
+    TYPE_DIFFERENT = "类型不同"
+    CHILDREN_DIFFERENT = "子项不同"
+    LINK_TARGET_DIFFERENT = "链接目标不同"
+    SIZE_DIFFERENT = "大小不同"
+    CONTENT_DIFFERENT = "内容不同"
 
 
 @dataclass(frozen=True)
@@ -59,17 +79,17 @@ def _decode_remote_tree(output: str) -> dict[Path, Entry]:
         if key.is_absolute() or ".." in key.parts or str(key) != relative:
             raise ValueError("无效的相对路径")
         entry = Entry(**{**row, "path": Path(row["path"])})
-        if entry.kind not in ("目录", "文件", "链接") or not isinstance(entry.target, str):
+        if entry.kind not in tuple(EntryKind) or not isinstance(entry.target, str):
             raise ValueError("无效的条目类型或链接目标")
         if not isinstance(entry.size, int) or isinstance(entry.size, bool) or entry.size < 0:
             raise ValueError("无效的文件大小")
-        if entry.kind == "文件" and (
+        if entry.kind == EntryKind.FILE and (
             not isinstance(entry.digest, str) or not re.fullmatch("[0-9a-f]{32}", entry.digest)
         ):
             raise ValueError("缺少有效的 MD5 摘要")
         entries[key] = entry
     for key in entries:
-        if key != Path(".") and (key.parent not in entries or entries[key.parent].kind != "目录"):
+        if key != Path(".") and (key.parent not in entries or entries[key.parent].kind != EntryKind.DIRECTORY):
             raise ValueError("缺少父目录条目")
     return entries
 
@@ -114,12 +134,12 @@ def _scan_remote(
 
 
 def _signatures(entries: tuple[Entry | None, ...]) -> list[tuple[object, ...] | None]:
-    sizes = Counter(entry.size for entry in entries if entry is not None and entry.kind == "文件")
+    sizes = Counter(entry.size for entry in entries if entry is not None and entry.kind == EntryKind.FILE)
     signatures: list[tuple[object, ...] | None] = []
     for entry in entries:
         if entry is None:
             signatures.append(None)
-        elif entry.kind == "文件":
+        elif entry.kind == EntryKind.FILE:
             digest = _file_md5(entry) if sizes[entry.size] > 1 else ""
             signatures.append((entry.kind, entry.size, digest))
         else:
@@ -127,19 +147,21 @@ def _signatures(entries: tuple[Entry | None, ...]) -> list[tuple[object, ...] | 
     return signatures
 
 
-def _result(entries: tuple[Entry | None, ...], groups: tuple[int, ...]) -> str:
+def _result(entries: tuple[Entry | None, ...], groups: tuple[int, ...]) -> CompareResult:
     present = [entry for entry in entries if entry is not None]
     if len(present) != len(entries):
-        return "缺失"
+        return CompareResult.MISSING
     if len({entry.kind for entry in present}) > 1:
-        return "类型不同"
+        return CompareResult.TYPE_DIFFERENT
     if len(set(groups)) == 1:
-        return "一致"
-    if present[0].kind == "目录":
-        return "子项不同"
-    if present[0].kind == "链接":
-        return "链接目标不同"
-    return "大小不同" if len({entry.size for entry in present}) > 1 else "内容不同"
+        return CompareResult.IDENTICAL
+    if present[0].kind == EntryKind.DIRECTORY:
+        return CompareResult.CHILDREN_DIFFERENT
+    if present[0].kind == EntryKind.LINK:
+        return CompareResult.LINK_TARGET_DIFFERENT
+    return (
+        CompareResult.SIZE_DIFFERENT if len({entry.size for entry in present}) > 1 else CompareResult.CONTENT_DIFFERENT
+    )
 
 
 def _load_trees(
@@ -170,7 +192,7 @@ def _load_trees(
                     max_depth=max_depth,
                 )
             )
-    if len({tree[Path(".")].kind == "目录" for tree in trees}) > 1:
+    if len({tree[Path(".")].kind == EntryKind.DIRECTORY for tree in trees}) > 1:
         raise ValueError("不能混合比较目录和文件（符号链接按链接本身比较）")
     return trees
 
@@ -182,9 +204,31 @@ def compare_paths(
     exclude_paths: Sequence[str] = (),
     default_excludes: bool = True,
     max_depth: int | None = None,
+    ignore_case: bool = False,
 ) -> list[Comparison]:
-    """按排除规则及可选深度比较本地或 host:path 路径，返回排序后的范围内结果。"""
-    return _compare_trees(_load_trees(paths, exclude_names, exclude_paths, default_excludes, max_depth))
+    """按排除规则及可选深度比较路径并返回结果；ignore_case 忽略相对路径大小写，重名时报错。"""
+    trees = _load_trees(paths, exclude_names, exclude_paths, default_excludes, max_depth)
+    if not ignore_case:
+        return _compare_trees(trees)
+    folded, original_paths = _casefold_trees(trees)
+    comparisons = [replace(item, path=original_paths[item.path]) for item in _compare_trees(folded)]
+    return sorted(comparisons, key=lambda item: item.path)
+
+
+def _casefold_trees(trees: Sequence[dict[Path, Entry]]) -> tuple[list[dict[Path, Entry]], dict[Path, Path]]:
+    """折叠相对路径的大小写，校验单个输入内重名，并保留最先出现的原始路径用于展示。"""
+    folded = []
+    original_paths: dict[Path, Path] = {}
+    for index, tree in enumerate(trees, start=1):
+        entries: dict[Path, Entry] = {}
+        for relative, entry in tree.items():
+            key = Path(str(relative).casefold())
+            if key in entries:
+                raise ValueError(f"输入 [{index}] 存在大小写路径冲突：{entries[key].path} 与 {entry.path}")
+            entries[key] = entry
+            original_paths.setdefault(key, relative)
+        folded.append(entries)
+    return folded, original_paths
 
 
 def _compare_trees(trees: Sequence[dict[Path, Entry]]) -> list[Comparison]:
@@ -202,7 +246,7 @@ def _compare_trees(trees: Sequence[dict[Path, Entry]]) -> list[Comparison]:
         entries = tuple(tree.get(relative) for tree in trees)
         groups = []
         for index, (entry, signature) in enumerate(zip(entries, _signatures(entries), strict=True)):
-            if entry is not None and entry.kind == "目录":
+            if entry is not None and entry.kind == EntryKind.DIRECTORY:
                 signature = (
                     entry.kind,
                     tuple(
@@ -217,7 +261,7 @@ def _compare_trees(trees: Sequence[dict[Path, Entry]]) -> list[Comparison]:
 
 def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool, *, compact: bool = False) -> Table:
     style = "green" if identical else "red"
-    title = "一致的目录 / 文件" if identical else "不一致的目录 / 文件"
+    title = f"{CompareResult.IDENTICAL if identical else CompareResult.DIFFERENT}的目录 / 文件"
     table = Table(title=f"{title}（{len(rows)}）", header_style="bold", border_style=style)
     if compact:
         compact_table(table)
@@ -230,45 +274,63 @@ def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool, 
         row_groups: dict[int, int] = {}
         for entry, identity in zip(item.entries, item.groups, strict=True):
             if entry is None:
-                labels.append(Text("缺失", style="yellow"))
+                labels.append(Text(CompareResult.MISSING, style="yellow"))
                 continue
             group = row_groups.setdefault(identity, len(row_groups) + 1)
             label = f"{entry.kind}/组{group}" if compact else f"{entry.kind} · 组{group}"
-            if entry.kind == "链接":
+            if entry.kind == EntryKind.LINK:
                 label += f" → {entry.target}"
             labels.append(Text(label))
         table.add_row(Text(str(item.path)), *labels, item.result)
     return table
 
 
-def print_report(
+def print_report(  # pylint: disable=too-many-arguments,too-many-locals
     paths: Sequence[str | Path],
     comparisons: Sequence[Comparison],
     console: Console,
     *,
-    hide_identical: bool = False,
+    show: ShowMode | str = ShowMode.ALL,
     compact: bool = False,
     max_depth: int | None = None,
+    ignore_case: bool = False,
+    display_depth: int | None = None,
 ) -> None:
-    """向 console 输出比较表格及范围汇总，可隐藏一致项或精简布局；max_depth 标明扫描深度。"""
+    """按 show 类型及可选展示深度输出表格，汇总始终包含全部已比较条目。"""
+    if show not in tuple(ShowMode):
+        raise ValueError(f"展示类型必须是 {ShowMode.ALL}、{ShowMode.IDENTICAL} 或 {ShowMode.DIFFERENT}")
+    if display_depth is not None and (
+        isinstance(display_depth, bool) or not isinstance(display_depth, int) or display_depth < 0
+    ):
+        raise ValueError("展示深度必须是大于等于 0 的整数")
     for index, path in enumerate(paths, start=1):
         label = str(path) if _split_remote(path) is not None else str(Path(path).expanduser().absolute())
         console.print(Text(f"[{index}] {label}"))
+    if ignore_case:
+        console.print("忽略相对路径大小写，仍比较条目类型、文件内容和链接目标。")
     if max_depth is None:
         console.print("同一行中组号相同表示内容一致；目录包含全部子项，. 表示根条目。")
     else:
         console.print(f"比较范围：最多 {max_depth} 层（根目录为第 0 层），未检查更深层内容。")
         console.print("同一行中组号相同表示当前深度内一致；目录仅包含范围内子项，. 表示根条目。")
+    if display_depth is not None:
+        console.print(f"展示范围：最多 {display_depth} 层（根目录为第 0 层），汇总包含全部已比较条目。")
     for identical in (True, False):
-        if identical and hide_identical:
+        if show not in (ShowMode.ALL, ShowMode.IDENTICAL if identical else ShowMode.DIFFERENT):
             continue
-        rows = [item for item in comparisons if (item.result == "一致") == identical]
-        if identical or rows:
+        rows = [
+            item
+            for item in comparisons
+            if (item.result == CompareResult.IDENTICAL) == identical
+            and (display_depth is None or len(item.path.parts) <= display_depth)
+        ]
+        if rows:
             console.print(_report_table(rows, len(paths), identical, compact=compact))
-    same = sum(item.result == "一致" for item in comparisons)
+    same = sum(item.result == CompareResult.IDENTICAL for item in comparisons)
     different = len(comparisons) - same
     scope = "整体" if max_depth is None else "当前深度内"
-    console.print(f"{scope}{'一致' if not different else '不一致'}：一致 {same} 项，不一致 {different} 项。")
+    result = CompareResult.DIFFERENT if different else CompareResult.IDENTICAL
+    console.print(f"{scope}{result}：{CompareResult.IDENTICAL} {same} 项，{CompareResult.DIFFERENT} {different} 项。")
 
 
 @cli_entry
@@ -281,22 +343,38 @@ def main() -> None:
         "示例：\n"
         "  pcompare ./old ./new\n"
         "  pcompare 'seekplum:~/Downloads' ~/Downloads\n"
+        "  pcompare 'seekplum:~/Downloads' ~/Downloads --ignore-case\n"
         "  pcompare ./a.txt ./b.txt ./c.txt\n"
         "  pcompare ./old ./new --exclude-name node_modules --exclude-name .venv\n"
         "  pcompare ./old ./new --exclude-name '*.log*'\n"
-        "  pcompare ./old ./new --exclude-path packages/web/dist --no-hide-identical\n\n"
+        f"  pcompare ./old ./new --exclude-path packages/web/dist --show {ShowMode.ALL}\n"
+        f"  pcompare ./old ./new --show {ShowMode.IDENTICAL}\n"
+        f"  pcompare ./old ./new --show {ShowMode.ALL} --display-depth 2\n"
         "  pcompare ./old ./new --quick\n"
         "  pcompare ./old ./new -L 3 --no-default-excludes\n\n"
         "目录递归比较，文件按内容比较，符号链接仅比较链接目标。\n"
         "远端路径使用 [user@]host:path，支持 SSH 别名；远端需要 Python 3.9+。\n"
-        "退出码：0 内容一致，1 存在差异，2 输入或读取失败。"
+        f"退出码：{CompareExitCode.IDENTICAL} 内容一致，{CompareExitCode.DIFFERENT} 存在差异，"
+        f"{CompareExitCode.ERROR} 输入或读取失败。"
     )
     parser.add_argument("paths", nargs="+", metavar="路径", help="要比较的本地或 host:path 路径，至少两个")
     parser.add_argument(
-        "--hide-identical",
-        action=argparse.BooleanOptionalAction,
-        default=True,
-        help="隐藏一致的目录、文件和链接条目（默认开启）",
+        "--ignore-case",
+        action="store_true",
+        help="忽略相对路径大小写，单个输入内出现大小写重名时报错（默认区分大小写）",
+    )
+    parser.add_argument(
+        "--show",
+        choices=[mode.value for mode in ShowMode],
+        default=ShowMode.DIFFERENT,
+        help=f"选择展示类型：{ShowMode.ALL} 全部、{ShowMode.IDENTICAL} 仅一致项、"
+        f"{ShowMode.DIFFERENT} 仅不一致项（默认）",
+    )
+    parser.add_argument(
+        "--display-depth",
+        type=int,
+        metavar="层数",
+        help="限制表格展示深度，至少为 0，根目录为第 0 层；默认不限，不影响比较范围及汇总",
     )
     parser.add_argument(
         "--exclude-name",
@@ -321,6 +399,8 @@ def main() -> None:
     parser.add_argument("--quick", action="store_true", help="快速比较，默认只扫描 2 层；可用 --max-depth 覆盖")
     parser.add_argument("--max-depth", "-L", type=int, metavar="层数", help="限制扫描深度，至少为 1，根目录为第 0 层")
     args = parser.parse_args()
+    if args.display_depth is not None and args.display_depth < 0:
+        parser.error("展示深度必须是大于等于 0 的整数")
     max_depth = args.max_depth if args.max_depth is not None else (2 if args.quick else None)
     console = Console()
     try:
@@ -331,19 +411,26 @@ def main() -> None:
                 exclude_paths=args.exclude_path,
                 default_excludes=args.default_excludes,
                 max_depth=max_depth,
+                ignore_case=args.ignore_case,
             )
         print_report(
             args.paths,
             comparisons,
             console,
-            hide_identical=args.hide_identical,
+            show=args.show,
             compact=args.compact,
             max_depth=max_depth,
+            ignore_case=args.ignore_case,
+            display_depth=args.display_depth,
         )
     except (OSError, ValueError) as exc:
         Console(stderr=True).print(Text(f"比较失败：{exc}", style="red"))
-        raise SystemExit(2) from exc
-    raise SystemExit(int(any(item.result != "一致" for item in comparisons)))
+        raise SystemExit(CompareExitCode.ERROR) from exc
+    raise SystemExit(
+        CompareExitCode.DIFFERENT
+        if any(item.result != CompareResult.IDENTICAL for item in comparisons)
+        else CompareExitCode.IDENTICAL
+    )
 
 
 if __name__ == "__main__":

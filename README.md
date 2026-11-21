@@ -29,6 +29,9 @@
 
 ## 安装环境依赖
 
+项目支持 Python `>=3.11,<3.15`，CI 覆盖 Python 3.11、3.12、3.13、3.14。
+`pcompare` 的独立远端扫描脚本支持远端 Python 3.9+，无需在远端安装本项目。
+
 1.安装 [uv](https://github.com/astral-sh/uv)
 
 ```bash
@@ -287,6 +290,9 @@ pcompare ./config.yaml ./config.backup.yaml
 # 比较远端与本地目录，远端 ~ 在远端展开
 pcompare 'seekplum:~/Downloads' ~/Downloads
 
+# 忽略目录和文件名称的大小写，仍比较文件内容
+pcompare 'seekplum:~/Downloads' ~/Downloads --ignore-case
+
 # 按名称排除所有层级的依赖目录，按相对路径排除指定目录
 pcompare 'seekplum:~/Downloads' ~/Downloads \
   --exclude-name node_modules --exclude-name .venv \
@@ -301,8 +307,17 @@ pcompare ./backup_a ./backup_b --exclude-name 're:.*\.log(?:\.\d+)?'
 # 按路径通配符排除任意层级的 dist 目录
 pcompare ./backup_a ./backup_b --exclude-path '**/dist'
 
-# 同时展示一致条目
-pcompare ./backup_a ./backup_b --no-hide-identical
+# 展示全部条目
+pcompare ./backup_a ./backup_b --show all
+
+# 仅展示一致条目
+pcompare ./backup_a ./backup_b --show identical
+
+# 仅展示不一致条目（默认）
+pcompare ./backup_a ./backup_b --show different
+
+# 完整比较，仅展示到第二层目录、文件及链接
+pcompare ./backup_a ./backup_b --show all --display-depth 2
 
 # 快速比较，默认只扫描 2 层（与 tree -L 2 的层级一致）
 pcompare ./backup_a ./backup_b --quick
@@ -324,9 +339,29 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 才算一致，`.` 表示输入的根条目。表格中的列编号对应输入路径；同一行内
 组号相同的条目一致，即使其他输入存在差异，也能识别其中相同的条目。
 
-`--hide-identical` 默认开启，隐藏一致的目录、文件和链接条目；
-`--no-hide-identical` 恢复展示一致、不一致两张表。汇总始终保留两类条目数量，
-隐藏一致项不影响整体比较结果和退出码；全部一致时不显示空的差异表格。
+默认区分相对路径的大小写。`--ignore-case` 忽略每层目录名和文件名的大小写，
+例如将 `README.md` 与 `readme.md` 匹配到同一行，仍比较条目类型、文件内容和链接目标。
+表格采用按输入顺序最先出现的原始相对路径；排除规则仍按原始名称和路径匹配。
+若同一个输入中存在大小写折叠后重名的条目，例如同时存在独立的 `README.md`
+与 `readme.md`，命令报告冲突并以退出码 `2` 结束，避免覆盖或误合并。
+
+`--show` 选择目录、文件和链接条目的展示类型：
+
+| 参数值 | 展示内容 |
+| --- | --- |
+| `all` | 全部条目，按一致与不一致分表展示 |
+| `identical` | 仅一致项 |
+| `different` | 仅不一致项，默认值 |
+
+汇总始终保留两类条目数量，展示类型不影响整体比较结果和退出码；
+没有可展示条目时不显示空表格。
+
+`--display-depth N` 限制两张表的展示层级，默认不限；`N` 必须为非负整数，
+根目录为第 0 层，`--display-depth 0` 仅展示根条目。
+更深层条目仍参与比较，差异会反映在父目录上；汇总数量和退出码均依据
+全部已比较条目，表格标题中的数量仅统计当前展示的条目。
+该参数适用于三种展示类型，并可与 `--quick`、`--max-depth` 配合：
+扫描深度控制读取和比较范围，展示深度仅控制输出行数。
 
 默认按名称忽略 `.DS_Store`、`.idea`、`.node_modules`、`node_modules`、`.venv`、
 `__pycache__`、`.mypy_cache`、`.pytest_cache`，

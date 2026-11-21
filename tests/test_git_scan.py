@@ -812,7 +812,7 @@ def test_collect_repositories_with_progress(tmp_path: Path) -> None:
         errors: list[DirectoryScanError],
         exclude: tuple[str, ...],
         progress: Any = None,
-    ) -> Generator[str]:
+    ) -> Generator[str, None, None]:
         if progress is not None:
             progress.discovered(True)
         yield "/one/repo"
