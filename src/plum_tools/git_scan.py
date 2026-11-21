@@ -11,6 +11,7 @@ import sys
 from collections import defaultdict
 from collections.abc import Generator
 from concurrent.futures import FIRST_COMPLETED, Future, ThreadPoolExecutor, wait
+from contextvars import copy_context
 from dataclasses import asdict, dataclass, field
 from functools import partial
 from pathlib import Path
@@ -22,6 +23,7 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
+from .utils.cli import cancel_current, run_process
 from .utils.parser import add_compact_argument
 from .utils.printer import compact_table
 
@@ -180,7 +182,7 @@ def _git(path: str, *args: str, allowed_codes: tuple[int, ...] = (0,)) -> str:
         raise GitScanError("未找到 git 可执行文件")
     env = {**os.environ, "LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
     try:
-        result = subprocess.run(  # nosec B603
+        result = run_process(
             [executable, "--no-optional-locks", "-c", "color.ui=false", *args],
             cwd=path,
             env=env,
@@ -534,7 +536,7 @@ def _collect_repositories(
     scan_repository = partial(_scan_repository, fetch=fetch, shared={}, lock=Lock(), stash=stash)
 
     def report(future: Future[Repository]) -> None:
-        if progress is not None:
+        if progress is not None and not future.cancelled():
             progress.checked(future.exception() is not None or bool(future.result().errors))
 
     def collect(done: set[Future[Repository]]) -> None:
@@ -542,22 +544,28 @@ def _collect_repositories(
 
     with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as pool:
         pending: set[Future[Repository]] = set()
-        for path in iter_repositories(paths, errors, exclude, progress):
-            future = pool.submit(scan_repository, path)
-            future.add_done_callback(report)
-            pending.add(future)
-            done = {future for future in pending if future.done()}
-            collect(done)
-            pending.difference_update(done)
-            # 对未完成任务施加上限，避免仓库很多时占用无界内存。
-            if len(pending) >= _MAX_WORKERS * 2:
+        try:
+            for path in iter_repositories(paths, errors, exclude, progress):
+                future = pool.submit(copy_context().run, scan_repository, path)
+                future.add_done_callback(report)
+                pending.add(future)
+                done = {future for future in pending if future.done()}
+                collect(done)
+                pending.difference_update(done)
+                # 对未完成任务施加上限，避免仓库很多时占用无界内存。
+                if len(pending) >= _MAX_WORKERS * 2:
+                    done, pending = wait(pending, return_when=FIRST_COMPLETED)
+                    collect(done)
+            if progress is not None:
+                progress.finish_discovery()
+            while pending:
                 done, pending = wait(pending, return_when=FIRST_COMPLETED)
                 collect(done)
-        if progress is not None:
-            progress.finish_discovery()
-        while pending:
-            done, pending = wait(pending, return_when=FIRST_COMPLETED)
-            collect(done)
+        except KeyboardInterrupt:
+            cancel_current()
+            for future in pending:
+                future.cancel()
+            raise
     return sorted(repos, key=lambda repo: repo.path)
 
 

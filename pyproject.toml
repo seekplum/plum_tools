@@ -162,6 +162,7 @@ markers = [
 filterwarnings = [
   "ignore::DeprecationWarning:sentry_dramatiq",
   "ignore::SyntaxWarning:oss2",
+  'ignore:install "ipywidgets" for Jupyter support:UserWarning',
 ]
 
 [tool.coverage.report]

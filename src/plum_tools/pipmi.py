@@ -22,6 +22,7 @@ import paramiko
 
 from .conf import COMMAND_TIMEOUT, OsCommand, PathConfig
 from .exceptions import RunCmdError, SSHException
+from .utils.cli import cli_entry
 from .utils.parser import add_compact_argument, get_base_parser
 from .utils.printer import print_error, print_text
 from .utils.sshconf import get_host_ip
@@ -401,6 +402,7 @@ class Parser:
         }
 
 
+@cli_entry
 def main() -> None:
     """程序主入口"""
     args = get_args()

@@ -83,3 +83,55 @@ def test_main() -> None:
         )
         mock_parser.parse_args.assert_called_once_with()
         mock_run.assert_called_once_with("1", "1.1.1")
+
+
+def test_run_compact_mode_uses_columns() -> None:
+    """验证 run 函数在紧凑模式下使用分栏打印。"""
+
+    # 使用函数作为 side_effect，动态生成结果
+    def mock_ping_func(ip: str) -> str:
+        # 只让前两个 IP 可达
+        if ip in ("1.1.1.1", "1.1.1.2"):
+            return ip
+        return ""
+
+    with (
+        mock.patch("plum_tools.pping.Pool", return_value=MockPool()),
+        mock.patch("plum_tools.pping.get_prefix_host_ip", return_value="1.1.1"),
+        mock.patch("plum_tools.pping.ping", side_effect=mock_ping_func),
+        mock.patch("plum_tools.pping.print_columns") as mock_print_columns,
+        mock.patch("plum_tools.pping.Console") as mock_console_cls,
+    ):
+        # 模拟 Console 是终端，get_time 返回真实时间
+        import time
+
+        mock_console = mock.MagicMock()
+        mock_console.is_terminal = True
+        mock_console.get_time = time.monotonic  # noqa
+        mock_console_cls.return_value = mock_console
+
+        run("test", "", compact=True)
+
+        # 验证 print_columns 被调用
+        mock_print_columns.assert_called_once()
+        call_args = mock_print_columns.call_args[0]
+        # 第一个参数是 console，第二个参数是 IP 列表
+        items = call_args[1]
+        assert len(items) == 2
+        assert "1.1.1.1" in items[0].plain
+        assert "1.1.1.2" in items[1].plain
+
+
+def test_main_with_compact_flag() -> None:
+    """验证 main 函数在 compact 参数为 True 时传递 compact=True。"""
+    mock_parser = mock.MagicMock()
+    mock_parser.parse_args.return_value = mock.MagicMock(compact=True, type="test", prefix_host="1.1.1")
+
+    with (
+        mock.patch("plum_tools.pping.get_base_parser", return_value=mock_parser),
+        mock.patch("plum_tools.pping.add_compact_argument"),
+        mock.patch("plum_tools.pping.run") as mock_run,
+    ):
+        main()
+
+        mock_run.assert_called_once_with("test", "1.1.1", compact=True)

@@ -991,3 +991,79 @@ def test_repository_cells_compact_mode_for_clean_repo() -> None:
     _, _, _, status_text = _repository_cells(repo, "remote", compact=True)
 
     assert "干净 / 跟踪一致" in status_text.plain
+
+
+def test_print_directory_errors_compact_mode() -> None:
+    """验证 print_directory_errors 紧凑模式下使用紧凑表格。"""
+    from plum_tools.git_scan import DirectoryScanError, print_directory_errors
+
+    errors = [
+        DirectoryScanError("/bad1", "权限不足"),
+        DirectoryScanError("/bad2", "不存在"),
+    ]
+    output = StringIO()
+    console = Console(file=output, width=200)
+
+    print_directory_errors(console, errors, compact=True)
+
+    rendered = output.getvalue()
+    assert "目录扫描错误" in rendered
+    assert "/bad1" in rendered
+    assert "权限不足" in rendered
+
+
+def test_repository_cells_with_multiple_errors() -> None:
+    """验证 _repository_cells 在多个错误时正确换行。"""
+    repo = Repository("/repo", errors=["错误1", "错误2"])
+    _, _, _, status_text = _repository_cells(repo, "remote")
+
+    # 应包含两个错误信息，且有换行分隔
+    assert "检查失败：错误1" in status_text.plain
+    assert "检查失败：错误2" in status_text.plain
+    assert "\n" in status_text.plain
+
+
+def test_print_host_table_compact_mode() -> None:
+    """验证 _print_host_table 紧凑模式下使用紧凑表格。"""
+    from plum_tools.git_scan import _print_host_table
+
+    repos = [Repository("/repo", common_dir="/repo/.git", remote_url="github.com/team/project")]
+    groups = {"team/project": repos}
+    output = StringIO()
+    console = Console(file=output, width=200)
+
+    _print_host_table(console, "github.com", groups, "remote", set(), compact=True)
+
+    rendered = output.getvalue()
+    assert "github.com" in rendered
+    assert "/repo" in rendered
+
+
+def test_collect_repositories_handles_keyboard_interrupt() -> None:
+    """验证 _collect_repositories 在键盘中断时取消所有任务。"""
+    from concurrent.futures import Future
+
+    mock_future = mock.MagicMock(spec=Future)
+    # 让 done() 返回 False，确保 future 保留在 pending 集合中
+    mock_future.done.return_value = False
+
+    # 让 iter_repositories 在遍历时抛出 KeyboardInterrupt
+    def mock_iter(*args: Any, **kwargs: Any) -> Generator[str, None, None]:
+        yield "/repo1"
+        raise KeyboardInterrupt
+
+    with (
+        mock.patch("plum_tools.git_scan.iter_repositories", side_effect=mock_iter),
+        mock.patch("plum_tools.git_scan.ThreadPoolExecutor") as mock_executor,
+        mock.patch("plum_tools.git_scan.cancel_current") as mock_cancel,
+    ):
+        mock_pool = mock.MagicMock()
+        mock_pool.submit.return_value = mock_future
+        mock_executor.return_value.__enter__.return_value = mock_pool
+
+        with pytest.raises(KeyboardInterrupt):
+            _collect_repositories(["/projects"], [], fetch=False)
+
+        # 应调用 cancel_current 和 future.cancel
+        mock_cancel.assert_called_once()
+        assert mock_future.cancel.called

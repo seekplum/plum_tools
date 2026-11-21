@@ -713,3 +713,56 @@ def test_main_with_ignore_rsync_path() -> None:
         include=[],
         dry_run=False,
     )
+
+
+def test_get_sync_option_uses_dest_when_no_directory() -> None:
+    """验证当 dest 没有目录部分时使用 dest 作为目录。"""
+    sync = SyncFiles(
+        hostname="10.0.0.1",
+        user="root",
+        port=0,
+        identityfile="",
+        src="/tmp/src",
+        dest="file.txt",  # 没有目录部分
+        exclude=[],
+        delete=0,
+        ignore_rsync_path=False,
+    )
+
+    option = sync._get_sync_option()  # pylint: disable=protected-access
+
+    # 应使用 dest 作为目录
+    assert "--rsync-path=mkdir -p file.txt" in option
+
+
+def test_translate_debug_mode_with_failure(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证调试模式下命令执行失败时打印错误信息。"""
+    from plum_tools.prn import SyncFiles
+
+    sync = SyncFiles(
+        hostname="10.0.0.1",
+        user="root",
+        port=0,
+        identityfile="",
+        src="/tmp/src",
+        dest="/tmp/dest",
+        exclude=[],
+        delete=0,
+        is_debug=True,
+    )
+
+    with (
+        mock.patch("plum_tools.prn.process_paths", side_effect=lambda path, **kwargs: path),
+        mock.patch("plum_tools.prn.process_remote_paths", side_effect=lambda path, prefix: path),
+        mock.patch("plum_tools.prn.call_process", return_value=1),
+        mock.patch("plum_tools.prn.print_text"),
+        mock.patch("plum_tools.prn.print_error") as mock_print_error,
+        mock.patch("plum_tools.prn.print_ok"),
+    ):
+        sync.translate()
+
+        # 应打印错误信息
+        mock_print_error.assert_called_once()
+        call_args = mock_print_error.call_args[0][0]
+        assert "失败" in call_args
+        assert "错误码: 1" in call_args

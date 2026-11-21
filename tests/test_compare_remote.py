@@ -4,6 +4,7 @@ import json
 import os
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -231,3 +232,91 @@ def test_main_exits_on_missing_path(monkeypatch: pytest.MonkeyPatch, capsys: pyt
 
     assert exc_info.value.code == 2
     assert "远端扫描失败" in capsys.readouterr().err
+
+
+def test_exclusion_regex_rejects_empty_pattern() -> None:
+    """验证 _exclusion_regex 拒绝空的正则模式。"""
+    from plum_tools._compare_remote import _exclusion_regex
+
+    with pytest.raises(ValueError, match="无效的排除正则"):
+        _exclusion_regex("re:")
+
+
+def test_exclusion_regex_rejects_invalid_regex() -> None:
+    """验证 _exclusion_regex 拒绝无效的正则表达式。"""
+    from plum_tools._compare_remote import _exclusion_regex
+
+    with pytest.raises(ValueError, match="无效的排除正则"):
+        _exclusion_regex("re:[")
+
+
+def test_path_glob_matches_single_star() -> None:
+    """验证 _path_glob_matches 中 * 不跨目录匹配。"""
+    from pathlib import Path
+
+    from plum_tools._compare_remote import _path_glob_matches
+
+    pattern = Path("src/*.py")
+    # 应匹配
+    assert _path_glob_matches(Path("src/main.py"), pattern) is True
+    assert _path_glob_matches(Path("src/utils.py"), pattern) is True
+    # 不应跨目录匹配
+    assert _path_glob_matches(Path("src/lib/main.py"), pattern) is False
+
+
+def test_path_glob_matches_double_star() -> None:
+    """验证 _path_glob_matches 中 ** 可跨多层目录匹配。"""
+    from pathlib import Path
+
+    from plum_tools._compare_remote import _path_glob_matches
+
+    pattern = Path("src/**/*.py")
+    # 应匹配多层目录
+    assert _path_glob_matches(Path("src/main.py"), pattern) is True
+    assert _path_glob_matches(Path("src/lib/main.py"), pattern) is True
+    assert _path_glob_matches(Path("src/lib/sub/main.py"), pattern) is True
+    # 不应匹配其他顶层目录
+    assert _path_glob_matches(Path("test/main.py"), pattern) is False
+
+
+def test_path_glob_matches_complex_pattern() -> None:
+    """验证 _path_glob_matches 处理复杂模式。"""
+    from pathlib import Path
+
+    from plum_tools._compare_remote import _path_glob_matches
+
+    pattern = Path("**/test*/**")
+    # 应匹配
+    assert _path_glob_matches(Path("test/unit"), pattern) is True
+    assert _path_glob_matches(Path("src/test/unit"), pattern) is True
+    # 不应匹配
+    assert _path_glob_matches(Path("src/unit"), pattern) is False
+
+
+def test_scan_rejects_invalid_max_depth() -> None:
+    """验证 scan 拒绝无效的 max_depth 参数。"""
+    from plum_tools._compare_remote import read_entry
+
+    root = Path("/tmp")
+    # 布尔值不应被接受
+    with pytest.raises(ValueError, match="比较深度必须是大于等于 1 的整数"):
+        scan(read_entry(root), max_depth=True)
+    # 非整数不应被接受
+    with pytest.raises(ValueError, match="比较深度必须是大于等于 1 的整数"):
+        scan(read_entry(root), max_depth=cast(Any, "2"))
+    # 小于 1 不应被接受
+    with pytest.raises(ValueError, match="比较深度必须是大于等于 1 的整数"):
+        scan(read_entry(root), max_depth=0)
+
+
+def test_main_raises_on_low_python_version(monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture) -> None:
+    """验证 main 在 Python 版本过低时抛出异常。"""
+    monkeypatch.setattr("sys.argv", ["_compare_remote", "/tmp"])
+    # 模拟 Python 3.8
+    monkeypatch.setattr("sys.version_info", (3, 8, 0))
+
+    with pytest.raises(SystemExit) as exc_info:
+        main()
+
+    assert exc_info.value.code == 2
+    assert "Python 3.9" in capsys.readouterr().err

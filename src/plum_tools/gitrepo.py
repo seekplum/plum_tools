@@ -13,7 +13,6 @@
 import functools
 import os
 from collections.abc import Generator
-from multiprocessing import Pool
 
 from rich.console import Console
 from rich.table import Table
@@ -30,6 +29,8 @@ from .git_scan import (
     walk_directories,
     write_json_result,
 )
+from .utils.cli import cli_entry
+from .utils.cli import process_pool as Pool
 from .utils.git import check_is_git_repository, check_repository_modify_status, check_repository_stash
 from .utils.parser import get_base_parser
 from .utils.printer import compact_table
@@ -163,6 +164,7 @@ def check_projects(
     _print_check_results(console, result, errors, detail, compact=compact)
 
 
+@cli_entry
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()

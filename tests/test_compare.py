@@ -5,6 +5,7 @@ import os
 from io import StringIO
 from pathlib import Path
 from types import SimpleNamespace
+from typing import Any, cast
 from unittest import mock
 
 import pytest
@@ -487,6 +488,76 @@ def test_load_trees_supports_remote_paths(tmp_path: Path) -> None:
     assert len(trees) == 2
     assert Path(".") in trees[0]
     assert Path(".") in trees[1]
+
+
+def test_load_trees_rejects_invalid_max_depth(tmp_path: Path) -> None:
+    """验证 _load_trees 拒绝无效的 max_depth 参数。"""
+    # 布尔值不应被接受
+    with pytest.raises(ValueError, match="比较深度必须是大于等于 1 的整数"):
+        _load_trees([str(tmp_path), str(tmp_path)], max_depth=True)
+    # 非整数不应被接受
+    with pytest.raises(ValueError, match="比较深度必须是大于等于 1 的整数"):
+        _load_trees([str(tmp_path), str(tmp_path)], max_depth=cast(Any, "2"))
+    # 小于 1 不应被接受
+    with pytest.raises(ValueError, match="比较深度必须是大于等于 1 的整数"):
+        _load_trees([str(tmp_path), str(tmp_path)], max_depth=0)
+
+
+def test_report_table_compact_mode(tmp_path: Path) -> None:
+    """验证 _report_table 在紧凑模式下调用 compact_table。"""
+    from plum_tools._compare_remote import Entry
+    from plum_tools.compare import Comparison, _report_table
+
+    rows = []
+    # 创建一个不一致的比较结果
+    entry1 = Entry(path=tmp_path, kind="目录")
+    entry2 = Entry(path=tmp_path, kind="目录")
+    comparison = Comparison(Path("."), (entry1, entry2), (1, 2), "不一致")
+    rows.append(comparison)
+
+    table = _report_table(rows, 2, identical=False, compact=True)
+
+    # 紧凑模式下应设置表格属性
+    assert table.box is None
+    assert table.expand is True
+
+
+def test_print_report_with_max_depth(tmp_path: Path) -> None:
+    """验证 print_report 在 max_depth 不为 None 时打印范围信息。"""
+    from plum_tools._compare_remote import Entry
+    from plum_tools.compare import Comparison, print_report
+
+    output = StringIO()
+    console = Console(file=output, width=200)
+
+    entry = Entry(path=tmp_path, kind="目录")
+    comparison = Comparison(Path("."), (entry, entry), (1, 1), "一致")
+
+    print_report([str(tmp_path), str(tmp_path)], [comparison], console, max_depth=2)
+
+    rendered = output.getvalue()
+    # 应打印范围信息
+    assert "比较范围：最多 2 层" in rendered
+    assert "未检查更深层内容" in rendered
+    assert "当前深度内" in rendered
+
+
+def test_print_report_compact_mode(tmp_path: Path) -> None:
+    """验证 print_report 在紧凑模式下使用紧凑表格。"""
+    from plum_tools._compare_remote import Entry
+    from plum_tools.compare import Comparison, print_report
+
+    output = StringIO()
+    console = Console(file=output, width=200)
+
+    entry = Entry(path=tmp_path, kind="目录")
+    comparison = Comparison(Path("."), (entry, entry), (1, 1), "不一致")
+
+    print_report([str(tmp_path), str(tmp_path)], [comparison], console, compact=True)
+
+    rendered = output.getvalue()
+    assert "不一致的目录 / 文件" in rendered
+    assert "不一致" in rendered
 
 
 def _entry_dict(path: Path, kind: str) -> dict:

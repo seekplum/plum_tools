@@ -386,3 +386,59 @@ def test_main_exits_when_ssh_connection_fails() -> None:
 
     assert exc_info.value.code == 1
     mock_print_error.assert_called_once_with("connect fail")
+
+
+def test_main_compact_mode_with_multiline_output() -> None:
+    """验证紧凑模式下多行输出使用换行分隔符。"""
+    args = mock.Mock(compact=True)
+    parser = mock.Mock()
+    parser.parser_ssh_conf.return_value = {"hostname": "10.0.0.1"}
+    parser.parser_ip_list.return_value = ["1"]
+    parser.parser_ipmi_auth.return_value = {
+        "ip": "10.0.0.1",
+        "user": "ADMIN",
+        "password": "123",
+        "command": "power status",
+    }
+    ssh_client = mock.Mock()
+    ssh_client.run_cmd.return_value = "line1\r\nline2\r\n"
+
+    with (
+        mock.patch("plum_tools.pipmi.get_args", return_value=args),
+        mock.patch("plum_tools.pipmi.Parser", return_value=parser),
+        mock.patch("plum_tools.pipmi.get_ssh", return_value=_mock_ssh_context(ssh_client)),
+        mock.patch("plum_tools.pipmi.print_text") as mock_print_text,
+        mock.patch("plum_tools.pipmi.print_error"),
+    ):
+        main()
+
+    # rstrip 移除末尾的 \r\n，但中间的 \r\n 保留，分隔符使用 \n
+    mock_print_text.assert_called_once_with("[10.0.0.1] power status：\nline1\r\nline2")
+
+
+def test_main_compact_mode_with_single_line_output() -> None:
+    """验证紧凑模式下单行输出使用空格分隔符。"""
+    args = mock.Mock(compact=True)
+    parser = mock.Mock()
+    parser.parser_ssh_conf.return_value = {"hostname": "10.0.0.1"}
+    parser.parser_ip_list.return_value = ["1"]
+    parser.parser_ipmi_auth.return_value = {
+        "ip": "10.0.0.1",
+        "user": "ADMIN",
+        "password": "123",
+        "command": "power status",
+    }
+    ssh_client = mock.Mock()
+    ssh_client.run_cmd.return_value = "ok\r\n"
+
+    with (
+        mock.patch("plum_tools.pipmi.get_args", return_value=args),
+        mock.patch("plum_tools.pipmi.Parser", return_value=parser),
+        mock.patch("plum_tools.pipmi.get_ssh", return_value=_mock_ssh_context(ssh_client)),
+        mock.patch("plum_tools.pipmi.print_text") as mock_print_text,
+        mock.patch("plum_tools.pipmi.print_error"),
+    ):
+        main()
+
+    # 应使用空格作为分隔符
+    mock_print_text.assert_called_once_with("[10.0.0.1] power status： ok")

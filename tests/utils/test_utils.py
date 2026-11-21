@@ -276,3 +276,42 @@ def test_run_cmd_raises_on_invalid_utf8_output() -> None:
     ):
         with pytest.raises(UnicodeDecodeError):
             run_cmd("echo test")
+
+
+def test_run_cmd_handles_unicode_decode_error_with_fallback(capsys: pytest.CaptureFixture[str]) -> None:
+    """验证 run_cmd 在第二次解码时回退到 unicode_escape。"""
+    # 构造一个场景：第一次 ensure_str 返回字符串，但第二次调用时抛出异常
+    process = mock.MagicMock()
+    process.__enter__.return_value = process
+    process.stdout.read.return_value = b"valid output"
+    process.stderr.read.return_value = b""
+    process.wait.return_value = 0
+
+    # ensure_str 在 run_cmd 中被调用多次：
+    # 1. 第203行：out_msg = ensure_str(p.stdout.read())
+    # 2. 第204行：err_msg = ensure_str(p.stderr.read())
+    # 3. 第215行：return ensure_str(out_msg) - 这里抛出异常
+    # 4. 第218行：ensure_str(out_msg, encoding="unicode_escape") - 返回 fallback
+    call_count = 0
+
+    def mock_ensure_str(s: Any, encoding: str = "utf-8", errors: str = "strict") -> str:
+        nonlocal call_count
+        call_count += 1
+        if call_count == 1:
+            return "valid output"
+        if call_count == 2:
+            return ""
+        if call_count == 3 and encoding == "utf-8":
+            raise UnicodeDecodeError("utf-8", b"invalid", 0, 1, "test error")
+        return "fallback result"
+
+    with (
+        mock.patch("plum_tools.utils.utils.signal.signal"),
+        mock.patch("plum_tools.utils.utils.signal.alarm"),
+        mock.patch("plum_tools.utils.utils.subprocess.Popen", return_value=process),
+        mock.patch("plum_tools.utils.utils.ensure_str", side_effect=mock_ensure_str),
+    ):
+        result = run_cmd("echo test")
+
+    # 应使用 unicode_escape 解码成功
+    assert result == "fallback result"

@@ -18,6 +18,7 @@ import sys
 
 from .conf import LOCAL_HOST, PathConfig
 from .exceptions import RunCmdError, SystemTypeError
+from .utils.cli import call_process, cli_entry
 from .utils.parser import get_base_parser
 from .utils.printer import print_error, print_ok, print_text
 from .utils.sshconf import merge_ssh_config
@@ -281,7 +282,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         try:
             if self._is_debug:
                 print_text(cmd)
-                exit_code = subprocess.call(cmd, shell=True)  # nosec B602
+                exit_code = call_process(subprocess.call, cmd, shell=True)  # nosec B604
                 if exit_code != 0:
                     print_error(f"{text}失败, 错误码: {exit_code}")
                     return
@@ -369,6 +370,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
             sync.translate()
 
 
+@cli_entry
 def main() -> None:  # pylint: disable=R0914
     """程序主入口"""
     parser = get_base_parser()

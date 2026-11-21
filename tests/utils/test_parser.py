@@ -87,3 +87,37 @@ def test_add_extra_argument_rejects_non_string_value() -> None:
             action(parser, namespace, ["foo", "bar"], "--extra")
 
     mock_error.assert_called_once()
+
+
+def test_extra_action_returns_after_non_string_error() -> None:
+    """验证 ExtraAction 在非字符串值时调用 error 后直接返回。"""
+    from plum_tools.utils.parser import ExtraAction
+
+    parser = argparse.ArgumentParser()
+    namespace = argparse.Namespace(extra={})
+    action = ExtraAction(option_strings=["--extra"], dest="extra")
+
+    with mock.patch.object(parser, "error") as mock_error:
+        # 传递非字符串值，应调用 error 并返回，不抛出异常
+        action(parser, namespace, ["foo", "bar"], "--extra")
+
+        mock_error.assert_called_once()
+        # namespace 不应被修改
+        assert namespace.extra == {}
+
+
+def test_extra_action_returns_after_invalid_format() -> None:
+    """验证 ExtraAction 在无效格式时调用 error 后直接返回。"""
+    from plum_tools.utils.parser import ExtraAction
+
+    parser = argparse.ArgumentParser()
+    namespace = argparse.Namespace(extra={})
+    action = ExtraAction(option_strings=["--extra"], dest="extra")
+
+    with mock.patch.object(parser, "error") as mock_error:
+        # 传递无效格式（没有 =），应调用 error 并返回，不抛出异常
+        action(parser, namespace, "foo", "--extra")
+
+        mock_error.assert_called_once()
+        # namespace 不应被修改
+        assert namespace.extra == {}

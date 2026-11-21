@@ -12,6 +12,7 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
+from .utils.cli import cli_entry
 from .utils.parser import add_compact_argument, add_extra_argument, get_base_parser
 from .utils.printer import compact_table, print_columns
 
@@ -243,6 +244,7 @@ def _print_results(
     )
 
 
+@cli_entry
 def main() -> None:
     """解析命令行参数，扫描导入并输出 Rich 表格或 JSON，进度写入 stderr。"""
     parser = get_base_parser()

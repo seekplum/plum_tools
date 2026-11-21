@@ -15,6 +15,7 @@
 import os
 
 from .conf import SSHConfig
+from .utils.cli import cli_entry
 from .utils.parser import get_base_parser
 from .utils.sshconf import merge_ssh_config
 
@@ -72,6 +73,7 @@ def login(host: str, host_type: str, user: str, port: int, identityfile: str) ->
     os.system(cmd)  # nosec B605
 
 
+@cli_entry
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()

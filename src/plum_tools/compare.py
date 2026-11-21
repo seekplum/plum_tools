@@ -19,6 +19,7 @@ from rich.text import Text
 from . import _compare_remote
 from ._compare_remote import CHUNK_SIZE as _CHUNK_SIZE
 from ._compare_remote import Entry
+from .utils.cli import cli_entry, run_process
 from .utils.parser import add_compact_argument, get_base_parser
 from .utils.printer import compact_table
 
@@ -95,7 +96,7 @@ def _scan_remote(
         }
     )
     # 本地按参数列表调用，远端路径单独转义，避免路径中的 shell 字符被执行。
-    process = subprocess.run(  # nosec B603
+    process: subprocess.CompletedProcess[str] = run_process(
         [ssh, "-T", "-o", "ConnectTimeout=10", "--", host, shlex.join(["python3", "-", path, options])],
         input=script,
         capture_output=True,
@@ -152,7 +153,7 @@ def _load_trees(
         raise ValueError("至少需要两个路径")
     if max_depth is not None and (isinstance(max_depth, bool) or not isinstance(max_depth, int) or max_depth < 1):
         raise ValueError("比较深度必须是大于等于 1 的整数")
-    _compare_remote.exclusion_rules(exclude_names, exclude_paths)
+    _compare_remote.exclusion_matcher(exclude_names, exclude_paths)
     trees = []
     for path in paths:
         remote = _split_remote(path)
@@ -270,6 +271,7 @@ def print_report(
     console.print(f"{scope}{'一致' if not different else '不一致'}：一致 {same} 项，不一致 {different} 项。")
 
 
+@cli_entry
 def main() -> None:
     """解析路径参数并展示结果；退出码 0 表示一致，1 表示差异，2 表示错误。"""
     parser = get_base_parser()
@@ -281,6 +283,7 @@ def main() -> None:
         "  pcompare 'seekplum:~/Downloads' ~/Downloads\n"
         "  pcompare ./a.txt ./b.txt ./c.txt\n"
         "  pcompare ./old ./new --exclude-name node_modules --exclude-name .venv\n"
+        "  pcompare ./old ./new --exclude-name '*.log*'\n"
         "  pcompare ./old ./new --exclude-path packages/web/dist --no-hide-identical\n\n"
         "  pcompare ./old ./new --quick\n"
         "  pcompare ./old ./new -L 3 --no-default-excludes\n\n"
@@ -300,14 +303,14 @@ def main() -> None:
         action="append",
         default=[],
         metavar="名称",
-        help="按目录名或文件名精确排除任意层级的条目，可重复传入",
+        help="按名称排除任意层级的条目，支持通配符或 re: 正则完整匹配，可重复传入",
     )
     parser.add_argument(
         "--exclude-path",
         action="append",
         default=[],
         metavar="相对路径",
-        help="按相对于各输入根目录的路径精确排除条目，可重复传入",
+        help="按根目录内相对路径排除，支持通配符（** 跨层）或 re: 正则完整匹配，可重复传入",
     )
     parser.add_argument(
         "--no-default-excludes",

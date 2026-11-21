@@ -17,6 +17,7 @@ import sys
 
 from .conf import STASH_UUID, GitCommand
 from .exceptions import RunCmdError
+from .utils.cli import cli_entry
 from .utils.git import check_repository_modify_status, check_repository_stash, get_current_branch_name
 from .utils.parser import get_base_parser
 from .utils.printer import print_warn
@@ -91,6 +92,7 @@ class GitCheckoutStash:
         self._apply()
 
 
+@cli_entry
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()

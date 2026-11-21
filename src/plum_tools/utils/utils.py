@@ -22,6 +22,7 @@ import yaml
 
 from ..conf import OsCommand, PathConfig
 from ..exceptions import RunCmdError, RunCmdTimeout
+from .cli import managed_process
 from .printer import print_error, print_text
 
 
@@ -188,25 +189,31 @@ def run_cmd(cmd: str, is_raise_exception: bool = True, timeout: int | None = Non
         """通过抛出异常达到超时效果"""
         raise RunCmdTimeout(f"执行命令 `{cmd}` 超时，超时时间为 {timeout} 秒")
 
-    # 设置指定时间后出发handler
-    if timeout:
-        signal.signal(signal.SIGALRM, raise_timeout_exception)
-        signal.alarm(timeout)
+    previous = signal.getsignal(signal.SIGALRM) if timeout else None
+    try:
+        if timeout:
+            signal.signal(signal.SIGALRM, raise_timeout_exception)
+            signal.alarm(timeout)
+        # 沿用现有 shell 命令协议，取消时通过独立进程组回收后代。
+        with managed_process(  # nosec B604
+            cmd,
+            shell=True,
+            close_fds=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        ) as p:
+            out_msg = p.stdout.read()  # type: ignore[union-attr]
+            err_msg = p.stderr.read()  # type: ignore[union-attr]
+            exit_code = p.wait()
+    finally:
+        if timeout:
+            try:
+                signal.alarm(0)
+            finally:
+                signal.signal(signal.SIGALRM, previous)
 
-    with subprocess.Popen(
-        cmd,
-        shell=True,
-        close_fds=True,
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    ) as p:  # nosec B602
-        out_msg = ensure_str(p.stdout.read())  # type: ignore[union-attr]
-        err_msg = ensure_str(p.stderr.read())  # type: ignore[union-attr]
-        exit_code = p.wait()
-
-    # 解除触发handler
-    if timeout:
-        signal.alarm(0)
+    out_msg = ensure_str(out_msg)
+    err_msg = ensure_str(err_msg)
 
     if is_raise_exception and exit_code != 0:
         message = f"执行命令 `{cmd}` 失败"

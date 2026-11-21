@@ -10,14 +10,14 @@
 #=============================================================================
 """
 
-from multiprocessing import Pool
-
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.text import Text
 
 from .conf import PROCESSES_NUMBER, OsCommand
 from .exceptions import RunCmdError
+from .utils.cli import cli_entry
+from .utils.cli import process_pool as Pool
 from .utils.parser import add_compact_argument, get_base_parser
 from .utils.printer import print_columns, print_text
 from .utils.sshconf import get_prefix_host_ip
@@ -82,6 +82,7 @@ def run(host_type: str, prefix_host: str, *, compact: bool = False) -> None:
             print_text(ip)
 
 
+@cli_entry
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()

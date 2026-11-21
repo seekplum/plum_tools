@@ -86,6 +86,11 @@ pcompare 版本: 0.6.6（2026-11-19） 提交: a1b2c3d4e5f6
 所有命令的 `--help` 均使用中文说明，并提供示例命令。存在默认值或可选值的参数会说明其取值或配置来源。
 参数名、JSON 字段和枚举值保持原样；外部命令及系统的原始诊断保留原文。
 
+所有命令支持 Ctrl+C 取消：停止当前任务并清理资源，向标准错误输出“已取消”，
+以退出码 `130` 结束，不打印 Python 异常堆栈。扫描、等待子命令及输出表格时均可取消，
+进程池和线程池会停止后续任务，加载动画和进度条自动关闭。
+交互式 `pssh` 会话中的 Ctrl+C 仍交给 SSH 处理，用于中断远端当前命令。
+
 ## 紧凑模式
 
 在宽终端中使用 `--compact` 减少结果占用的行数，默认关闭。
@@ -287,6 +292,15 @@ pcompare 'seekplum:~/Downloads' ~/Downloads \
   --exclude-name node_modules --exclude-name .venv \
   --exclude-path packages/web/dist
 
+# 按通配符排除名称中包含 .log 的文件或目录
+pcompare 'seekplum:~/packages' ~/packages --quick --exclude-name '*.log*'
+
+# 使用 re: 前缀进行正则完整匹配
+pcompare ./backup_a ./backup_b --exclude-name 're:.*\.log(?:\.\d+)?'
+
+# 按路径通配符排除任意层级的 dist 目录
+pcompare ./backup_a ./backup_b --exclude-path '**/dist'
+
 # 同时展示一致条目
 pcompare ./backup_a ./backup_b --no-hide-identical
 
@@ -317,17 +331,24 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 默认按名称忽略 `.DS_Store`、`.idea`、`.node_modules`、`node_modules`、`.venv`、
 `__pycache__`、`.mypy_cache`、`.pytest_cache`，
 可通过 `--no-default-excludes` 关闭。手动排除参数与内置规则合并，
-可重复传入，按字面精确匹配，不展开通配符：
+可重复传入，支持精确匹配、通配符和 `re:` 前缀的正则表达式：
 
 - `--exclude-name` 按目录名或文件名匹配任意层级，例如 `node_modules`、
-  `.venv`、`.DS_Store`。
+  `.venv`、`*.log*`。
 - `--exclude-path` 按相对于各输入根目录的路径匹配，例如
   `packages/web/dist`，不会排除其他位置同名的 `dist`。
+
+普通字符串仍精确匹配；通配符支持 `*`、`?`、`[abc]`，区分大小写。
+路径通配符中 `*` 不跨越 `/`，独立路径段 `**` 匹配零层或多层目录，
+例如 `packages/*/dist` 匹配一层项目目录，`**/dist` 匹配任意层级的 `dist`。
+以 `re:` 开头时，正则对整个名称或相对路径进行匹配；需要部分匹配时显式添加 `.*`。
+正则路径使用 `/` 分隔，表达式不会进行路径规范化；无效正则在扫描或连接 SSH 前报错。
+包含通配符或正则的参数应加引号，避免被 shell 提前展开。
 
 两类规则对全部本地和远端输入生效，匹配目录时跳过整个子树，
 排除项不会被读取、计算摘要，也不参与比较和统计。
 规则仅作用于输入目录内的子项，不排除直接传入的根目录或文件；
-相对路径不能是绝对路径、`.` 或包含 `..`。
+普通及通配符路径不能是绝对路径、`.` 或包含 `..`。
 
 `--quick` 默认只扫描 2 层；`--max-depth N`（简写 `-L N`）可单独使用，
 也可覆盖 `--quick` 的默认层级，`N` 必须为正整数。根目录是第 0 层，
