@@ -135,7 +135,7 @@ def process_remote_paths(paths: str | list[str], user_prefix: str, pv: str) -> s
 class SyncFiles:  # pylint: disable=too-many-instance-attributes
     """上传文件到服务器"""
 
-    # pylint: disable=too-many-positional-arguments,too-many-arguments
+    # pylint: disable=too-many-positional-arguments,too-many-arguments,too-many-locals
     def __init__(
         self,
         hostname: str,
@@ -151,6 +151,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         ignore_rsync_path: bool = False,
         ignore_exclude: bool = False,
         include: list[str] | None = None,
+        cli_exclude: list[str] | None = None,
         dry_run: bool = False,
     ):
         """文件上传功能
@@ -193,6 +194,9 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
 
         :param include 包含的目录
         :example include ["pkg"]
+
+        :param cli_exclude 命令行传入的排除目录，--ignore-exclude 时仅保留此项
+        :example cli_exclude ["node_modules"]
         """
         self._hostname = hostname
         self._user = user
@@ -202,6 +206,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         self._dest = dest
         self._exclude = exclude or []
         self._include = set(include or [])
+        self._cli_exclude = cli_exclude or []
         self._delete = delete
         self._is_download = is_download
         self._is_debug = is_debug
@@ -229,13 +234,13 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         option = ["rsync -rtlv"]
         known_host = "UserKnownHostsFile=/dev/null"
         host_key = "StrictHostKeyChecking no"
-        timeout = "ConnectTimeout=2"
+        timeout = "ConnectTimeout=10"
         # 指定端口
         if self._port:
             ssh_cmd = f"ssh -p {self._port}"
         else:
             ssh_cmd = "ssh"
-        if not self._ignore_rsync_path:
+        if not self._ignore_rsync_path and not self._is_download:
             directory = os.path.dirname(self._dest)
             if not directory:
                 directory = self._dest
@@ -244,13 +249,13 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             option.append(f'-e \'{ssh_cmd} -i {self._identity_file} -o "{known_host}" -o "{host_key}" -o "{timeout}"\'')
         if self._delete:
             option.append("--delete")
-        if not self._ignore_exclude:
-            exists = set()
-            for item in self._exclude:
-                if item in self._include or item in exists:
-                    continue
-                exists.add(item)
-                option.append(f"--exclude '{item}'")
+        exclude_items = self._cli_exclude if self._ignore_exclude else self._exclude
+        exists = set()
+        for item in exclude_items:
+            if item in self._include or item in exists:
+                continue
+            exists.add(item)
+            option.append(f"--exclude '{item}'")
         return " ".join(option)
 
     def translate(self) -> None:
@@ -304,6 +309,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
     is_debug: bool = False,
     ignore_rsync_path: bool = False,
     ignore_exclude: bool = False,
+    exclude: list[str] | None = None,
     include: list[str] | None = None,
     dry_run: bool = False,
 ) -> None:
@@ -347,6 +353,9 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
     :param ignore_exclude 是否忽略 exclude 参数
     :example ignore_exclude False
 
+    :param exclude 命令行传入的排除目录，--ignore-exclude 时仅保留此项
+    :example exclude ["node_modules"]
+
     :param include 包含的目录
     :example include ["pkg"]
     """
@@ -361,6 +370,7 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
                 "is_debug": is_debug,
                 "ignore_rsync_path": ignore_rsync_path,
                 "ignore_exclude": ignore_exclude,
+                "cli_exclude": exclude,
                 "include": include,
                 "dry_run": dry_run,
             }
@@ -556,6 +566,7 @@ def main() -> None:  # pylint: disable=R0914
         is_debug,
         ignore_rsync_path=ignore_rsync_path,
         ignore_exclude=ignore_exclude,
+        exclude=exclude,
         include=include,
         dry_run=args.dry_run,
     )

@@ -202,8 +202,7 @@ def test_translate_download_debug_and_localhost_paths(capsys: pytest.CaptureFixt
         sync.translate()
 
     mock_subprocess_call.assert_called_once_with(
-        # flake8: noqa: E501
-        "rsync -rtlv '--rsync-path=mkdir -p /local && rsync' --delete --exclude '.git' /remote/a/ /remote/b /local/file",
+        "rsync -rtlv --delete --exclude '.git' /remote/a/ /remote/b /local/file",
         shell=True,  # nosec: B604
     )
     captured = capsys.readouterr()
@@ -257,7 +256,7 @@ def test_translate_dry_run_prints_command_without_syncing(
     if hostname != LOCAL_HOST:
         ssh_option = (
             ' -e \'ssh -p 22 -i id_rsa -o "UserKnownHostsFile=/dev/null" '
-            '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\''
+            '-o "StrictHostKeyChecking no" -o "ConnectTimeout=10"\''
         )
         user_prefix = "user@1.1.1.1:"
     paths = (
@@ -265,9 +264,8 @@ def test_translate_dry_run_prints_command_without_syncing(
         if is_download
         else f"/local/project/ {user_prefix}/remote/project"
     )
-    assert capsys.readouterr().out == (
-        f"rsync -rtlv '--rsync-path=mkdir -p {directory} && rsync'{ssh_option} --delete --exclude '.git' {paths}\n"
-    )
+    rsync_path = "" if is_download else f" '--rsync-path=mkdir -p {directory} && rsync'"
+    assert capsys.readouterr().out == (f"rsync -rtlv{rsync_path}{ssh_option} --delete --exclude '.git' {paths}\n")
 
 
 @pytest.mark.parametrize("dry_run", [False, True])
@@ -293,6 +291,7 @@ def test_main_parses_dry_run(dry_run: bool) -> None:
         False,
         ignore_rsync_path=False,
         ignore_exclude=False,
+        exclude=[],
         include=[],
         dry_run=dry_run,
     )
@@ -326,7 +325,7 @@ def test_main_dry_run_previews_all_hosts_and_projects(
     mock_subprocess_call.assert_not_called()
     ssh_option = (
         '-e \'ssh -p 22 -i id_rsa -o "UserKnownHostsFile=/dev/null" '
-        '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\''
+        '-o "StrictHostKeyChecking no" -o "ConnectTimeout=10"\''
     )
     assert capsys.readouterr().out.splitlines() == [
         "rsync -rtlv /local/a /remote/a",
@@ -381,6 +380,7 @@ def test_main_uses_localhost_when_servers_not_provided() -> None:
         True,
         ignore_rsync_path=True,
         ignore_exclude=False,
+        exclude=[],
         include=[],
         dry_run=False,
     )
@@ -438,7 +438,7 @@ def test_translate(capsys: pytest.CaptureFixture) -> None:
         m.assert_called_once_with(
             "rsync -rtlv '--rsync-path=mkdir -p / && rsync' -e "
             '\'ssh -p 22 -i  -o "UserKnownHostsFile=/dev/null" '
-            '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\' /tmp/ user@1.1.1.1:/tmp'
+            '-o "StrictHostKeyChecking no" -o "ConnectTimeout=10"\' /tmp/ user@1.1.1.1:/tmp'
         )
         captured = capsys.readouterr()
         output = captured.out
@@ -462,7 +462,7 @@ def test_translate_ignore_rsync_path(capsys: pytest.CaptureFixture) -> None:
         u.translate()
         m.assert_called_once_with(
             'rsync -rtlv -e \'ssh -p 22 -i  -o "UserKnownHostsFile=/dev/null" '
-            '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\' /tmp/ user@1.1.1.1:/tmp'
+            '-o "StrictHostKeyChecking no" -o "ConnectTimeout=10"\' /tmp/ user@1.1.1.1:/tmp'
         )
 
     captured = capsys.readouterr()
@@ -662,6 +662,7 @@ def test_main() -> None:
             False,
             ignore_rsync_path=False,
             ignore_exclude=False,
+            exclude=[],
             include=[],
             dry_run=False,
         )
@@ -710,6 +711,7 @@ def test_main_with_ignore_rsync_path() -> None:
         False,
         ignore_rsync_path=True,
         ignore_exclude=False,
+        exclude=[],
         include=[],
         dry_run=False,
     )
@@ -766,3 +768,87 @@ def test_translate_debug_mode_with_failure(capsys: pytest.CaptureFixture[str]) -
         call_args = mock_print_error.call_args[0][0]
         assert "失败" in call_args
         assert "错误码: 1" in call_args
+
+
+def test_get_sync_option_skips_rsync_path_in_download_mode() -> None:
+    """下载模式下 _get_sync_option 不应生成 --rsync-path，且使用 10 秒连接超时。"""
+    sync = SyncFiles(
+        hostname="10.0.0.1",
+        user="root",
+        port=22,
+        identityfile="id_rsa",
+        src="/local/dest",
+        dest="/remote/src",
+        exclude=[],
+        delete=0,
+        is_download=True,
+    )
+
+    option = sync._get_sync_option()  # pylint: disable=protected-access
+
+    assert "--rsync-path" not in option
+    assert "ConnectTimeout=10" in option
+
+
+def test_translate_download_skips_rsync_path(capsys: pytest.CaptureFixture[str]) -> None:
+    """下载模式的命令不应包含 --rsync-path，避免远端执行本地路径的 mkdir。"""
+    sync = SyncFiles(
+        hostname="1.1.1.1",
+        user="user",
+        port=22,
+        identityfile="id_rsa",
+        src="/local/dest",
+        dest="/remote/src/",
+        exclude=[],
+        delete=0,
+        is_download=True,
+        dry_run=True,
+    )
+
+    sync.translate()
+
+    command = capsys.readouterr().out
+    assert "--rsync-path" not in command
+    assert "ConnectTimeout=10" in command
+
+
+def test_get_sync_option_ignore_exclude_keeps_cli_exclude() -> None:
+    """--ignore-exclude 时仅保留命令行传入的 exclude，忽略配置中的排除项。"""
+    sync = SyncFiles(
+        hostname="10.0.0.1",
+        user="root",
+        port=22,
+        identityfile="id_rsa",
+        src="/local/src",
+        dest="/remote/dest",
+        exclude=[".git", "node_modules", "*.log"],
+        delete=0,
+        ignore_exclude=True,
+        cli_exclude=["node_modules"],
+    )
+
+    option = sync._get_sync_option()  # pylint: disable=protected-access
+
+    assert "--exclude 'node_modules'" in option
+    assert ".git" not in option
+    assert "*.log" not in option
+
+
+def test_get_sync_option_ignore_exclude_without_cli_exclude() -> None:
+    """--ignore-exclude 且无命令行 exclude 时，不生成任何 --exclude。"""
+    sync = SyncFiles(
+        hostname="10.0.0.1",
+        user="root",
+        port=22,
+        identityfile="id_rsa",
+        src="/local/src",
+        dest="/remote/dest",
+        exclude=[".git"],
+        delete=0,
+        ignore_exclude=True,
+        cli_exclude=[],
+    )
+
+    option = sync._get_sync_option()  # pylint: disable=protected-access
+
+    assert "--exclude" not in option
