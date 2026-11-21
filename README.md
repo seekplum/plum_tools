@@ -242,7 +242,7 @@ pfind_imports -p ./project --json | jq -r '.modules[].package_name'
 
 ## pcompare
 
-比较两个及以上目录或文件，通过 Rich 表格分别展示一致、不一致的条目。
+比较两个及以上目录或文件，通过 Rich 表格默认仅展示不一致的条目。
 
 ```bash
 # 比较多个目录
@@ -250,6 +250,20 @@ pcompare ./backup_a ./backup_b ./backup_c
 
 # 比较多个文件，文件名可以不同
 pcompare ./config.yaml ./config.backup.yaml
+
+# 比较远端与本地目录，远端 ~ 在远端展开
+pcompare 'seekplum:~/Downloads' ~/Downloads
+
+# 按名称排除所有层级的依赖目录，按相对路径排除指定目录
+pcompare 'seekplum:~/Downloads' ~/Downloads \
+  --exclude-name node_modules --exclude-name .venv \
+  --exclude-path packages/web/dist
+
+# 同时展示一致条目
+pcompare ./backup_a ./backup_b --no-hide-identical
+
+# 比较多个远端文件，可混合本地路径
+pcompare 'user@server-a:/data/config.yaml' 'server-b:/data/config.yaml' ./config.yaml
 
 # 也可以直接以模块方式运行
 uv run python -m plum_tools.compare ./backup_a ./backup_b
@@ -259,7 +273,28 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 才算一致，`.` 表示输入的根条目。表格中的列编号对应输入路径；同一行内
 组号相同的条目一致，即使其他输入存在差异，也能识别其中相同的条目。
 
+`--hide-identical` 默认开启，隐藏一致的目录、文件和链接条目；
+`--no-hide-identical` 恢复展示一致、不一致两张表。汇总始终保留两类条目数量，
+隐藏一致项不影响整体比较结果和退出码。
+
+排除参数默认均为空，可重复传入，按字面精确匹配，不展开通配符：
+
+- `--exclude-name` 按目录名或文件名匹配任意层级，例如 `node_modules`、
+  `.venv`、`.DS_Store`。
+- `--exclude-path` 按相对于各输入根目录的路径匹配，例如
+  `packages/web/dist`，不会排除其他位置同名的 `dist`。
+
+两类规则对全部本地和远端输入生效，匹配目录时跳过整个子树，
+排除项不会被读取、计算摘要，也不参与比较和统计。
+规则仅作用于输入目录内的子项，不排除直接传入的根目录或文件；
+相对路径不能是绝对路径、`.` 或包含 `..`。
+
 普通文件先比较大小，同大小的文件分块计算完整 MD5，不比较修改时间或权限。
+远端支持 `[user@]host:path`（IPv6 地址使用方括号），连接使用系统 `ssh`，
+沿用 `~/.ssh/config` 中的主机别名、端口、密钥和跳板机配置。
+本机需要 `ssh`，远端需要 PATH 中可执行的 Python 3.9+，无需安装本工具。
+远端会计算全部普通文件的完整 MD5，仅传回文件清单和摘要，不下载文件内容。
+远端路径中的空格或 `~` 建议用引号包裹；名称包含冒号的本地路径用 `./` 或绝对路径表示。
 符号链接仅比较链接目标，不跟随链接。目录与文件不能混合输入；路径不存在、
 无法读取或遇到不支持的特殊文件时会报错。
 
