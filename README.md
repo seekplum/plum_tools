@@ -270,6 +270,7 @@ pfind_imports -p ./project --json | jq -r '.modules[].package_name'
 ## pcompare
 
 比较两个及以上目录或文件，通过 Rich 表格默认仅展示不一致的条目。
+扫描和比较期间显示加载动画，包含等待 SSH 及计算 MD5 的过程。
 
 ```bash
 # 比较多个目录
@@ -289,6 +290,15 @@ pcompare 'seekplum:~/Downloads' ~/Downloads \
 # 同时展示一致条目
 pcompare ./backup_a ./backup_b --no-hide-identical
 
+# 快速比较，默认只扫描 2 层（与 tree -L 2 的层级一致）
+pcompare ./backup_a ./backup_b --quick
+
+# 指定扫描层级，也可与 --quick 一起使用
+pcompare 'seekplum:~/Downloads' ~/Downloads -L 3
+
+# 关闭内置忽略规则，仍保留手动传入的排除项
+pcompare ./backup_a ./backup_b --no-default-excludes
+
 # 比较多个远端文件，可混合本地路径
 pcompare 'user@server-a:/data/config.yaml' 'server-b:/data/config.yaml' ./config.yaml
 
@@ -304,7 +314,9 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 `--no-hide-identical` 恢复展示一致、不一致两张表。汇总始终保留两类条目数量，
 隐藏一致项不影响整体比较结果和退出码。
 
-排除参数默认均为空，可重复传入，按字面精确匹配，不展开通配符：
+默认按名称忽略 `.DS_Store`、`.idea`、`node_modules`、`.venv`、`__pycache__`，
+可通过 `--no-default-excludes` 关闭。手动排除参数与内置规则合并，
+可重复传入，按字面精确匹配，不展开通配符：
 
 - `--exclude-name` 按目录名或文件名匹配任意层级，例如 `node_modules`、
   `.venv`、`.DS_Store`。
@@ -316,11 +328,18 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 规则仅作用于输入目录内的子项，不排除直接传入的根目录或文件；
 相对路径不能是绝对路径、`.` 或包含 `..`。
 
+`--quick` 默认只扫描 2 层；`--max-depth N`（简写 `-L N`）可单独使用，
+也可覆盖 `--quick` 的默认层级，`N` 必须为正整数。根目录是第 0 层，
+根目录内的直接子项是第 1 层。扫描到边界目录时保留目录条目，停止读取其子项，
+本地与远端均在扫描阶段限制深度。范围内的普通文件仍按大小及完整 MD5 比较。
+有限深度模式的报告标记为“当前深度内一致 / 不一致”，退出码也仅反映该范围，
+不保证未扫描的深层内容一致；不传这两个参数时仍完整递归。
+
 普通文件先比较大小，同大小的文件分块计算完整 MD5，不比较修改时间或权限。
 远端支持 `[user@]host:path`（IPv6 地址使用方括号），连接使用系统 `ssh`，
 沿用 `~/.ssh/config` 中的主机别名、端口、密钥和跳板机配置。
 本机需要 `ssh`，远端需要 PATH 中可执行的 Python 3.9+，无需安装本工具。
-远端会计算全部普通文件的完整 MD5，仅传回文件清单和摘要，不下载文件内容。
+远端会计算扫描范围内普通文件的完整 MD5，仅传回文件清单和摘要，不下载文件内容。
 远端路径中的空格或 `~` 建议用引号包裹；名称包含冒号的本地路径用 `./` 或绝对路径表示。
 符号链接仅比较链接目标，不跟随链接。目录与文件不能混合输入；路径不存在、
 无法读取或遇到不支持的特殊文件时会报错。
