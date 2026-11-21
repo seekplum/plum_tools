@@ -226,7 +226,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
 
     def _get_sync_option(self) -> str:
         """组合出同步文件的命令"""
-        option = ["rsync -rtv"]
+        option = ["rsync -rtlv"]
         known_host = "UserKnownHostsFile=/dev/null"
         host_key = "StrictHostKeyChecking no"
         timeout = "ConnectTimeout=2"

@@ -203,7 +203,7 @@ def test_translate_download_debug_and_localhost_paths(capsys: pytest.CaptureFixt
 
     mock_subprocess_call.assert_called_once_with(
         # flake8: noqa: E501
-        "rsync -rtv '--rsync-path=mkdir -p /local && rsync' --delete --exclude '.git' /remote/a/ /remote/b /local/file",
+        "rsync -rtlv '--rsync-path=mkdir -p /local && rsync' --delete --exclude '.git' /remote/a/ /remote/b /local/file",
         shell=True,  # nosec: B604
     )
     captured = capsys.readouterr()
@@ -266,7 +266,7 @@ def test_translate_dry_run_prints_command_without_syncing(
         else f"/local/project/ {user_prefix}/remote/project"
     )
     assert capsys.readouterr().out == (
-        f"rsync -rtv '--rsync-path=mkdir -p {directory} && rsync'{ssh_option} --delete --exclude '.git' {paths}\n"
+        f"rsync -rtlv '--rsync-path=mkdir -p {directory} && rsync'{ssh_option} --delete --exclude '.git' {paths}\n"
     )
 
 
@@ -329,10 +329,10 @@ def test_main_dry_run_previews_all_hosts_and_projects(
         '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\''
     )
     assert capsys.readouterr().out.splitlines() == [
-        "rsync -rtv /local/a /remote/a",
-        "rsync -rtv --delete --exclude '.git' /local/b /remote/b",
-        f"rsync -rtv {ssh_option} /local/a root@10.0.0.1:/remote/a",
-        f"rsync -rtv {ssh_option} --delete --exclude '.git' /local/b root@10.0.0.1:/remote/b",
+        "rsync -rtlv /local/a /remote/a",
+        "rsync -rtlv --delete --exclude '.git' /local/b /remote/b",
+        f"rsync -rtlv {ssh_option} /local/a root@10.0.0.1:/remote/a",
+        f"rsync -rtlv {ssh_option} --delete --exclude '.git' /local/b root@10.0.0.1:/remote/b",
     ]
 
 
@@ -436,7 +436,7 @@ def test_translate(capsys: pytest.CaptureFixture) -> None:
     with mock.patch("plum_tools.prn.run_cmd") as m:
         u.translate()
         m.assert_called_once_with(
-            "rsync -rtv '--rsync-path=mkdir -p / && rsync' -e "
+            "rsync -rtlv '--rsync-path=mkdir -p / && rsync' -e "
             '\'ssh -p 22 -i  -o "UserKnownHostsFile=/dev/null" '
             '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\' /tmp/ user@1.1.1.1:/tmp'
         )
@@ -461,7 +461,7 @@ def test_translate_ignore_rsync_path(capsys: pytest.CaptureFixture) -> None:
     with mock.patch("plum_tools.prn.run_cmd") as m:
         u.translate()
         m.assert_called_once_with(
-            'rsync -rtv -e \'ssh -p 22 -i  -o "UserKnownHostsFile=/dev/null" '
+            'rsync -rtlv -e \'ssh -p 22 -i  -o "UserKnownHostsFile=/dev/null" '
             '-o "StrictHostKeyChecking no" -o "ConnectTimeout=2"\' /tmp/ user@1.1.1.1:/tmp'
         )
 
