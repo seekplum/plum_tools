@@ -1356,6 +1356,78 @@ def test_resolve_project_reuses_repository(tmp_path: Path) -> None:
     assert first is second
 
 
+@pytest.mark.parametrize("order", [(0, 1, 2), (2, 1, 0), (1, 0, 2)])
+def test_resolve_project_keeps_sibling_repository_contexts_separate(tmp_path: Path, order: tuple[int, ...]) -> None:
+    """兄弟仓库不能把配置注入共用祖先，结果不受候选顺序影响。"""
+    python, node, plain = (tmp_path / name for name in ("python", "node", "plain"))
+    for root in (python, node, plain):
+        root.mkdir()
+    (python / "requirements.txt").write_text("pytest\n", encoding="utf-8")
+    nested = python / "frontend"
+    nested.mkdir()
+    (nested / "package.json").write_text('{"dependencies":{"demo":"1"}}', encoding="utf-8")
+    (node / "package.json").write_text('{"dependencies":{"demo":"1"}}', encoding="utf-8")
+    paths = (nested / "node_modules", node / "node_modules", plain / ".pytest_cache")
+    scanner = ProjectScanner(_make_scanner_state(), mock.MagicMock())
+    projects: dict = {}
+    for index in order:
+        item = Candidate(paths[index], tmp_path, Category.DEPS, "r", "rb", repository=(python, node, plain)[index])
+        actual = scanner.resolve_project(item, projects)
+        expected = Project.detect(paths[index].parent, Project())
+        assert actual == expected
+
+
+@pytest.mark.parametrize("relative", ["", "src", "src/nested"])
+def test_resolve_project_inherits_repository_above_scan_root(tmp_path: Path, relative: str) -> None:
+    """从仓库子目录扫描时仍沿用仓库根的重建依据。"""
+    (tmp_path / "go.mod").write_text("module example.com/demo\n", encoding="utf-8")
+    root = tmp_path / relative
+    root.mkdir(parents=True, exist_ok=True)
+    parent = root / "nested"
+    parent.mkdir()
+    scanner = ProjectScanner(_make_scanner_state(), mock.MagicMock())
+    item = Candidate(parent / ".pytest_cache", root, Category.PROJECT_CACHE, "r", "rb", repository=tmp_path)
+    assert scanner.resolve_project(item, {}) == Project.detect(tmp_path, Project())
+
+
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("changed", [False, True])
+def test_revalidate_multiple_repositories_matches_scan(tmp_path: Path, reverse: bool, changed: bool) -> None:
+    """批量扫描与保存计划后的复核必须使用相同的项目上下文。"""
+    roots = [tmp_path / name for name in ("python", "plain")]
+    for root in roots:
+        (root / ".git").mkdir(parents=True)
+        (root / ".pytest_cache").mkdir()
+        (root / ".pytest_cache" / "cache").write_text("cached\n", encoding="utf-8")
+    (roots[0] / "requirements.txt").write_text("pytest\n", encoding="utf-8")
+    repositories = {root: Repository(root, tracked=[]) for root in roots}
+    ignored = {root / ".pytest_cache": ".gitignore:1: .pytest_cache/" for root in roots}
+    state = CleanupState(parse_args(["scan", "--root", str(tmp_path)]), None)
+    scanner = ProjectScanner(state, FileInspector(state))
+    with (
+        mock.patch("plum_tools._cleanup.scanner.repository_at", side_effect=lambda path, **_: repositories.get(path)),
+        mock.patch.object(Repository, "ignored", return_value=ignored),
+    ):
+        scanner.scan_projects(tmp_path)
+    assert not state.errors
+    assert {item.path for item in state.candidates} == set(ignored)
+    state.candidates.sort(key=lambda item: str(item.path), reverse=reverse)
+    state.args.from_plan = str(tmp_path / "plan.json")
+    if changed:
+        (roots[1] / "go.mod").write_text("module example.com/demo\n", encoding="utf-8")
+    with (
+        mock.patch.object(Repository, "load", side_effect=repositories.__getitem__),
+        mock.patch.object(Repository, "ignored", return_value=ignored),
+        mock.patch("plum_tools._cleanup.execution.repository_at", side_effect=repositories.__getitem__),
+    ):
+        executor = CleanupExecutor(state, scanner.inspector, scanner)
+        if changed:
+            with pytest.raises(ValueError, match="项目配置或生成物规则已变化"):
+                executor.revalidate()
+        else:
+            executor.revalidate()
+
+
 # ---------- reporting.py: CleanupReporter ----------
 
 
@@ -2755,7 +2827,7 @@ def test_go_artifacts_keep_directories_and_other_projects(tmp_path: Path, name: 
 def test_go_test_binary_uses_readonly_version_probe(tmp_path: Path, name: str, version: str) -> None:
     """只读取 Go 构建信息，不能执行候选二进制。"""
     path = tmp_path / name
-    path.write_bytes(b"binary")
+    path.write_bytes(b"\x7fELFbinary")
     scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
     with (
         mock.patch("plum_tools._cleanup.scanner.shutil.which", return_value="/usr/bin/go"),
@@ -2771,7 +2843,7 @@ def test_go_test_binary_uses_readonly_version_probe(tmp_path: Path, name: str, v
 def test_go_test_binary_without_tool_kept(tmp_path: Path) -> None:
     """缺少 Go 时无法确认的测试文件继续保留。"""
     path = tmp_path / "demo.test"
-    path.write_bytes(b"binary")
+    path.write_bytes(b"\x7fELFbinary")
     scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
     with (
         mock.patch("plum_tools._cleanup.scanner.shutil.which", return_value=None),
@@ -2781,7 +2853,7 @@ def test_go_test_binary_without_tool_kept(tmp_path: Path) -> None:
     probe.assert_not_called()
 
 
-@pytest.mark.parametrize("name", ["coverage.out", "demo.test"])
+@pytest.mark.parametrize("name", ["coverage.out", "demo.test", "service"])
 @pytest.mark.parametrize("kind", ["symlink", "fifo"])
 def test_go_artifacts_do_not_read_links_or_special_files(tmp_path: Path, name: str, kind: str) -> None:
     """内容校验不得跟随软链接或阻塞在同名管道文件上。"""
@@ -2796,6 +2868,93 @@ def test_go_artifacts_do_not_read_links_or_special_files(tmp_path: Path, name: s
     with mock.patch("plum_tools._cleanup.scanner.query_text") as probe:
         assert scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=False) is None
     probe.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "header",
+    [
+        b"\x7fELF",
+        b"MZ\x90\0",
+        b"\xfe\xed\xfa\xce",
+        b"\xce\xfa\xed\xfe",
+        b"\xfe\xed\xfa\xcf",
+        b"\xcf\xfa\xed\xfe",
+        b"\xca\xfe\xba\xbe",
+        b"\xbe\xba\xfe\xca",
+        b"\xca\xfe\xba\xbf",
+        b"\xbf\xba\xfe\xca",
+        b"\0asm",
+    ],
+)
+def test_go_build_binary_requires_readonly_build_information(tmp_path: Path, header: bytes) -> None:
+    """不同平台的构建产物必须通过 Go 构建信息确认，且不要求可执行权限。"""
+    path = tmp_path / "custom-output"
+    path.write_bytes(header + b"payload")
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    with (
+        mock.patch("plum_tools._cleanup.scanner.shutil.which", return_value="/usr/bin/go"),
+        mock.patch("plum_tools._cleanup.scanner.query_text", return_value=f"{path}: go1.24.0") as probe,
+    ):
+        assert scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=False) == (
+            Category.BUILD,
+            "重新执行生成此文件的 go build 命令",
+        )
+    probe.assert_called_once_with(["/usr/bin/go", "version", str(path)])
+
+
+@pytest.mark.parametrize("name", ["service", "service.test", "service.exe"])
+@pytest.mark.parametrize("content", [b"", b"package main\n", b"#!/bin/sh\nexit 0\n"])
+def test_go_build_binary_keeps_text_without_probe(tmp_path: Path, name: str, content: bytes) -> None:
+    """源码、脚本和空文件不触发外部查询，即使名称或权限像构建产物。"""
+    path = tmp_path / name
+    path.write_bytes(content)
+    path.chmod(0o755)
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    with mock.patch("plum_tools._cleanup.scanner.query_text") as probe:
+        assert scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=False) is None
+    probe.assert_not_called()
+
+
+@pytest.mark.parametrize("failure", [ValueError("not Go"), OSError("unavailable")])
+def test_go_build_binary_keeps_unreadable_build_information(tmp_path: Path, failure: Exception) -> None:
+    """非 Go 可执行文件和查询失败不能中断同目录其他候选的发现。"""
+    path = tmp_path / "service"
+    path.write_bytes(b"\x7fELFpayload")
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    with (
+        mock.patch("plum_tools._cleanup.scanner.shutil.which", return_value="/usr/bin/go"),
+        mock.patch("plum_tools._cleanup.scanner.query_text", side_effect=failure) as probe,
+    ):
+        assert scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=False) is None
+    probe.assert_called_once_with(["/usr/bin/go", "version", str(path)])
+
+
+@pytest.mark.parametrize("restriction", ["none", "tracked", "not-ignored", "sensitive", "category", "non-go"])
+@pytest.mark.parametrize("relative", ["custom-output", "bin/server", "build/server.exe", "dist/linux/server"])
+def test_scan_go_build_keeps_mixed_directories(tmp_path: Path, restriction: str, relative: str) -> None:
+    """仅选择通过保护检查的 Go 二进制，混合输出目录中的其他文件继续保留。"""
+    if restriction != "non-go":
+        (tmp_path / "go.mod").write_text("module example.com/demo\n", encoding="utf-8")
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True, exist_ok=True)
+    if restriction == "sensitive":
+        path = path.parent / ".env"
+    path.write_bytes(b"\x7fELFpayload")
+    (path.parent / "keep.txt").write_text("user data\n", encoding="utf-8")
+    repo = Repository(tmp_path, tracked=[path.relative_to(tmp_path).as_posix()] if restriction == "tracked" else [])
+    categories = ["--category", "project-cache"] if restriction == "category" else []
+    state = CleanupState(parse_args(["scan", "--root", str(tmp_path), *categories]), None)
+    scanner = ProjectScanner(state, FileInspector(state))
+    ignored = {} if restriction == "not-ignored" else {path: ".gitignore:1: output"}
+    with (
+        mock.patch("plum_tools._cleanup.scanner.repository_at", return_value=repo),
+        mock.patch.object(Repository, "ignored", return_value=ignored),
+        mock.patch("plum_tools._cleanup.scanner.shutil.which", return_value="/usr/bin/go"),
+        mock.patch("plum_tools._cleanup.scanner.query_text", return_value=f"{path}: go1.24.0"),
+    ):
+        scanner.scan_projects(tmp_path)
+    assert not state.errors
+    assert [item.path for item in state.candidates] == ([path] if restriction == "none" else [])
 
 
 @pytest.mark.parametrize("protection", ["none", "tracked", "not-ignored", "sensitive"])

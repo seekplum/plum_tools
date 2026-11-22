@@ -162,6 +162,20 @@ PROJECT_CACHES = {
 }
 # Go 覆盖率文件还必须校验格式头，不能仅凭通用文件名清理。
 GO_COVERAGE_FILES = {"coverage.out", "coverage.txt", "cover.out", "coverprofile.out"}
+# 仅对 ELF、PE、Mach-O 和 WebAssembly 文件进一步查询 Go 构建信息。
+GO_BINARY_HEADERS = (
+    b"\x7fELF",
+    b"MZ",
+    b"\xfe\xed\xfa\xce",
+    b"\xce\xfa\xed\xfe",
+    b"\xfe\xed\xfa\xcf",
+    b"\xcf\xfa\xed\xfe",
+    b"\xca\xfe\xba\xbe",
+    b"\xbe\xba\xfe\xca",
+    b"\xca\xfe\xba\xbf",
+    b"\xbf\xba\xfe\xca",
+    b"\0asm",
+)
 # 构建目录还必须匹配相应项目标记。
 BUILD_DIRS = {
     "dist": {ProjectKind.PYTHON, ProjectKind.NODE},

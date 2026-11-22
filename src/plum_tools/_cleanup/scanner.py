@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from .constants import (
     BUILD_DIRS,
     DEPENDENCIES,
+    GO_BINARY_HEADERS,
     GO_COVERAGE_FILES,
     MANAGED_CACHE_NAMES,
     PROJECT_CACHES,
@@ -46,7 +47,8 @@ class ProjectScanner:
     def resolve_project(self, item: Candidate, projects: dict) -> Project:
         """复用父目录配置识别项目，检测预览后新增或替换的重建依据。"""
         project = Project()
-        if item.repository:
+        # 仅仓库内起扫时继承仓库根配置，避免污染多个仓库共用的祖先缓存。
+        if item.repository and is_within(item.root, item.repository):
             key = (item.repository, item.repository)
             if key not in projects:
                 projects[key] = Project.detect(item.repository, project)
@@ -126,7 +128,11 @@ class ProjectScanner:
         ):
             commands = "; ".join(project.rebuild.values())
             return Category.BUILD, commands + "；重新执行项目构建或测试命令"
-        return None
+        return (
+            self._go_file_match(path, Category.BUILD)
+            if not is_dir and ProjectKind.GO in project.kinds and Category.BUILD in self.state.args.categories
+            else None
+        )
 
     @staticmethod
     def _go_vendor_match(path: Path, project: Project) -> tuple[Category, str] | None:
@@ -149,11 +155,18 @@ class ProjectScanner:
             if header in {b"mode: set", b"mode: count", b"mode: atomic"}:
                 return category, "go test -coverprofile=<报告路径> ./..."
         elif category == Category.BUILD:
+            with path.open("rb") as stream:
+                if not stream.read(4).startswith(GO_BINARY_HEADERS):
+                    return None
             executable = shutil.which("go")
             if executable:
-                version = query_text([executable, "version", str(path)])
+                try:
+                    version = query_text([executable, "version", str(path)])
+                except (OSError, ValueError, subprocess.SubprocessError):
+                    return None
                 if version.startswith((f"{path}: go", f"{path}: devel ")):
-                    return category, "重新执行生成此文件的 go test -c 命令"
+                    command = "go test -c" if path.name.endswith((".test", ".test.exe")) else "go build"
+                    return category, f"重新执行生成此文件的 {command} 命令"
         return None
 
     def scan_projects(self, root: Path) -> None:
@@ -488,7 +501,12 @@ class ProjectScanner:
         if entry.is_symlink():
             return None
         is_dir = entry.is_dir(follow_symlinks=False)
-        if not is_dir and entry.name not in DEPENDENCIES and self._project_file_category(entry.name, project) is None:
+        if (
+            not is_dir
+            and entry.name not in DEPENDENCIES
+            and self._project_file_category(entry.name, project) is None
+            and not (ProjectKind.GO in project.kinds and Category.BUILD in self.state.args.categories)
+        ):
             return None
         path = Path(entry.path)
         if self.inspector.excluded(path, scope.root) or self.inspector.protected_name(path):
