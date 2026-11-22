@@ -13,6 +13,7 @@
 """
 
 import os
+import shlex
 import subprocess
 import sys
 
@@ -20,7 +21,7 @@ from .conf import LOCAL_HOST, PathConfig
 from .exceptions import RunCmdError, SystemTypeError
 from .utils.cli import call_process, cli_entry
 from .utils.parser import get_base_parser
-from .utils.printer import print_error, print_ok, print_text
+from .utils.printer import print_error, print_ok, print_text, print_warn
 from .utils.sshconf import merge_ssh_config
 from .utils.utils import YmlConfig, get_file_abspath, run_cmd
 
@@ -32,6 +33,7 @@ def get_project_conf(  # noqa: C901
     delete: int | None,
     exclude: list[str],
     is_download: bool = False,
+    resolve_src: bool = True,
 ) -> dict:
     """查询项目信息
 
@@ -92,7 +94,7 @@ def get_project_conf(  # noqa: C901
     if not isinstance(data["dest"], list):
         data["dest"] = [data["dest"]]
     # 上传时对本地路径取绝对路径
-    if not is_download:
+    if not is_download and resolve_src:
         try:
             data["src"] = [get_file_abspath(path) for path in data["src"]]
         except RunCmdError:
@@ -108,6 +110,27 @@ def get_project_conf(  # noqa: C901
         data["exclude"].extend(exclude)
 
     return data
+
+
+def is_directory_target(target: str) -> bool:
+    """识别显式目录路径，避免将主机别名误判为目录。"""
+    return target.startswith(("/", "~/", "./", "../")) or target in ("~", ".", "..")
+
+
+def get_directory_path(root: str, path: str) -> str:
+    """将配置路径映射到目录根路径内，拒绝越界路径及其他用户的家目录。"""
+    if path == "~":
+        relative = ""
+    elif path.startswith("~/"):
+        relative = path[2:]
+    elif path.startswith("~"):
+        raise ValueError(f"目录目标不支持其他用户的家目录：{path}")
+    else:
+        relative = path.lstrip("/")
+    directory = os.path.abspath(os.path.join(root, relative))
+    if os.path.commonpath([root, directory]) != root:
+        raise ValueError(f"配置路径超出目录根路径：{path}")
+    return directory
 
 
 def process_path(path: str, is_local: bool = False) -> str:
@@ -153,6 +176,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         include: list[str] | None = None,
         cli_exclude: list[str] | None = None,
         dry_run: bool = False,
+        directory_root: str = "",
     ):
         """文件上传功能
 
@@ -214,6 +238,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
         self._ignore_rsync_path = ignore_rsync_path
         self._ignore_exclude = ignore_exclude
         self._is_localhost = hostname == LOCAL_HOST
+        self._directory_root = directory_root
 
     @property
     def host_info(self) -> str:
@@ -258,8 +283,39 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             option.append(f"--exclude '{item}'")
         return " ".join(option)
 
+    def _translate_directory(self) -> None:
+        """同步目录目标，按实际来源处理缺项并保留目录内容复制语义。"""
+        local = self._src if isinstance(self._src, list) else [self._src]
+        remote = self._dest if isinstance(self._dest, list) else [self._dest]
+        local_paths = [os.path.abspath(os.path.expanduser(path)) for path in local]
+        try:
+            root_paths = [get_directory_path(self._directory_root, path) for path in remote]
+        except ValueError as exc:
+            print_error(str(exc))
+            raise SystemExit(1) from exc
+        sources, destinations = (root_paths, local_paths) if self._is_download else (local_paths, root_paths)
+        if len(destinations) != 1:
+            print_error("目录模式只能指定一个目标路径")
+            raise SystemExit(1)
+        existing = []
+        for path in sources:
+            if not os.path.lexists(path):
+                print_warn(f"源文件或目录不存在：{path}，跳过")
+                continue
+            existing.append(shlex.quote(process_path(path, is_local=True)))
+        if not existing:
+            return
+        destination = destinations[0]
+        if not self._dry_run:
+            os.makedirs(os.path.dirname(destination), exist_ok=True)
+        src, dest = " ".join(existing), shlex.quote(destination)
+        self._run_sync_command(src, dest, f"同步 {src} 到 {dest} ")
+
     def translate(self) -> None:
         """文件上传功能"""
+        if self._directory_root:
+            self._translate_directory()
+            return
         # pv = "|pv -lep -s 117 >/dev/null"
         pv = ""
 
@@ -279,6 +335,10 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             dest = f"{self.user_prefix}{self._dest}{pv}"
             text = f"上传 {self._src} 到 {self.host_info} {self._dest} "
 
+        self._run_sync_command(src, dest, text)
+
+    def _run_sync_command(self, src: str, dest: str, text: str) -> None:
+        """统一预览或执行同步命令，保留调试输出和中断处理。"""
         rsync = self._get_sync_option()
         cmd = f"{rsync} {src} {dest}"
         if self._dry_run:
@@ -360,8 +420,11 @@ def sync_files(  # pylint: disable=too-many-arguments,too-many-positional-argume
     :example include ["pkg"]
     """
     for host in host_list:
-        if host == LOCAL_HOST:
-            ssh_conf = {"hostname": host, "user": "", "port": 0, "identityfile": ""}
+        directory_root = os.path.abspath(os.path.expanduser(host)) if is_directory_target(host) else ""
+        if host == LOCAL_HOST or directory_root:
+            ssh_conf = {"hostname": LOCAL_HOST, "user": "", "port": 0, "identityfile": ""}
+            if directory_root:
+                ssh_conf["directory_root"] = directory_root
         else:
             ssh_conf = merge_ssh_config(host, host_type, user, port, identity_file)
         ssh_conf.update(
@@ -389,7 +452,10 @@ def main() -> None:  # pylint: disable=R0914
         "示例：\n"
         "  prn -s dev -p default --dry-run\n"
         "  prn -s dev -l ./src -r /srv/app --dry-run\n"
-        "  prn -s dev -p default --download\n\n"
+        "  prn -s dev -p default --download\n"
+        '  prn -s "/Volumes/SANDISK ELE/seekplum" -p python go --dry-run\n\n'
+        "目录目标：-s 支持 /、~/、./、../ 开头的路径，将项目 dest 映射到该根目录；\n"
+        "~/ 按目标根目录展开，绝对路径按根目录内的相同层级映射；--download 反向恢复，缺项跳过。\n"
         "配置：项目及默认 SSH 参数读取 ~/.plum_tools.yaml；\n"
         "SSH 参数优先使用命令行值，其次为主机别名配置，最后为 default_ssh_conf。"
     )
@@ -554,7 +620,13 @@ def main() -> None:  # pylint: disable=R0914
     is_download, is_debug = args.download, args.debug
     ignore_rsync_path, ignore_exclude, include = args.ignore_rsync_path, args.ignore_exclude, args.include
 
-    projects_conf = [get_project_conf(project, src, dest, delete, exclude, is_download) for project in projects]
+    if all(is_directory_target(host) for host in host_list):
+        projects_conf = [
+            get_project_conf(project, src, dest, delete, exclude, is_download, resolve_src=False)
+            for project in projects
+        ]
+    else:
+        projects_conf = [get_project_conf(project, src, dest, delete, exclude, is_download) for project in projects]
     sync_files(
         host_list,
         host_type,

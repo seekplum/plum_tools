@@ -19,7 +19,9 @@ from plum_tools.conf import LOCAL_HOST, PathConfig
 from plum_tools.exceptions import RunCmdError, SystemTypeError
 from plum_tools.prn import (
     SyncFiles,
+    get_directory_path,
     get_project_conf,
+    is_directory_target,
     main,
     process_path,
     process_paths,
@@ -852,3 +854,213 @@ def test_get_sync_option_ignore_exclude_without_cli_exclude() -> None:
     option = sync._get_sync_option()  # pylint: disable=protected-access
 
     assert "--exclude" not in option
+
+
+@pytest.mark.parametrize(
+    ("target", "expected"),
+    [
+        ("/abs/path", True),
+        ("~/home", True),
+        ("./rel", True),
+        ("../rel", True),
+        ("~", True),
+        (".", True),
+        ("..", True),
+        ("dev", False),
+        ("1.1.1.1", False),
+        ("~user", False),
+    ],
+)
+def test_is_directory_target(target: str, expected: bool) -> None:
+    assert is_directory_target(target) is expected
+
+
+@pytest.mark.parametrize(
+    ("root", "path", "expected"),
+    [
+        ("/srv/app", "~", "/srv/app"),
+        ("/srv/app", "~/python", "/srv/app/python"),
+        ("/srv/app", "/srv/app/go", "/srv/app/srv/app/go"),
+        ("/srv/app", "go", "/srv/app/go"),
+        ("/srv/app", "python/go", "/srv/app/python/go"),
+    ],
+)
+def test_get_directory_path_maps_paths(root: str, path: str, expected: str) -> None:
+    assert get_directory_path(root, path) == expected
+
+
+@pytest.mark.parametrize(
+    ("root", "path", "message"),
+    [
+        ("/srv/app", "~user", "目录目标不支持其他用户的家目录"),
+        ("/srv/app", "../../etc", "配置路径超出目录根路径"),
+    ],
+)
+def test_get_directory_path_rejects_invalid_path(root: str, path: str, message: str) -> None:
+    with pytest.raises(ValueError, match=message):
+        get_directory_path(root, path)
+
+
+def test_get_project_conf_skips_abspath_when_resolve_src_false() -> None:
+    with (
+        mock.patch(
+            "plum_tools.utils.utils.YmlConfig.parse_config_yml",
+            return_value={"projects": {"demo": {"src": "/tmp/src", "dest": "/tmp/dest"}}},
+        ),
+        mock.patch("plum_tools.prn.get_file_abspath") as mock_get_file_abspath,
+    ):
+        data = get_project_conf("demo", [], [], None, [], is_download=False, resolve_src=False)
+
+    mock_get_file_abspath.assert_not_called()
+    assert data == {"src": ["/tmp/src"], "dest": ["/tmp/dest"], "exclude": [], "delete": 0}
+
+
+def test_translate_directory_upload(capsys: pytest.CaptureFixture[str]) -> None:
+    sync = SyncFiles(LOCAL_HOST, "", 0, "", "/tmp/src", "/srv/app/go", [], 0, directory_root="/srv/app")
+
+    with (
+        mock.patch("plum_tools.prn.os.path.lexists", return_value=True),
+        mock.patch("plum_tools.prn.os.path.isdir", return_value=False),
+        mock.patch("plum_tools.prn.os.makedirs") as mock_makedirs,
+        mock.patch("plum_tools.prn.run_cmd") as mock_run_cmd,
+    ):
+        sync.translate()
+
+    mock_run_cmd.assert_called_once_with("rsync -rtlv /tmp/src /srv/app/srv/app/go")
+    mock_makedirs.assert_called_once_with("/srv/app/srv/app", exist_ok=True)
+    assert "同步 /tmp/src 到 /srv/app/srv/app/go 成功" in capsys.readouterr().out
+
+
+def test_translate_directory_download(capsys: pytest.CaptureFixture[str]) -> None:
+    sync = SyncFiles(
+        LOCAL_HOST, "", 0, "", "/tmp/src", "/srv/app/go", [], 0, is_download=True, directory_root="/srv/app"
+    )
+
+    with (
+        mock.patch("plum_tools.prn.os.path.lexists", return_value=True),
+        mock.patch("plum_tools.prn.os.path.isdir", return_value=False),
+        mock.patch("plum_tools.prn.os.makedirs") as mock_makedirs,
+        mock.patch("plum_tools.prn.run_cmd") as mock_run_cmd,
+    ):
+        sync.translate()
+
+    mock_run_cmd.assert_called_once_with("rsync -rtlv /srv/app/srv/app/go /tmp/src")
+    mock_makedirs.assert_called_once_with("/tmp", exist_ok=True)
+    assert "同步 /srv/app/srv/app/go 到 /tmp/src 成功" in capsys.readouterr().out
+
+
+def test_translate_directory_dry_run(capsys: pytest.CaptureFixture[str]) -> None:
+    sync = SyncFiles(LOCAL_HOST, "", 0, "", "/tmp/src", "/srv/app/go", [], 0, dry_run=True, directory_root="/srv/app")
+
+    with (
+        mock.patch("plum_tools.prn.os.path.lexists", return_value=True),
+        mock.patch("plum_tools.prn.os.path.isdir", return_value=False),
+        mock.patch("plum_tools.prn.os.makedirs") as mock_makedirs,
+        mock.patch("plum_tools.prn.run_cmd") as mock_run_cmd,
+    ):
+        sync.translate()
+
+    mock_run_cmd.assert_not_called()
+    mock_makedirs.assert_not_called()
+    assert capsys.readouterr().out == "rsync -rtlv /tmp/src /srv/app/srv/app/go\n"
+
+
+def test_translate_directory_multiple_dest_exits() -> None:
+    sync = SyncFiles(
+        LOCAL_HOST, "", 0, "", "/tmp/src", cast(str, ["/srv/app/go1", "/srv/app/go2"]), [], 0, directory_root="/srv/app"
+    )
+
+    # fmt: off
+    with (
+        mock.patch("plum_tools.prn.print_error") as mock_print_error,
+    ):
+        # fmt: on
+        with pytest.raises(SystemExit) as exc_info:
+            sync.translate()
+
+    assert exc_info.value.code == 1
+    mock_print_error.assert_called_once_with("目录模式只能指定一个目标路径")
+
+
+def test_translate_directory_skips_missing_source(capsys: pytest.CaptureFixture[str]) -> None:
+    sync = SyncFiles(
+        LOCAL_HOST, "", 0, "", cast(str, ["/tmp/missing", "/tmp/src"]), "/srv/app/go", [], 0, directory_root="/srv/app"
+    )
+
+    def lexists(path: str) -> bool:
+        return path == "/tmp/src"
+
+    with (
+        mock.patch("plum_tools.prn.os.path.lexists", side_effect=lexists),
+        mock.patch("plum_tools.prn.os.path.isdir", return_value=False),
+        mock.patch("plum_tools.prn.os.makedirs") as mock_makedirs,
+        mock.patch("plum_tools.prn.run_cmd") as mock_run_cmd,
+        mock.patch("plum_tools.prn.print_warn") as mock_print_warn,
+    ):
+        sync.translate()
+
+    mock_run_cmd.assert_called_once_with("rsync -rtlv /tmp/src /srv/app/srv/app/go")
+    mock_print_warn.assert_called_once_with("源文件或目录不存在：/tmp/missing，跳过")
+    mock_makedirs.assert_called_once_with("/srv/app/srv/app", exist_ok=True)
+
+
+def test_translate_directory_exits_on_out_of_root() -> None:
+    sync = SyncFiles(LOCAL_HOST, "", 0, "", "/tmp/src", "/../../etc", [], 0, directory_root="/srv/app")
+
+    # fmt: off
+    with (
+        mock.patch("plum_tools.prn.print_error") as mock_print_error,
+    ):
+        # fmt: on
+        with pytest.raises(SystemExit) as exc_info:
+            sync.translate()
+
+    assert exc_info.value.code == 1
+    mock_print_error.assert_called_once_with("配置路径超出目录根路径：/../../etc")
+
+
+def test_sync_files_directory_root_uses_local() -> None:
+    projects_conf = [{"src": "/tmp/src", "dest": "/srv/app/go", "exclude": [], "delete": 0}]
+    sync_instances = [mock.Mock()]
+
+    with (
+        mock.patch("plum_tools.prn.merge_ssh_config") as mock_merge,
+        mock.patch("plum_tools.prn.SyncFiles", side_effect=sync_instances) as mock_sync_files,
+    ):
+        sync_files(["/srv/app"], "default", "root", 22, "id_rsa", projects_conf)
+
+    mock_merge.assert_not_called()
+    sync_instances[0].translate.assert_called_once_with()
+    kwargs = mock_sync_files.call_args.kwargs
+    assert kwargs["directory_root"] == "/srv/app"
+    assert kwargs["hostname"] == LOCAL_HOST
+
+
+def test_main_directory_target_skips_abspath() -> None:
+    argv = ["prn", "-s", "/srv/app", "--dry-run"]
+    project_conf = {"src": ["/tmp/src"], "dest": ["/srv/app/go"]}
+    with (
+        mock.patch("sys.argv", argv),
+        mock.patch("plum_tools.prn.get_project_conf", return_value=project_conf) as mock_project,
+        mock.patch("plum_tools.prn.sync_files") as mock_sync,
+    ):
+        main()
+
+    call = mock_project.call_args
+    assert call.args == ("default", "", "", None, [], False)
+    assert call.kwargs == {"resolve_src": False}
+    mock_sync.assert_called_once_with(
+        ["/srv/app"],
+        "default",
+        "",
+        0,
+        "",
+        [project_conf],
+        False,
+        False,
+        ignore_rsync_path=False,
+        ignore_exclude=False,
+        exclude=[],
+        include=[],
+        dry_run=True,
+    )
