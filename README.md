@@ -118,7 +118,7 @@ Git 仓库和文件比较表格精简边框，仓库状态使用同行排列；
 
 `--compact` 只影响展示，不改变扫描、比较、执行操作或退出码。
 与 `--json` 同时使用时，JSON 内容和格式保持原样；
-`pping` 输出重定向或通过管道传递时，仍保持每行一个 IP。
+`pping` 未启用 `--json` 时，输出重定向或通过管道传递仍保持每行一个 IP。
 `prn`、`pssh` 和 `gitstash` 未提供紧凑模式。
 
 ## gitrepo
@@ -503,11 +503,19 @@ prn --help
 ```bash
 pping -p 192.168.1
 pping -t default
+pping -p 192.168.1 --json | jq -r '.reachable[]'
 pping --help
 ```
 
 `-p` 指定网段前三段；未传入时读取主机类型对应的网段配置。
 主机类型默认 `default`，可选值由 `host_type_<类型>` 配置决定。
+
+`--json` 忽略 `--compact`，stdout 只输出一个 JSON 对象，进度条写入 stderr。
+顶层包含 `schema_version`（当前为 `1`）、`command`（`pping`）、
+`options`、`summary` 和 `reachable`。
+`options` 记录 `host_type` 及补全末尾句点后的实际网段 `prefix_host`；
+`summary` 包含 `target_count`、`reachable_count` 和 `unreachable_count`。
+`reachable` 按 IP 数值顺序保存可达地址，没有可达地址时为空数组。
 
 ## 详细文档
 

@@ -10,6 +10,8 @@
 #=============================================================================
 """
 
+import json
+
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.text import Text
@@ -38,9 +40,9 @@ def ping(ip: str) -> str | None:
     return ip
 
 
-def run(host_type: str, prefix_host: str, *, compact: bool = False) -> None:
+def run(host_type: str, prefix_host: str, *, compact: bool = False, json_output: bool = False) -> None:
     """探测 prefix_host 指定网段，为空时读取 host_type 配置。
-    按地址顺序输出可达 IP；compact 仅在终端分栏，重定向时保持逐行输出。
+    按地址顺序输出可达 IP；json_output 输出 JSON，否则 compact 仅在终端分栏。
     """
     if not prefix_host:
         prefix_host = get_prefix_host_ip(host_type)
@@ -74,6 +76,25 @@ def run(host_type: str, prefix_host: str, *, compact: bool = False) -> None:
                 reachable.add(ip)
             progress.update(task, advance=1, reachable=len(reachable))
     addresses = [ip for ip in targets if ip in reachable]
+    if json_output:
+        print(
+            json.dumps(
+                {
+                    "schema_version": 1,
+                    "command": "pping",
+                    "options": {"host_type": host_type, "prefix_host": prefix_host},
+                    "summary": {
+                        "target_count": len(targets),
+                        "reachable_count": len(addresses),
+                        "unreachable_count": len(targets) - len(addresses),
+                    },
+                    "reachable": addresses,
+                },
+                ensure_ascii=False,
+                indent=2,
+            )
+        )
+        return
     output_console = Console()
     if compact and output_console.is_terminal:
         print_columns(output_console, [Text(ip) for ip in addresses])
@@ -87,7 +108,9 @@ def main() -> None:
     """程序主入口"""
     parser = get_base_parser()
     parser.description = "并发探测指定网段内 1 至 254 号地址，输出可达 IP。"  # noqa
-    parser.epilog = "示例：\n  pping -p 192.168.1\n  pping -t default"
+    parser.epilog = (
+        "示例：\n  pping -p 192.168.1\n  pping -t default\n  pping -p 192.168.1 --json | jq -r '.reachable[]'"
+    )
     parser.add_argument(
         "-t",
         "--type",
@@ -108,8 +131,16 @@ def main() -> None:
     )
 
     add_compact_argument(parser)
+    parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="以 JSON 输出探测结果，忽略 --compact；进度条写入标准错误",
+    )
     args = parser.parse_args()
+    display_options = {}
     if args.compact is True:
-        run(args.type, args.prefix_host, compact=True)
-    else:
-        run(args.type, args.prefix_host)
+        display_options["compact"] = True
+    if args.json_output is True:
+        display_options["json_output"] = True
+    run(args.type, args.prefix_host, **display_options)
