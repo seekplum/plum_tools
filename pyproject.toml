@@ -12,6 +12,7 @@ dependencies = [
   "paramiko",
   "pynacl>=1.6.2",
   "rich",
+  "trash-cli",
 ]
 requires-python = ">=3.11,<3.15"
 classifiers = [
@@ -48,6 +49,8 @@ pipmi = "plum_tools.pipmi:main"
 prn = "plum_tools.prn:main"
 pfind_imports = "plum_tools.find_imports:main"
 pcompare = "plum_tools.compare:main"
+agent_usage_report = "plum_tools.agent_usage_report:main"
+pclean = "plum_tools.cleanup:main"
 
 [project.urls]
 Homepage = "https://github.com/seekplum/plum_tools"
