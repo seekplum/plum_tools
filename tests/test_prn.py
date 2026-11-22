@@ -264,7 +264,7 @@ def test_translate_dry_run_prints_command_without_syncing(
         if is_download
         else f"/local/project/ {user_prefix}/remote/project"
     )
-    rsync_path = "" if is_download else f" '--rsync-path=mkdir -p {directory} && rsync'"
+    rsync_path = "" if is_download or hostname == LOCAL_HOST else f" '--rsync-path=mkdir -p {directory} && rsync'"
     assert capsys.readouterr().out == (f"rsync -rtlv{rsync_path}{ssh_option} --delete --exclude '.git' {paths}\n")
 
 

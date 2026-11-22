@@ -240,7 +240,7 @@ class SyncFiles:  # pylint: disable=too-many-instance-attributes
             ssh_cmd = f"ssh -p {self._port}"
         else:
             ssh_cmd = "ssh"
-        if not self._ignore_rsync_path and not self._is_download:
+        if not self._ignore_rsync_path and not self._is_download and not self._is_localhost:
             directory = os.path.dirname(self._dest)
             if not directory:
                 directory = self._dest
