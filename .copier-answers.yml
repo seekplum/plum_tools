@@ -12,4 +12,4 @@ use_docker: false
 use_drone_ci: false
 use_github_ci: true
 use_gitlab_ci: false
-version: 0.8.1
+version: 0.8.2
