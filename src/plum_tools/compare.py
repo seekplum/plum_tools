@@ -1,4 +1,4 @@
-"""递归比较多个目录或文件，使用 Rich 分开展示一致和不一致的条目。"""
+"""递归比较多个目录或文件，通过 Rich 表格或 JSON 展示比较结果。"""
 
 import json
 import os
@@ -333,6 +333,56 @@ def print_report(  # pylint: disable=too-many-arguments,too-many-locals
     console.print(f"{scope}{result}：{CompareResult.IDENTICAL} {same} 项，{CompareResult.DIFFERENT} {different} 项。")
 
 
+def _print_json_report(
+    paths: Sequence[str | Path], comparisons: Sequence[Comparison], options: dict[str, object]
+) -> None:
+    """将输入 paths、全部 comparisons 及比较 options 以版本化 JSON 写入 stdout。"""
+    same = sum(item.result == CompareResult.IDENTICAL for item in comparisons)
+    print(
+        json.dumps(
+            {
+                "schema_version": 1,
+                "command": "pcompare",
+                "paths": [
+                    str(path) if _split_remote(path) is not None else str(Path(path).expanduser().absolute())
+                    for path in paths
+                ],
+                "options": options,
+                "summary": {
+                    "entry_count": len(comparisons),
+                    "identical_count": same,
+                    "different_count": len(comparisons) - same,
+                    "identical": same == len(comparisons),
+                },
+                "entries": [
+                    {
+                        "path": str(item.path),
+                        "identical": item.result == CompareResult.IDENTICAL,
+                        "result": item.result,
+                        "groups": item.groups,
+                        "entries": [
+                            (
+                                {
+                                    "path": str(entry.path),
+                                    "kind": entry.kind,
+                                    "size": entry.size,
+                                    "target": entry.target,
+                                }
+                                if entry is not None
+                                else None
+                            )
+                            for entry in item.entries
+                        ],
+                    }
+                    for item in comparisons
+                ],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+
+
 @cli_entry
 def main() -> None:
     """解析路径参数并展示结果；退出码 0 表示一致，1 表示差异，2 表示错误。"""
@@ -349,6 +399,7 @@ def main() -> None:
         "  pcompare ./old ./new --exclude-name '*.log*'\n"
         f"  pcompare ./old ./new --exclude-path packages/web/dist --show {ShowMode.ALL}\n"
         f"  pcompare ./old ./new --show {ShowMode.IDENTICAL}\n"
+        "  pcompare ./old ./new --json | jq -r '.entries[] | select(.identical) | .path'\n"
         f"  pcompare ./old ./new --show {ShowMode.ALL} --display-depth 2\n"
         "  pcompare ./old ./new --quick\n"
         "  pcompare ./old ./new -L 3 --no-default-excludes\n\n"
@@ -358,6 +409,12 @@ def main() -> None:
         f"{CompareExitCode.ERROR} 输入或读取失败。"
     )
     parser.add_argument("paths", nargs="+", metavar="路径", help="要比较的本地或 host:path 路径，至少两个")
+    parser.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="以 JSON 输出全部比较结果，忽略展示选项；加载动画写入标准错误",
+    )
     parser.add_argument(
         "--ignore-case",
         action="store_true",
@@ -402,7 +459,7 @@ def main() -> None:
     if args.display_depth is not None and args.display_depth < 0:
         parser.error("展示深度必须是大于等于 0 的整数")
     max_depth = args.max_depth if args.max_depth is not None else (2 if args.quick else None)
-    console = Console()
+    console = Console(stderr=args.json_output)
     try:
         with console.status("正在扫描并比较…", spinner="dots"):
             comparisons = compare_paths(
@@ -413,16 +470,29 @@ def main() -> None:
                 max_depth=max_depth,
                 ignore_case=args.ignore_case,
             )
-        print_report(
-            args.paths,
-            comparisons,
-            console,
-            show=args.show,
-            compact=args.compact,
-            max_depth=max_depth,
-            ignore_case=args.ignore_case,
-            display_depth=args.display_depth,
-        )
+        if args.json_output:
+            _print_json_report(
+                args.paths,
+                comparisons,
+                {
+                    "exclude_names": args.exclude_name,
+                    "exclude_paths": args.exclude_path,
+                    "default_excludes": args.default_excludes,
+                    "max_depth": max_depth,
+                    "ignore_case": args.ignore_case,
+                },
+            )
+        else:
+            print_report(
+                args.paths,
+                comparisons,
+                console,
+                show=args.show,
+                compact=args.compact,
+                max_depth=max_depth,
+                ignore_case=args.ignore_case,
+                display_depth=args.display_depth,
+            )
     except (OSError, ValueError) as exc:
         Console(stderr=True).print(Text(f"比较失败：{exc}", style="red"))
         raise SystemExit(CompareExitCode.ERROR) from exc
