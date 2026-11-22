@@ -109,16 +109,28 @@ class ToolScanner:
                         ],
                     )
                 elif name == Tool.GO:
-                    task = self.add_cache_task(
-                        name,
-                        [executable, "env", "GOCACHE"],
-                        [executable, "clean", "-cache"],
-                    )
-                    if task:
-                        task.command.pop()
-                        task.environment["GOCACHE"] = str(task.cache)
+                    self._scan_go(executable)
             except (OSError, ValueError, subprocess.SubprocessError) as exc:
                 self.state.add_note(name, str(exc))
+
+    def _scan_go(self, executable: str) -> None:
+        """分别固定 Go 构建与模块缓存，单个范围不可用时仍检查另一范围。"""
+        for name, variable, flags, description in (
+            ("go", "GOCACHE", ["-cache", "-testcache", "-fuzzcache"], "Go 构建、测试结果与模糊测试语料缓存"),
+            ("go-modcache", "GOMODCACHE", ["-modcache"], "Go 共享模块下载缓存（含解压的依赖源码）"),
+        ):
+            try:
+                task = self.add_cache_task(name, [executable, "env", variable], [executable, "clean", *flags])
+                if task:
+                    # Go 通过环境变量限定清理范围，不接受缓存目录作为位置参数。
+                    task.command.pop()
+                    task.environment[variable] = str(task.cache)
+                    task.scope = f"{description}: {task.cache}"
+                    task.preview += (
+                        "；模糊测试缓存移除后需重新积累语料" if variable == "GOCACHE" else "；影响共享缓存的所有项目"
+                    )
+            except (OSError, ValueError, subprocess.SubprocessError) as exc:
+                self.state.add_note(f"go {variable}", str(exc))
 
     def scan_system_cache(self) -> None:
         """为 Linux 软件包下载缓存生成原生命令，保留软件和系统状态。"""

@@ -65,6 +65,7 @@ class ProjectKind(StrEnum):
 
     NODE = "node"
     PYTHON = "python"
+    GO = "go"
     RUST = "rust"
     MAVEN = "maven"
     GRADLE = "gradle"
@@ -143,7 +144,7 @@ PRUNE_CATEGORIES = {Category.TOOLS, Category.SYSTEM_CACHE, Category.DOCKER}
 # Homebrew 下载缓存仍逐文件进入计划，其余工具使用原生命令。
 PRUNE_TOOLS = tuple(tool for tool in Tool if tool != Tool.BREW)
 # 依赖目录仅在选中 deps（包括默认 all）且可按配置重建时进入候选清单。
-DEPENDENCIES = {"node_modules", ".node_modules", ".venv", "venv", ".tox", ".nox"}
+DEPENDENCIES = {"node_modules", ".node_modules", ".venv", "venv", ".tox", ".nox", "vendor"}
 # 这些名称提供足够明确的缓存语义，其余名称需要显式添加。
 PROJECT_CACHES = {
     "__pycache__",
@@ -159,6 +160,8 @@ PROJECT_CACHES = {
     ".tsbuildinfo",
     ".nyc_output",
 }
+# Go 覆盖率文件还必须校验格式头，不能仅凭通用文件名清理。
+GO_COVERAGE_FILES = {"coverage.out", "coverage.txt", "cover.out", "coverprofile.out"}
 # 构建目录还必须匹配相应项目标记。
 BUILD_DIRS = {
     "dist": {ProjectKind.PYTHON, ProjectKind.NODE},
@@ -194,6 +197,8 @@ PROJECT_MARKERS = {
     "Pipfile.lock",
     "tox.ini",
     "noxfile.py",
+    "go.mod",
+    "go.sum",
     "Cargo.toml",
     "Cargo.lock",
     "pom.xml",
@@ -228,6 +233,7 @@ PYTHON_INSTALL_COMMANDS = (
 )
 # 构建命令只用于说明重建方式，不会在清理流程中执行。
 BUILD_COMMANDS = (
+    ("go.mod", ProjectKind.GO, "go build ./..."),
     ("Cargo.toml", ProjectKind.RUST, "cargo build"),
     ("pom.xml", ProjectKind.MAVEN, "mvn package"),
     ("build.gradle", ProjectKind.GRADLE, "gradle build"),

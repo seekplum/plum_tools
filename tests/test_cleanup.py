@@ -2673,3 +2673,291 @@ def test_scan_project_roots_filters_skipped(tmp_path: Path) -> None:
     with mock.patch.object(ProjectScanner, "scan_projects"):
         scanner._scan_project_roots()
     assert state.candidates == [kept]
+
+
+# ---------- Go 项目、产物与共享缓存 ----------
+
+
+def test_project_detect_go_records_module_files(tmp_path: Path) -> None:
+    """模块声明和校验文件共同绑定 Go 项目的重建依据。"""
+    (tmp_path / "go.mod").write_text("module example.com/demo\n\ngo 1.22\n", encoding="utf-8")
+    (tmp_path / "go.sum").write_text("example.com/lib v1.0.0 h1:abc\n", encoding="utf-8")
+    project = Project.detect(tmp_path, Project())
+    assert project.kinds == {ProjectKind.GO}
+    assert project.rebuild == {ProjectKind.GO: "go build ./..."}
+    assert project.manifests == {tmp_path / name: signature((tmp_path / name).stat()) for name in ("go.mod", "go.sum")}
+
+
+@pytest.mark.parametrize("marker", ["go.sum", "main.go"])
+def test_project_detect_go_requires_module(tmp_path: Path, marker: str) -> None:
+    """孤立校验文件和源码不能证明依赖可重建。"""
+    (tmp_path / marker).write_text("x", encoding="utf-8")
+    inherited = Project()
+    assert Project.detect(tmp_path, inherited) is inherited
+
+
+@pytest.mark.parametrize("invalid", ["missing", "symlink", "nested", "non-go", "category"])
+def test_go_vendor_requires_rebuild_evidence(tmp_path: Path, invalid: str) -> None:
+    """依赖目录必须直接属于模块且具有真实的 vendor 清单。"""
+    vendor = tmp_path / "vendor"
+    vendor.mkdir()
+    marker = vendor / "modules.txt"
+    if invalid == "symlink":
+        target = tmp_path / "modules.txt"
+        target.write_text("# example.com/lib v1.0.0\n", encoding="utf-8")
+        marker.symlink_to(target)
+    elif invalid != "missing":
+        marker.write_text("# example.com/lib v1.0.0\n", encoding="utf-8")
+    project = Project(
+        kinds={ProjectKind.GO},
+        manifests={tmp_path / ("other" if invalid == "nested" else "") / "go.mod": (1, 2, 3, 4, 5)},
+        rebuild={ProjectKind.GO: "go build ./..."},
+    )
+    if invalid == "non-go":
+        project = Project(kinds={ProjectKind.NODE})
+    categories = {Category.BUILD} if invalid == "category" else {Category.DEPS}
+    scanner = ProjectScanner(_make_scanner_state(categories=categories), _make_scan_inspector())
+    assert scanner.project_match(vendor, project, is_dir=True) is None
+
+
+@pytest.mark.parametrize("mode", ["set", "count", "atomic"])
+@pytest.mark.parametrize("name", ["coverage.out", "coverage.txt", "cover.out", "demo.coverprofile"])
+def test_go_coverage_requires_valid_header(tmp_path: Path, mode: str, name: str) -> None:
+    """常见覆盖率报告需要具有 Go 格式头。"""
+    report = tmp_path / name
+    report.write_text(f"mode: {mode}\nexample.com/demo/main.go:1.1,2.1 1 1\n", encoding="utf-8")
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    match = scanner.project_match(report, Project(kinds={ProjectKind.GO}), is_dir=False)
+    assert match == (Category.PROJECT_CACHE, "go test -coverprofile=<报告路径> ./...")
+
+
+@pytest.mark.parametrize("content", [b"", b"user data\n", b"mode: other\n", b"mode: atomic plus data\n"])
+def test_go_coverage_keeps_unrecognized_content(tmp_path: Path, content: bytes) -> None:
+    """同名普通文件不应被视为覆盖率产物。"""
+    report = tmp_path / "coverage.out"
+    report.write_bytes(content)
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    assert scanner.project_match(report, Project(kinds={ProjectKind.GO}), is_dir=False) is None
+
+
+@pytest.mark.parametrize("name", ["coverage.out", "demo.test", "demo.test.exe"])
+def test_go_artifacts_keep_directories_and_other_projects(tmp_path: Path, name: str) -> None:
+    """产物名称不能直接匹配目录或其他语言项目。"""
+    path = tmp_path / name
+    path.mkdir()
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    assert scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=True) is None
+    assert scanner.project_match(path, Project(kinds={ProjectKind.NODE}), is_dir=False) is None
+
+
+@pytest.mark.parametrize("name", ["demo.test", "demo.test.exe"])
+@pytest.mark.parametrize("version", ["go1.24.0", "devel go1.25-abc", ""])
+def test_go_test_binary_uses_readonly_version_probe(tmp_path: Path, name: str, version: str) -> None:
+    """只读取 Go 构建信息，不能执行候选二进制。"""
+    path = tmp_path / name
+    path.write_bytes(b"binary")
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    with (
+        mock.patch("plum_tools._cleanup.scanner.shutil.which", return_value="/usr/bin/go"),
+        mock.patch(
+            "plum_tools._cleanup.scanner.query_text", return_value=f"{path}: {version}" if version else ""
+        ) as probe,
+    ):
+        match = scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=False)
+    probe.assert_called_once_with(["/usr/bin/go", "version", str(path)])
+    assert match == ((Category.BUILD, "重新执行生成此文件的 go test -c 命令") if version else None)
+
+
+def test_go_test_binary_without_tool_kept(tmp_path: Path) -> None:
+    """缺少 Go 时无法确认的测试文件继续保留。"""
+    path = tmp_path / "demo.test"
+    path.write_bytes(b"binary")
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    with (
+        mock.patch("plum_tools._cleanup.scanner.shutil.which", return_value=None),
+        mock.patch("plum_tools._cleanup.scanner.query_text") as probe,
+    ):
+        assert scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=False) is None
+    probe.assert_not_called()
+
+
+@pytest.mark.parametrize("name", ["coverage.out", "demo.test"])
+@pytest.mark.parametrize("kind", ["symlink", "fifo"])
+def test_go_artifacts_do_not_read_links_or_special_files(tmp_path: Path, name: str, kind: str) -> None:
+    """内容校验不得跟随软链接或阻塞在同名管道文件上。"""
+    path = tmp_path / name
+    if kind == "symlink":
+        target = tmp_path / "target"
+        target.write_text("mode: atomic\n", encoding="utf-8")
+        path.symlink_to(target)
+    else:
+        os.mkfifo(path)
+    scanner = ProjectScanner(_make_scanner_state(), _make_scan_inspector())
+    with mock.patch("plum_tools._cleanup.scanner.query_text") as probe:
+        assert scanner.project_match(path, Project(kinds={ProjectKind.GO}), is_dir=False) is None
+    probe.assert_not_called()
+
+
+@pytest.mark.parametrize("protection", ["none", "tracked", "not-ignored", "sensitive"])
+def test_scan_go_vendor_respects_git_and_protection(tmp_path: Path, protection: str) -> None:
+    """真实扫描仅接收可重建且通过 Git 和保护规则的 vendor。"""
+    (tmp_path / "go.mod").write_text("module example.com/demo\n", encoding="utf-8")
+    vendor = tmp_path / "vendor"
+    vendor.mkdir()
+    (vendor / "modules.txt").write_text("# example.com/lib v1.0.0\n", encoding="utf-8")
+    package = vendor / "example.com" / "lib"
+    package.mkdir(parents=True)
+    (package / "lib.go").write_text("package lib\n", encoding="utf-8")
+    if protection == "sensitive":
+        (vendor / ".env").write_text("TOKEN=secret\n", encoding="utf-8")
+    repo = Repository(tmp_path, tracked=["vendor/example.com/lib/lib.go"] if protection == "tracked" else [])
+    state = CleanupState(parse_args(["scan", "--root", str(tmp_path)]), None)
+    scanner = ProjectScanner(state, FileInspector(state))
+    ignored = {} if protection == "not-ignored" else {vendor: ".gitignore:1: vendor/"}
+    with (
+        mock.patch("plum_tools._cleanup.scanner.repository_at", return_value=repo),
+        mock.patch.object(Repository, "ignored", return_value=ignored) as check_ignore,
+    ):
+        scanner.scan_projects(tmp_path)
+    check_ignore.assert_called_once_with([vendor])
+    assert not state.errors
+    assert [item.path for item in state.candidates] == ([vendor] if protection == "none" else [])
+    if protection == "none":
+        assert state.candidates[0].category == Category.DEPS
+        assert state.candidates[0].rebuild == "go mod vendor"
+
+
+def test_go_project_revalidates_new_checksum_file(tmp_path: Path) -> None:
+    """预览后新增 go.sum 时必须拒绝继续使用旧计划。"""
+    (tmp_path / "go.mod").write_text("module example.com/demo\n", encoding="utf-8")
+    (tmp_path / "coverage.out").write_text("mode: atomic\n", encoding="utf-8")
+    state = CleanupState(parse_args(["scan", "--root", str(tmp_path)]), None)
+    scanner = ProjectScanner(state, FileInspector(state))
+    with mock.patch("plum_tools._cleanup.scanner.repository_at", return_value=None):
+        scanner.scan_projects(tmp_path)
+    assert len(state.candidates) == 1
+    (tmp_path / "go.sum").write_text("new checksum\n", encoding="utf-8")
+    state.args.from_plan = str(tmp_path / "plan.json")
+    executor = CleanupExecutor(state, scanner.inspector, scanner)
+    with mock.patch("plum_tools._cleanup.execution.repository_at", return_value=None):
+        with pytest.raises(ValueError, match="项目配置或生成物规则已变化"):
+            executor.revalidate()
+
+
+def test_go_fast_vendor_checks_protected_files_before_run(tmp_path: Path) -> None:
+    """快速计划执行前仍完整检查 vendor 内的新增敏感文件。"""
+    (tmp_path / "go.mod").write_text("module example.com/demo\n", encoding="utf-8")
+    vendor = tmp_path / "vendor"
+    vendor.mkdir()
+    (vendor / "modules.txt").write_text("# example.com/lib v1.0.0\n", encoding="utf-8")
+    state = CleanupState(parse_args(["scan", "--root", str(tmp_path), "--fast-deps"]), None)
+    scanner = ProjectScanner(state, FileInspector(state))
+    with mock.patch("plum_tools._cleanup.scanner.repository_at", return_value=None):
+        scanner.scan_projects(tmp_path)
+    assert len(state.candidates) == 1
+    assert state.candidates[0].snapshot == SnapshotMode.DIRECTORY
+    (vendor / ".env").write_text("TOKEN=secret\n", encoding="utf-8")
+    state.args.command = Command.RUN
+    with pytest.raises(ValueError, match="受保护或排除路径"):
+        CleanupExecutor(state, scanner.inspector, scanner).revalidate()
+
+
+def test_go_prune_pins_both_cache_paths(tmp_path: Path) -> None:
+    """构建与模块缓存分别固定路径、命令和执行环境。"""
+    build, modules = tmp_path / "build", tmp_path / "modules"
+    build.mkdir()
+    modules.mkdir()
+    state = _make_tools_state(tool=["go"])
+    scanner = ToolScanner(state, _make_tools_inspector())
+    with (
+        mock.patch("plum_tools._cleanup.tools.shutil.which", return_value="/usr/bin/go"),
+        mock.patch("plum_tools._cleanup.tools.query_text", side_effect=[str(build), str(modules)]) as probe,
+        mock.patch("plum_tools._cleanup.tools.repository_at", return_value=None),
+    ):
+        scanner.scan_tools()
+    probe.assert_has_calls(
+        [mock.call(["/usr/bin/go", "env", "GOCACHE"]), mock.call(["/usr/bin/go", "env", "GOMODCACHE"])]
+    )
+    assert probe.call_count == 2
+    assert [task.command for task in state.tasks] == [
+        ["/usr/bin/go", "clean", "-cache", "-testcache", "-fuzzcache"],
+        ["/usr/bin/go", "clean", "-modcache"],
+    ]
+    assert [task.environment for task in state.tasks] == [{"GOCACHE": str(build)}, {"GOMODCACHE": str(modules)}]
+    assert [task.cache for task in state.tasks] == [build, modules]
+    for task, variable in zip(state.tasks, ("GOCACHE", "GOMODCACHE"), strict=True):
+        assert task.cache is not None
+        info = task.cache.stat()
+        assert task.guard == (info.st_dev, info.st_ino)
+        assert task.verifications == [ToolVerification(["/usr/bin/go", "env", variable], str(task.cache))]
+
+
+@pytest.mark.parametrize("invalid", ["off", "relative", "missing", "home", "symlink"])
+def test_go_prune_invalid_build_cache_does_not_hide_modules(tmp_path: Path, invalid: str) -> None:
+    """构建缓存不可用时，模块缓存仍独立检查并展示。"""
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    build = invalid
+    state = _make_tools_state(tool=["go"])
+    state.home = tmp_path
+    if invalid == "missing":
+        build = str(tmp_path / "missing")
+    elif invalid == "home":
+        build = str(tmp_path)
+    elif invalid == "symlink":
+        link = tmp_path / "link"
+        link.symlink_to(modules, target_is_directory=True)
+        build = str(link)
+    scanner = ToolScanner(state, _make_tools_inspector())
+    with (
+        mock.patch("plum_tools._cleanup.tools.shutil.which", return_value="/usr/bin/go"),
+        mock.patch("plum_tools._cleanup.tools.query_text", side_effect=[build, str(modules)]),
+        mock.patch("plum_tools._cleanup.tools.repository_at", return_value=None),
+    ):
+        scanner.scan_tools()
+    assert len(state.tasks) == 1
+    assert state.tasks[0].command == ["/usr/bin/go", "clean", "-modcache"]
+    assert state.notes
+
+
+@pytest.mark.parametrize("restriction", ["tracked", "excluded", "older-than", "symlink"])
+def test_go_prune_keeps_unsafe_module_cache(tmp_path: Path, restriction: str) -> None:
+    """模块缓存同样遵守仓库、路径和时间筛选限制。"""
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    if restriction == "symlink":
+        link = tmp_path / "link"
+        link.symlink_to(modules, target_is_directory=True)
+        modules = link
+    state = _make_tools_state(tool=["go"], older_than=30 if restriction == "older-than" else None)
+    scanner = ToolScanner(state, _make_tools_inspector(excluded=restriction == "excluded"))
+    repository = Repository(tmp_path, tracked=["modules/source.go"]) if restriction == "tracked" else None
+    with (
+        mock.patch("plum_tools._cleanup.tools.shutil.which", return_value="/usr/bin/go"),
+        mock.patch("plum_tools._cleanup.tools.query_text", side_effect=["off", str(modules)]),
+        mock.patch("plum_tools._cleanup.tools.repository_at", return_value=repository),
+    ):
+        scanner.scan_tools()
+    assert state.tasks == []
+    assert state.notes
+
+
+def test_go_prune_revalidates_module_cache_setting(tmp_path: Path) -> None:
+    """模块缓存配置在预览后变化时必须拒绝执行旧范围。"""
+    modules = tmp_path / "modules"
+    modules.mkdir()
+    state = _make_tools_state(tool=["go"])
+    scanner = ToolScanner(state, _make_tools_inspector())
+    with (
+        mock.patch("plum_tools._cleanup.tools.shutil.which", return_value="/usr/bin/go"),
+        mock.patch("plum_tools._cleanup.tools.query_text", side_effect=["off", str(modules)]),
+        mock.patch("plum_tools._cleanup.tools.repository_at", return_value=None),
+    ):
+        scanner.scan_tools()
+    assert len(state.tasks) == 1
+    with (
+        mock.patch("plum_tools._cleanup.execution.repository_at", return_value=None),
+        mock.patch("plum_tools._cleanup.models.query_text", return_value=str(tmp_path / "changed")),
+    ):
+        with pytest.raises(ValueError, match="工具范围或引擎身份已变化"):
+            CleanupExecutor(state, scanner.inspector, mock.MagicMock()).revalidate_task(state.tasks[0])

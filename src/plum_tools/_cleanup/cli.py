@@ -30,6 +30,7 @@ HELP_EPILOG = """示例:
   pclean scan --root ~/PythonProjects --root ~/WebProjects --category project-cache,build,deps
   pclean scan --root ~/PythonProjects --fast-deps
   pclean scan --root ~/PythonProjects --workers 4
+  pclean scan --root ~/GolangProjects --category project-cache,build,deps
   pclean scan --category tools --tool brew
   pclean scan --root ~/PythonProjects --category project-cache --include-generated .mycache
   pclean scan --root . --save-plan /tmp/pclean-plan.json
@@ -39,6 +40,7 @@ HELP_EPILOG = """示例:
   pclean run --from-plan /tmp/pclean-plan.json
   pclean prune show
   pclean prune show --category tools --tool uv --tool pnpm
+  pclean prune show --category tools --tool go
   pclean prune run --category docker --older-than 30
   pclean prune run --category tools --tool pip --yes
 
@@ -65,7 +67,10 @@ HELP_EPILOG = """示例:
   Docker 默认保留最近 30 天的构建缓存和新建镜像；不清理容器、卷或带标签镜像。
   Docker 执行前复核引擎 ID、上下文端点及构建器节点；查询失败时停止清理。
   原生工具不支持按时间或排除路径清理时，会明确跳过相应操作。
-  prune tools: npm/pip/Yarn Classic 全局缓存；pnpm/uv 无用缓存；Go 构建缓存。
+  prune tools: npm/pip/Yarn Classic 全局缓存；pnpm/uv 无用缓存；Go 构建、测试结果、模糊测试与模块下载缓存。
+  Go 模块按 go.mod/go.sum 识别；deps 支持模块根目录带 modules.txt 的 vendor，重建使用 go mod vendor。
+  Go 项目缓存支持校验格式的覆盖率报告；build 支持经 go version 确认的 *.test、*.test.exe。
+  Go 模块缓存由多个项目共享，清理后依赖需重新下载；模糊测试缓存需重新积累，不清理 testdata 语料。
   prune system-cache: Linux 的 APT/DNF/YUM 下载缓存，需要已有 root 权限，不自动提权。
   all 包含 deps；移除依赖后需要重新安装，精确恢复版本取决于锁文件。
   deps 按项目声明重建，未记录的手工安装或环境内本地修改无法恢复。

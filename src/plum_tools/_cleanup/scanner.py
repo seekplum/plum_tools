@@ -17,6 +17,7 @@ from typing import TYPE_CHECKING
 from .constants import (
     BUILD_DIRS,
     DEPENDENCIES,
+    GO_COVERAGE_FILES,
     MANAGED_CACHE_NAMES,
     PROJECT_CACHES,
     PROJECT_CATEGORIES,
@@ -65,6 +66,13 @@ class ProjectScanner:
 
     def _project_file_category(self, name: str, project: Project) -> Category | None:
         """仅按名称和项目类型筛选文件，供发现阶段在读取元数据前排除源码。"""
+        if ProjectKind.GO in project.kinds:
+            if Category.PROJECT_CACHE in self.state.args.categories and (
+                name in GO_COVERAGE_FILES or name.endswith(".coverprofile")
+            ):
+                return Category.PROJECT_CACHE
+            if Category.BUILD in self.state.args.categories and name.endswith((".test", ".test.exe")):
+                return Category.BUILD
         if Category.PROJECT_CACHE in self.state.args.categories and (
             name in PROJECT_CACHES
             or name.endswith((".pyc", ".pyo", ".tsbuildinfo"))
@@ -89,6 +97,8 @@ class ProjectScanner:
         if name in DEPENDENCIES:
             if Category.DEPS not in self.state.args.categories:
                 return None
+            if name == "vendor" and is_dir and ProjectKind.GO in project.kinds:
+                return self._go_vendor_match(path, project)
             if name in {"node_modules", ".node_modules"} and ProjectKind.NODE in project.rebuild:
                 return Category.DEPS, project.rebuild[ProjectKind.NODE]
             if name in {".venv", "venv"} and ProjectKind.PYTHON in project.rebuild and (path / "pyvenv.cfg").is_file():
@@ -99,6 +109,10 @@ class ProjectScanner:
                 return Category.DEPS, "nox"
             return None
         category = self._project_file_category(name, project)
+        if ProjectKind.GO in project.kinds and (
+            name in GO_COVERAGE_FILES or name.endswith((".coverprofile", ".test", ".test.exe"))
+        ):
+            return self._go_file_match(path, category) if not is_dir and category else None
         if category == Category.PROJECT_CACHE or (
             Category.PROJECT_CACHE in self.state.args.categories
             and is_dir
@@ -112,6 +126,34 @@ class ProjectScanner:
         ):
             commands = "; ".join(project.rebuild.values())
             return Category.BUILD, commands + "；重新执行项目构建或测试命令"
+        return None
+
+    @staticmethod
+    def _go_vendor_match(path: Path, project: Project) -> tuple[Category, str] | None:
+        """仅接收直接属于模块且包含真实清单的 vendor 依赖目录。"""
+        marker = path / "modules.txt"
+        if path.parent / "go.mod" not in project.manifests:
+            return None
+        if marker.is_file() and not marker.is_symlink():
+            return Category.DEPS, "go mod vendor"
+        return None
+
+    @staticmethod
+    def _go_file_match(path: Path, category: Category) -> tuple[Category, str] | None:
+        """校验报告格式或只读构建信息，避免将同名普通文件当作 Go 产物。"""
+        if not stat.S_ISREG(path.lstat().st_mode):
+            return None
+        if category == Category.PROJECT_CACHE:
+            with path.open("rb") as stream:
+                header = stream.readline(64).rstrip(b"\r\n")
+            if header in {b"mode: set", b"mode: count", b"mode: atomic"}:
+                return category, "go test -coverprofile=<报告路径> ./..."
+        elif category == Category.BUILD:
+            executable = shutil.which("go")
+            if executable:
+                version = query_text([executable, "version", str(path)])
+                if version.startswith((f"{path}: go", f"{path}: devel ")):
+                    return category, "重新执行生成此文件的 go test -c 命令"
         return None
 
     def scan_projects(self, root: Path) -> None:
