@@ -356,11 +356,15 @@ uv run python -m plum_tools.compare ./backup_a ./backup_b
 汇总始终保留两类条目数量，展示类型不影响整体比较结果和退出码；
 没有可展示条目时不显示空表格。
 
-`--json` 输出全部已比较条目，忽略 `--show`、`--display-depth` 和 `--compact`：
+`--json` 默认输出全部已比较条目，支持 `--display-depth`，忽略 `--show` 和 `--compact`：
 
 ```bash
 # 输出所有一致目录、文件和链接的相对路径
 pcompare ./backup_a ./backup_b --json |
+  jq -r '.entries[] | select(.identical) | .path'
+
+# 仅输出根条目和第一层中的一致项
+pcompare ./backup_a ./backup_b --display-depth 1 --json |
   jq -r '.entries[] | select(.identical) | .path'
 
 # 仅输出一致目录
@@ -376,7 +380,7 @@ stdout 只输出一个 JSON 对象，加载动画和错误写入 stderr。
 顶层包含 `schema_version`（当前为 `1`）、`command`（`pcompare`）、
 `paths`、`options`、`summary` 和 `entries`。
 `paths` 按输入顺序保存本地绝对路径或原始远端路径；`options` 记录排除规则、
-是否启用默认排除、实际比较深度 `max_depth` 和 `ignore_case`。
+是否启用默认排除、实际比较深度 `max_depth`、`ignore_case` 和展示深度 `display_depth`。
 `summary` 包含 `entry_count`、`identical_count`、`different_count` 和 `identical`。
 每个条目提供相对路径 `path`、布尔值 `identical`、中文结果 `result`、
 内容分组 `groups` 和按输入顺序排列的 `entries`。
@@ -388,7 +392,7 @@ JSON 仍遵循排除规则和扫描深度限制；`options.max_depth` 不为 `nu
 一致状态仅表示当前深度范围内一致。退出码仍为 `0`、`1`、`2`；
 启用 shell 的 `pipefail` 时，有差异的比较即使成功输出 JSON，管道也会返回非零。
 
-`--display-depth N` 限制两张表的展示层级，默认不限；`N` 必须为非负整数，
+`--display-depth N` 限制表格和 JSON 条目的展示层级，默认不限；`N` 必须为非负整数，
 根目录为第 0 层，`--display-depth 0` 仅展示根条目。
 更深层条目仍参与比较，差异会反映在父目录上；汇总数量和退出码均依据
 全部已比较条目，表格标题中的数量仅统计当前展示的条目。

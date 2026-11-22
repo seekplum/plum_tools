@@ -334,9 +334,13 @@ def print_report(  # pylint: disable=too-many-arguments,too-many-locals
 
 
 def _print_json_report(
-    paths: Sequence[str | Path], comparisons: Sequence[Comparison], options: dict[str, object]
+    paths: Sequence[str | Path],
+    comparisons: Sequence[Comparison],
+    options: dict[str, object],
+    *,
+    display_depth: int | None = None,
 ) -> None:
-    """将输入 paths、全部 comparisons 及比较 options 以版本化 JSON 写入 stdout。"""
+    """按 display_depth 输出 comparisons 的 JSON 条目，汇总保留全部比较结果及 options。"""
     same = sum(item.result == CompareResult.IDENTICAL for item in comparisons)
     print(
         json.dumps(
@@ -375,6 +379,7 @@ def _print_json_report(
                         ],
                     }
                     for item in comparisons
+                    if display_depth is None or len(item.path.parts) <= display_depth
                 ],
             },
             ensure_ascii=False,
@@ -413,7 +418,7 @@ def main() -> None:
         "--json",
         dest="json_output",
         action="store_true",
-        help="以 JSON 输出全部比较结果，忽略展示选项；加载动画写入标准错误",
+        help="以 JSON 输出比较结果，支持 --display-depth，忽略 --show 和 --compact；加载动画写入标准错误",
     )
     parser.add_argument(
         "--ignore-case",
@@ -431,7 +436,7 @@ def main() -> None:
         "--display-depth",
         type=int,
         metavar="层数",
-        help="限制表格展示深度，至少为 0，根目录为第 0 层；默认不限，不影响比较范围及汇总",
+        help="限制表格及 JSON 条目的展示深度，至少为 0，根目录为第 0 层；默认不限，不影响比较范围及汇总",
     )
     parser.add_argument(
         "--exclude-name",
@@ -480,7 +485,9 @@ def main() -> None:
                     "default_excludes": args.default_excludes,
                     "max_depth": max_depth,
                     "ignore_case": args.ignore_case,
+                    "display_depth": args.display_depth,
                 },
+                display_depth=args.display_depth,
             )
         else:
             print_report(
