@@ -13,7 +13,7 @@
 import re
 import sys
 
-from plum_tools.conf import PathConfig
+from plum_tools.utils.constants import PathConfig
 from plum_tools.utils.utils import YmlConfig, print_error
 
 

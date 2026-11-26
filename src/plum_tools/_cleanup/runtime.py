@@ -11,7 +11,7 @@ def implementation_paths() -> tuple[Path, ...]:
     package = Path(__file__).resolve().parent
     shared = package.parent / "utils"
     return (
-        package.parent / "cleanup.py",
+        package.parent / "cli" / "pclean.py",
         *(shared / name for name in ("compat.py", "parser.py", "cli.py")),
         *sorted(package.glob("*.py")),
     )

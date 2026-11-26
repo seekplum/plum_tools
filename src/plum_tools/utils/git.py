@@ -12,7 +12,7 @@
 
 import os
 
-from plum_tools.conf import GitCommand
+from plum_tools.utils.constants import GitCommand
 from plum_tools.utils.utils import cd, run_cmd
 
 

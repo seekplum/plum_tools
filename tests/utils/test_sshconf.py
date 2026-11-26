@@ -15,7 +15,7 @@ from unittest import mock
 
 import pytest
 
-from plum_tools.conf import PathConfig
+from plum_tools.utils.constants import PathConfig
 from plum_tools.utils.sshconf import SSHConf, get_host_ip, get_prefix_host_ip, get_ssh_alias_conf, merge_ssh_config
 
 

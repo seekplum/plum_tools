@@ -41,17 +41,17 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project.scripts]
-gitrepo = "plum_tools.gitrepo:main"
-gitstash = "plum_tools.gitstash:main"
-pssh = "plum_tools.pssh:main"
-pping = "plum_tools.pping:main"
-pipmi = "plum_tools.pipmi:main"
-prn = "plum_tools.prn:main"
-pfind_imports = "plum_tools.find_imports:main"
-pcompare = "plum_tools.compare:main"
-agent_usage_report = "plum_tools.agent_usage_report:main"
-pclean = "plum_tools.cleanup:main"
-pforkcheck = "plum_tools.fork_check:main"
+gitrepo = "plum_tools.cli.gitrepo:main"
+gitstash = "plum_tools.cli.gitstash:main"
+pssh = "plum_tools.cli.pssh:main"
+pping = "plum_tools.cli.pping:main"
+pipmi = "plum_tools.cli.pipmi:main"
+prn = "plum_tools.cli.prn:main"
+pfind_imports = "plum_tools.cli.pfind_imports:main"
+pcompare = "plum_tools.cli.pcompare:main"
+agent_usage_report = "plum_tools.cli.agent_usage_report:main"
+pclean = "plum_tools.cli.pclean:main"
+pforkcheck = "plum_tools.cli.pforkcheck:main"
 
 [project.urls]
 Homepage = "https://github.com/seekplum/plum_tools"
@@ -259,7 +259,7 @@ ignore-regex = '\bla vie\b'
 ignore-words-list = 'ans'
 
 [tool.vulture]
-exclude = ["dos/", ".venv/", ".git/"]
+exclude = ["dos/", ".venv/", ".git/", "src/plum_tools/_gitrepo/constants.py", "src/plum_tools/utils/enums.py"]
 ignore_decorators = []
 ignore_names = []
 make_whitelist = true

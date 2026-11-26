@@ -30,8 +30,8 @@ uv run poe test
 运行单个测试文件或单个用例时，把 pytest 参数直接传给 poe 任务：
 
 ```bash
-uv run poe test tests/test_gitrepo.py
-uv run poe test tests/test_gitrepo.py::test_name -svv
+uv run poe test tests/cli/test_gitrepo.py
+uv run poe test tests/cli/test_gitrepo.py::test_name -svv
 ```
 
 `pyproject.toml` 中默认 pytest 参数会排除 `integration` 标记：`-m 'not integration'`。
@@ -56,7 +56,7 @@ uv run poe lint-vulture
 
 ```bash
 uv run poe lint-mypy src/plum_tools tests
-uv run poe lint-black src/plum_tools/prn.py
+uv run poe lint-black src/plum_tools/cli/prn.py
 ```
 
 注意：`lint-ruff` 当前会执行 `ruff check ... --fix`，可能修改文件；需要只检查格式时使用 `lint-black`、`lint-isort` 等更具体任务。
@@ -110,19 +110,19 @@ uv run pre-commit run --all-files --show-diff-on-failure
 
 `pyproject.toml` 的 `[project.scripts]` 暴露以下命令：
 
-- `gitrepo` -> `plum_tools.gitrepo:main`：递归查找目录下的 git 仓库，并检查未提交修改、远程超前/落后和可选 stash 状态。
-- `gitstash` -> `plum_tools.gitstash:main`：切分支前按当前分支标记 stash，切到目标分支后恢复对应 stash。
-- `pssh` -> `plum_tools.pssh:main`：根据 IP 简写或 `~/.ssh/config` 别名拼接并执行 SSH 登录命令。
-- `pping` -> `plum_tools.pping:main`：并发 ping 指定网段内的 1-254 地址，输出可达 IP。
-- `pipmi` -> `plum_tools.pipmi:main`：先 SSH 到登录机，再对目标机器执行 `ipmitool` 命令。
-- `prn` -> `plum_tools.prn:main`：基于 rsync 上传/下载项目文件，配置来自 `~/.plum_tools.yaml` 或命令行参数。
-- `pfind_imports` -> `plum_tools.find_imports:main`：用 AST 扫描 Python import，按标准库/第三方库筛选输出。
+- `gitrepo` -> `plum_tools.cli.gitrepo:main`：递归查找目录下的 git 仓库，并检查未提交修改、远程超前/落后和可选 stash 状态。
+- `gitstash` -> `plum_tools.cli.gitstash:main`：切分支前按当前分支标记 stash，切到目标分支后恢复对应 stash。
+- `pssh` -> `plum_tools.cli.pssh:main`：根据 IP 简写或 `~/.ssh/config` 别名拼接并执行 SSH 登录命令。
+- `pping` -> `plum_tools.cli.pping:main`：并发 ping 指定网段内的 1-254 地址，输出可达 IP。
+- `pipmi` -> `plum_tools.cli.pipmi:main`：先 SSH 到登录机，再对目标机器执行 `ipmitool` 命令。
+- `prn` -> `plum_tools.cli.prn:main`：基于 rsync 上传/下载项目文件，配置来自 `~/.plum_tools.yaml` 或命令行参数。
+- `pfind_imports` -> `plum_tools.cli.pfind_imports:main`：用 AST 扫描 Python import，按标准库/第三方库筛选输出。
 
-每个 CLI 模块通常包含 `main()`、参数解析和业务函数/类；共享参数解析来自 `src/plum_tools/utils/parser.py`。
+命令入口统一位于 `src/plum_tools/cli/`，实现放在对应业务模块或内部子包。共享参数解析来自 `src/plum_tools/utils/parser.py`。
 
 ### 配置模型
 
-核心配置在 `src/plum_tools/conf.py`：
+核心配置在 `src/plum_tools/utils/constants.py`：
 
 - `PathConfig.PLUM_YML_PATH` 指向用户家目录下的 `~/.plum_tools.yaml`。
 - `src/plum_tools/.plum_tools.yaml` 是示例配置，包含默认 SSH 配置、`host_type_*` 网段前缀、IPMI 偏移和项目同步配置。
@@ -148,10 +148,10 @@ uv run pre-commit run --all-files --show-diff-on-failure
 
 ### 测试布局
 
-- CLI 顶层模块测试位于 `tests/test_*.py`。
+- CLI 入口测试位于 `tests/cli/`，业务测试按同名源码子包放在 `tests/_gitrepo/`、`tests/_prn/` 等目录。
 - 共享工具测试位于 `tests/utils/test_*.py`。
 - `tests/common.py` 提供测试辅助能力。
-- `tests/test_poe_tasks.py` 覆盖 `bin/poe_tasks.py` 中动态 poe 任务和 pytest 参数透传逻辑。
+- `tests/bin/test_poe_tasks.py` 覆盖 `bin/poe_tasks.py` 中动态 poe 任务和 pytest 参数透传逻辑。
 
 新增或修改某个模块时，优先在同名测试文件中补充测试；没有对应文件时按现有命名模式创建。
 

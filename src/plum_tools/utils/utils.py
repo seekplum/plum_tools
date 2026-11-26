@@ -20,9 +20,9 @@ from typing import Any
 
 import yaml
 
-from plum_tools.conf import OsCommand, PathConfig
-from plum_tools.exceptions import RunCmdError, RunCmdTimeout
 from plum_tools.utils.cli import managed_process
+from plum_tools.utils.constants import OsCommand, PathConfig
+from plum_tools.utils.exceptions import RunCmdError, RunCmdTimeout
 from plum_tools.utils.printer import print_error, print_text
 
 

@@ -1,0 +1,137 @@
+"""
+#=============================================================================
+#  ProjectName: plum-tools
+#     FileName: test_pping
+#         Desc: 测试pping模块
+#       Author: seekplum
+#        Email: 1131909224m@sina.cn
+#     HomePage: seekplum.github.io
+#       Create: 2019-04-04 23:44
+#=============================================================================
+"""
+
+from unittest import mock
+
+import pytest
+
+from plum_tools.cli.pping import main, ping, run
+from tests.common import MockPool
+
+
+def test_ping() -> None:
+    with mock.patch("plum_tools.cli.pping.run_cmd") as mock_run_cmd:
+        ip = ping("2.2.2.2")
+    assert ip == "2.2.2.2"
+    mock_run_cmd.assert_called_once_with("ping -W 3 -c 1 2.2.2.2")
+
+
+def test_ping_with_cmd_error() -> None:
+    ip = ping("1.1.1.999")
+    assert ip is None
+
+
+def test_run(capsys: pytest.CaptureFixture) -> None:
+    mock_ips = [f"1.1.1.{i}" if i < 10 else "" for i in range(1, 255)]
+    with (
+        mock.patch("plum_tools.cli.pping.Pool", return_value=MockPool()) as mock_pool,
+        mock.patch("plum_tools.cli.pping.get_prefix_host_ip", return_value="1.1.1") as mock_prefix,
+        mock.patch("plum_tools.cli.pping.ping", side_effect=mock_ips) as mock_ping,
+    ):
+        run("test", "")
+
+    mock_pool.assert_called_once_with(processes=100)
+    mock_prefix.assert_called_once_with("test")
+    mock_ping.assert_has_calls([mock.call(f"1.1.1.{i}") for i in range(1, 255)])
+    captured = capsys.readouterr()
+    output = captured.out
+    for ip in mock_ips:
+        if ip:
+            assert ip in output
+
+
+def test_main() -> None:
+    mock_parser = mock.Mock()
+    mock_args = mock.Mock(type="1", prefix_host="1.1.1", sort=None)
+    mock_parser.parse_args.return_value = mock_args
+    with (
+        mock.patch("plum_tools.cli.pping.get_base_parser", return_value=mock_parser) as mock_argparse,
+        mock.patch("plum_tools.cli.pping.run") as mock_run,
+    ):
+        main()
+        mock_argparse.assert_called_once_with()
+        mock_parser.add_argument.assert_has_calls(
+            [
+                mock.call(
+                    "-t",
+                    "--type",
+                    action="store",
+                    required=False,
+                    dest="type",
+                    default="default",
+                    help="主机类型，默认 default；可选值由配置中的 host_type_<类型> 决定",
+                ),
+                mock.call(
+                    "-p",
+                    "--prefix-host",
+                    action="store",
+                    required=False,
+                    dest="prefix_host",
+                    default=None,
+                    help="网段前三段，例如 192.168.1；默认读取所选主机类型的网段配置",
+                ),
+            ]
+        )
+        mock_parser.parse_args.assert_called_once_with()
+        mock_run.assert_called_once_with("1", "1.1.1")
+
+
+def test_run_compact_mode_uses_columns() -> None:
+    """验证 run 函数在紧凑模式下使用分栏打印。"""
+
+    # 使用函数作为 side_effect，动态生成结果
+    def mock_ping_func(ip: str) -> str:
+        # 只让前两个 IP 可达
+        if ip in ("1.1.1.1", "1.1.1.2"):
+            return ip
+        return ""
+
+    with (
+        mock.patch("plum_tools.cli.pping.Pool", return_value=MockPool()),
+        mock.patch("plum_tools.cli.pping.get_prefix_host_ip", return_value="1.1.1"),
+        mock.patch("plum_tools.cli.pping.ping", side_effect=mock_ping_func),
+        mock.patch("plum_tools.cli.pping.print_columns") as mock_print_columns,
+        mock.patch("plum_tools.cli.pping.Console") as mock_console_cls,
+    ):
+        # 模拟 Console 是终端，get_time 返回真实时间
+        import time
+
+        mock_console = mock.MagicMock()
+        mock_console.is_terminal = True
+        mock_console.get_time = time.monotonic  # noqa
+        mock_console_cls.return_value = mock_console
+
+        run("test", "", compact=True)
+
+        # 验证 print_columns 被调用
+        mock_print_columns.assert_called_once()
+        call_args = mock_print_columns.call_args[0]
+        # 第一个参数是 console，第二个参数是 IP 列表
+        items = call_args[1]
+        assert len(items) == 2
+        assert "1.1.1.1" in items[0].plain
+        assert "1.1.1.2" in items[1].plain
+
+
+def test_main_with_compact_flag() -> None:
+    """验证 main 函数在 compact 参数为 True 时传递 compact=True。"""
+    mock_parser = mock.MagicMock()
+    mock_parser.parse_args.return_value = mock.MagicMock(compact=True, type="test", prefix_host="1.1.1", sort=None)
+
+    with (
+        mock.patch("plum_tools.cli.pping.get_base_parser", return_value=mock_parser),
+        mock.patch("plum_tools.cli.pping.add_compact_argument"),
+        mock.patch("plum_tools.cli.pping.run") as mock_run,
+    ):
+        main()
+
+        mock_run.assert_called_once_with("test", "1.1.1", compact=True)

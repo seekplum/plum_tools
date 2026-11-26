@@ -16,8 +16,8 @@ from unittest import mock
 
 import pytest
 
-from plum_tools.conf import OsCommand, PathConfig
-from plum_tools.exceptions import RunCmdError, RunCmdTimeout
+from plum_tools.utils.constants import OsCommand, PathConfig
+from plum_tools.utils.exceptions import RunCmdError, RunCmdTimeout
 from plum_tools.utils.utils import GlobalConf, SSHConf, YmlConfig, cd, ensure_str, get_file_abspath, run_cmd
 
 

@@ -11,21 +11,23 @@
 
 ## 目录结构
 
-```text
-➜  tree -L 1 -a
-.
-├── .bumpversion.cfg    # `bumpversion`工具的配置文件，用于自动更新版本
-├── .gitignore          # 维护git仓库需要忽略文件
-├── .gitlab-ci.yml      # gitlab ci的配置文件
-├── .pylintrc           # pylint 配置文件
-├── CHANGELOG.md        # 记录模块的变化
-├── README.md           # 项目自述文件
-├── bin                 # 项目二进制程序
-├── docs                # 项目文档
-├── plum_tools          # 核心代码模块
-└── tests               # 单元测试目录
+所有命令的安装入口统一位于 `src/plum_tools/cli/`，文件名与终端命令名一致。例如，`gitrepo` 的入口是 `cli/gitrepo.py`，`pcompare` 的入口是 `cli/pcompare.py`。入口映射在 `pyproject.toml` 的 `[project.scripts]` 中。
 
+```text
+src/plum_tools/
+├── cli/                # 命令行入口与参数分派
+├── _gitrepo/           # 仓库读取、并发扫描、筛选、分组和报告
+├── _compare/           # 本地比较、报告和可独立执行的远端扫描脚本
+├── _cleanup/           # 清理计划、扫描和执行
+├── _prn/               # 同步配置、路径和 rsync 执行
+├── _pipmi/             # 主机配置和跳板机连接
+├── _find_imports/      # Python 导入扫描和报告
+├── _fork_check/        # 仓库对检查和报告
+├── _agent_usage/       # 使用记录采集和报告
+└── utils/              # 命令间共享的 CLI、Git、SSH、排序和枚举工具
 ```
+
+`gitstash.py`、`pssh.py`、`pping.py` 等单模块工具的业务逻辑与入口同放在 `cli/` 中。项目任务脚本位于 `bin/`，文档位于 `docs/`。`tests/` 按源码子目录组织，例如 `tests/cli/`、`tests/_prn/` 和 `tests/utils/`。
 
 ## 安装环境依赖
 
@@ -151,8 +153,14 @@ gitrepo scan -p ~/PythonProjects --group-by name
 # 仅展示重复克隆的目录
 gitrepo scan -p ~/PythonProjects --status duplicate
 
-# 展示领先或存在 stash 的目录，多个状态按“或”匹配
+# 展示领先或有已储藏记录的目录，多个状态按“或”匹配
 gitrepo scan -p ~/PythonProjects --status ahead stash
+
+# 查找本地文件变更，忽略仅切换子模块提交的情况
+gitrepo scan -p ~/PythonProjects --status staged unstaged untracked --ignore-status submodule-pointer -d
+
+# 查找异常，忽略分支落后和游离 HEAD
+gitrepo scan -p ~/PythonProjects --status issues --ignore-status behind detached
 
 # 仅展示链接工作树
 gitrepo scan -p ~/PythonProjects --status worktree
@@ -180,6 +188,13 @@ gitrepo scan -p ~/PythonProjects --ignore-stash
 无效的 `--host-regex` 在扫描前报错。
 
 `--status` 默认 `all`，支持空格分隔多个值，也可重复指定参数，匹配任一状态即保留目录。
+`--ignore-status` 支持多个值和重复传参，在统计、展示及 `--status` 筛选前逐项忽略：
+
+- `submodule-pointer` 忽略未暂存的子模块提交指针变化，保留已暂存的指针、模块内文件修改及未跟踪文件。
+- `ahead`、`behind` 分别忽略本地分支领先、落后于跟踪分支的状态。
+- `detached` 忽略游离 HEAD 提示，分支详情仍显示当前提交。
+
+指定忽略项后，`clean` 表示其余检查均正常，JSON 的 `options.ignored_statuses` 列出本次忽略项。
 指定 `all` 时不限制状态；状态筛选与主机筛选同时生效，空分组不展示。
 重复关联在筛选前计算，隐藏连接两个仓库的中间仓库不会改变已有分组或重复标记。
 
@@ -192,10 +207,11 @@ gitrepo scan -p ~/PythonProjects --ignore-stash
 | `clean` | 工作区和跟踪状态正常，且无检查错误 |
 | `staged` / `unstaged` / `untracked` / `conflict` | 暂存 / 未暂存 / 未跟踪 / 冲突 |
 | `submodule` | 父仓库检测到子模块变更，包括提交指针变化、模块内文件修改或未跟踪文件 |
-| `stash` | 存在 stash |
+| `stash` | 已储藏，数量为 `git stash list` 中的条目数 |
 | `ahead` / `behind` | 任一本地分支领先 / 落后于跟踪引用 |
 | `no-upstream` / `gone` / `local-upstream` | 无 upstream / upstream 失效 / 跟踪本地分支 |
-| `detached` / `unborn` / `no-remote` | 游离 HEAD / 尚无提交 / 未配置远程 |
+| `detached` / `unborn` | 游离 HEAD / 尚无提交 |
+| `no-remote` | 未配置远程仓库，`git remote` 输出为空 |
 | `error` | 检查失败，包含远程更新失败 |
 
 `clean` 可与 `duplicate`、`worktree` 同时成立。
@@ -274,7 +290,7 @@ worktree 逐个展示并带有 `worktree` 状态，共用 Git 数据的目录不
 可通过 `--exclude` 按名称跳过子目录，显式指定的扫描根目录仍会检查。
 `scan` 在发现仓库后立即提交有界并发检查，合并工作区、当前分支和 stash 查询，
 同一仓库的 worktree 共用分支、stash 详情读取及 fetch。
-表格同时展示暂存、未暂存、未跟踪、冲突及 stash 数量，
+表格同时展示暂存、未暂存、未跟踪、冲突及已储藏条目数，
 并检查所有本地分支的领先、落后、无 upstream、upstream 失效及游离 HEAD 状态。
 无远程、空仓库、读取失败及远程更新失败也会显示。
 
@@ -375,7 +391,7 @@ pcompare ./backup_a ./backup_b --no-default-excludes
 pcompare 'user@server-a:/data/config.yaml' 'server-b:/data/config.yaml' ./config.yaml
 
 # 也可以直接以模块方式运行
-uv run python -m plum_tools.compare ./backup_a ./backup_b
+uv run python -m plum_tools.cli.pcompare ./backup_a ./backup_b
 ```
 
 目录按相对路径递归比较，包含隐藏文件和空目录。目录只有在全部子项一致时
