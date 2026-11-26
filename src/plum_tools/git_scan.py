@@ -23,18 +23,45 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
-from .utils.cli import cancel_current, run_process
-from .utils.parser import add_compact_argument
-from .utils.printer import compact_table
+from plum_tools.git_sorting import SORT_FIELDS, sorted_repository_groups
+from plum_tools.utils.cli import cancel_current, run_process
+from plum_tools.utils.parser import add_compact_argument
+from plum_tools.utils.printer import compact_table
+from plum_tools.utils.sorting import SortField, add_sort_argument
 
 # 限制并发外部进程数，避免大型目录扫描耗尽系统资源。
 _MAX_WORKERS = 16
 # 单个 Git 命令的超时秒数，也约束网络更新等待时间。
 _GIT_TIMEOUT = 30
+# porcelain v2 的 S 标记表示子模块；删除或类型变更时还需检查前三个模式字段中的 gitlink。
+_SUBMODULE_RECORD = re.compile(r"[12u] .. (?:S|N\.\.\. (?:[0-7]{6} ){0,2}160000 )")
 # 一次读取所有本地分支的跟踪状态，供共用 Git 数据的目录复用。
 _BRANCH_FORMAT = (
     "%(refname:short)%00%(upstream)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(upstream:remotename)"
 )
+# 状态码与展示文案分离，供参数校验、筛选及帮助说明共用。
+_STATUS_LABELS = {
+    "all": "全部",
+    "issues": "存在异常或检查失败",
+    "duplicate": "重复克隆",
+    "worktree": "链接工作树",
+    "clean": "状态正常",
+    "staged": "暂存",
+    "unstaged": "未暂存",
+    "untracked": "未跟踪",
+    "conflict": "冲突",
+    "submodule": "子模块有变更",
+    "stash": "stash",
+    "ahead": "领先",
+    "behind": "落后",
+    "no-upstream": "无 upstream",
+    "gone": "upstream 已失效",
+    "local-upstream": "跟踪本地分支",
+    "detached": "游离 HEAD",
+    "unborn": "尚无提交",
+    "no-remote": "无远程",
+    "error": "检查失败",
+}
 
 
 class RepositoryProgress(Progress):
@@ -105,6 +132,18 @@ class Repository:  # pylint: disable=too-many-instance-attributes
     worktree: bool = False
     issues: list[str] = field(default_factory=list)
     errors: list[str] = field(default_factory=list)
+    remotes: dict[str, list[str]] = field(default_factory=dict)
+    statuses: list[str] = field(default_factory=list)
+    changes: list[dict[str, str]] = field(default_factory=list)
+    stashes: list[str] = field(default_factory=list)
+    counts: dict[str, int] = field(default_factory=dict)
+
+    @property
+    def remote_urls(self) -> set[str]:
+        """返回所有 remote 的规范化地址，包含首选远程地址并去重。"""
+        return {url for urls in self.remotes.values() for url in urls} | (
+            {self.remote_url} if self.remote_url else set()
+        )
 
 
 class GitScanError(RuntimeError):
@@ -134,11 +173,13 @@ def write_json_result(
     repositories: list[dict],
     errors: list[DirectoryScanError],
     options: dict[str, object],
+    *,
+    schema_version: int = 1,
 ) -> None:
     """将 command 的仓库、目录错误、统计及选项以版本化 JSON 写入 stdout。"""
     json.dump(
         {
-            "schema_version": 1,
+            "schema_version": schema_version,
             "command": command,
             "options": options,
             "summary": summary,
@@ -181,9 +222,13 @@ def _git(path: str, *args: str, allowed_codes: tuple[int, ...] = (0,)) -> str:
     if not executable:
         raise GitScanError("未找到 git 可执行文件")
     env = {**os.environ, "LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
+    options = ["--no-optional-locks", "-c", "color.ui=false"]
+    if args[0] == "status":
+        # 父仓库的 --untracked-files 不传入子模块，进程级配置可让嵌套的 status 也扫描未跟踪文件。
+        options.extend(("-c", "status.showUntrackedFiles=all"))
     try:
         result = run_process(
-            [executable, "--no-optional-locks", "-c", "color.ui=false", *args],
+            [executable, *options, *args],
             cwd=path,
             env=env,
             capture_output=True,
@@ -280,6 +325,36 @@ def normalize_remote_url(url: str, repo_path: str) -> str:
     return str(local_path.resolve())
 
 
+def _normalize_remote_urls(repo: Repository, name: str, output: str) -> list[str]:
+    urls = []
+    for value in output.splitlines():
+        try:
+            if not value.strip():
+                raise ValueError("远程地址为空")
+            urls.append(normalize_remote_url(value, repo.path))
+        except (OSError, RuntimeError, ValueError):
+            repo.errors.append(f"无法解析远程 {name} 的地址")
+    return urls
+
+
+def _read_remotes(repo: Repository, names: list[str]) -> None:
+    for name in sorted(names, key=lambda item: (item != "upstream", item != "origin", item)):
+        urls: list[str] = []
+        for options in (("--all",), ("--push", "--all")):
+            try:
+                output = _git(repo.path, "remote", "get-url", *options, name)
+                if not output.strip():
+                    raise GitScanError(f"远程 {name} 未配置地址")
+            except GitScanError as exc:
+                repo.errors.append(str(exc))
+                continue
+            urls.extend(_normalize_remote_urls(repo, name, output))
+        if urls:
+            repo.remotes[name] = list(dict.fromkeys(urls))
+            if not repo.remote_url:
+                repo.remote_name, repo.remote_url = name, urls[0]
+
+
 def _identify_repository(path: str) -> Repository:
     repo = Repository(path)
     try:
@@ -291,13 +366,10 @@ def _identify_repository(path: str) -> Repository:
         repo.worktree = str((Path(path) / git_dir).resolve()) != repo.common_dir
         remotes = _git(path, "remote").splitlines()
         if remotes:
-            repo.remote_name = min(remotes, key=lambda name: (name != "upstream", name != "origin", name))
-            url = _git(path, "remote", "get-url", repo.remote_name).strip()
-            if not url:
-                raise GitScanError(f"远程 {repo.remote_name} 未配置地址")
-            repo.remote_url = normalize_remote_url(url, path)
+            _read_remotes(repo, remotes)
         else:
             repo.issues.append("无远程")
+            repo.statuses.append("no-remote")
     except GitScanError as exc:
         repo.errors.append(str(exc))
     except (OSError, RuntimeError, ValueError):
@@ -305,7 +377,31 @@ def _identify_repository(path: str) -> Repository:
     return repo
 
 
-def _read_worktree(repo: Repository, stash: bool = True) -> None:
+def _submodule_detail(fields: list[str]) -> str:
+    kind, flags = fields[0], fields[2]
+    reasons = []
+    # 指针暂存后 C 标记会消失，此时要比较 HEAD 和索引记录的 gitlink。
+    if "C" in flags or (kind in ("1", "2") and fields[3:5] == ["160000", "160000"] and fields[6] != fields[7]):
+        reasons.append("提交指针变更")
+    if "M" in flags:
+        reasons.append("已跟踪文件修改")
+    if "U" in flags:
+        reasons.append("含未跟踪文件")
+    return f"子模块（{'、'.join(reasons)}）" if reasons else "子模块"
+
+
+def _worktree_change(entry: str, original_path: str, submodule: bool) -> dict[str, str]:
+    kind = entry[0]
+    fields = entry.split(" ", {"1": 8, "2": 9, "u": 10, "?": 1}[kind])
+    change = {"status": "??" if kind == "?" else fields[1], "path": fields[-1]}
+    if submodule:
+        change["submodule"] = _submodule_detail(fields)
+    if kind == "2":
+        change["original_path"] = original_path
+    return change
+
+
+def _read_worktree(repo: Repository, stash: bool = True, *, detail: bool = False) -> None:
     output = _git(
         repo.path,
         "status",
@@ -317,6 +413,8 @@ def _read_worktree(repo: Repository, stash: bool = True) -> None:
         "--ignore-submodules=none",
     )
     counts = dict.fromkeys(("暂存", "未暂存", "未跟踪", "冲突"), 0)
+    submodules = 0
+    repo.counts.update({"stash": 0} if stash else {})
     entries = iter(output.split("\0"))
     commit = ""
     for entry in entries:
@@ -327,7 +425,9 @@ def _read_worktree(repo: Repository, stash: bool = True) -> None:
         elif entry.startswith("# branch.head "):
             repo.branch = entry.removeprefix("# branch.head ")
         elif entry.startswith("# stash ") and stash:
+            repo.counts["stash"] = int(entry.removeprefix("# stash "))
             repo.issues.append(f"stash {entry.removeprefix('# stash ')}")
+            repo.statuses.append("stash")
         elif entry.startswith("? "):
             counts["未跟踪"] += 1
         elif entry.startswith("u "):
@@ -336,49 +436,77 @@ def _read_worktree(repo: Repository, stash: bool = True) -> None:
             code = entry[2:4]
             counts["暂存"] += code[0] != "."
             counts["未暂存"] += code[1] != "."
-        # -z 模式下重命名和复制另占一个原始路径，不能将其当作状态记录。
-        if entry.startswith("2 "):
-            next(entries, None)
+        # -z 模式下原路径另占一项，必须先消费，避免误判为后续状态记录。
+        original_path = next(entries, "") if entry.startswith("2 ") else ""
+        submodule = _SUBMODULE_RECORD.match(entry) is not None
+        submodules += submodule
+        if detail and entry.startswith(("1 ", "2 ", "u ", "? ")):
+            repo.changes.append(_worktree_change(entry, original_path, submodule))
     if repo.branch == "(detached)":
         repo.branch = f"HEAD@{commit}"
         repo.issues.append("游离 HEAD")
+        repo.statuses.append("detached")
     repo.issues.extend(f"{label} {count}" for label, count in counts.items() if count)
+    if submodules:
+        repo.issues.append(f"其中子模块 {submodules}")
+        repo.statuses.append("submodule")
+    repo.counts.update({code: counts[_STATUS_LABELS[code]] for code in ("staged", "unstaged", "untracked", "conflict")})
+    repo.statuses.extend(
+        code for code in ("staged", "unstaged", "untracked", "conflict") if counts[_STATUS_LABELS[code]]
+    )
 
 
 def _read_branches(repo: Repository, output: str) -> None:
+    repo.counts.update(ahead=0, behind=0)
     if not output and not repo.branch.startswith("HEAD@"):
         repo.issues.append("尚无提交")
+        repo.statuses.append("unborn")
     for line in output.splitlines():
         name, upstream, upstream_name, tracking, remote = line.split("\0")
         if not upstream:
             repo.issues.append(f"{name}：无 upstream")
+            repo.statuses.append("no-upstream")
             continue
         if tracking == "gone":
             repo.issues.append(f"{name}：upstream 已失效（{upstream_name}）")
+            repo.statuses.append("gone")
             continue
         if remote == ".":
             repo.issues.append(f"{name}：跟踪本地分支（{upstream_name}）")
+            repo.statuses.append("local-upstream")
         differences = re.findall(r"(ahead|behind) (\d+)", tracking)
+        for kind, count in differences:
+            repo.counts[kind] += int(count)
         if differences:
             labels = {"ahead": "领先", "behind": "落后"}
             summary = "，".join(f"{labels[kind]} {count}" for kind, count in differences)
             repo.issues.append(f"{name} → {upstream_name}：{summary}")
+            repo.statuses.extend(kind for kind, _ in differences)
 
 
 def _read_bare_status(repo: Repository, stash: bool = True) -> None:
+    repo.counts.update(staged=0, unstaged=0, untracked=0, conflict=0)
     repo.branch = _git(repo.path, "symbolic-ref", "--quiet", "--short", "HEAD", allowed_codes=(0, 1)).strip()
     if not repo.branch:
         repo.branch = f"HEAD@{_git(repo.path, 'rev-parse', '--short', 'HEAD').strip()}"
         repo.issues.append("游离 HEAD")
+        repo.statuses.append("detached")
     # 裸仓库没有工作区，直接读取 stash 引用的 reflog。
-    if stash and _git(repo.path, "rev-parse", "--verify", "--quiet", "refs/stash", allowed_codes=(0, 1)):
-        stash_count = len(_git(repo.path, "reflog", "show", "--format=%gd", "refs/stash").splitlines())
+    if stash:
+        exists = _git(repo.path, "rev-parse", "--verify", "--quiet", "refs/stash", allowed_codes=(0, 1))
+        stash_count = len(_git(repo.path, "reflog", "show", "--format=%gd", "refs/stash").splitlines()) if exists else 0
+        repo.counts["stash"] = stash_count
         if stash_count:
             repo.issues.append(f"stash {stash_count}")
+            repo.statuses.append("stash")
 
 
-def _read_shared_refs(repo: Repository, fetch: bool) -> tuple[str | None, list[str]]:
+def _read_shared_refs(
+    repo: Repository, fetch: bool, *, stash_details: bool = False
+) -> tuple[str | None, list[str], list[str]]:
     errors: list[str] = []
+    stashes: list[str] = []
+    branches = None
     if fetch:
         try:
             # 同一仓库的多个 worktree 共用引用，远程更新只执行一次。
@@ -386,18 +514,24 @@ def _read_shared_refs(repo: Repository, fetch: bool) -> tuple[str | None, list[s
         except GitScanError as exc:
             errors.append(f"远程更新失败，使用缓存：{exc}")
     try:
-        return _git(repo.path, "for-each-ref", f"--format={_BRANCH_FORMAT}", "refs/heads/"), errors
+        branches = _git(repo.path, "for-each-ref", f"--format={_BRANCH_FORMAT}", "refs/heads/")
     except GitScanError as exc:
         errors.append(str(exc))
-        return None, errors
+    if stash_details:
+        try:
+            stashes = _git(repo.path, "stash", "list").splitlines()
+        except GitScanError as exc:
+            errors.append(str(exc))
+    return branches, stashes, errors
 
 
 def _scan_repository(
     path: str,
     fetch: bool,
-    shared: dict[str, Future[tuple[str | None, list[str]]]],
+    shared: dict[str, Future[tuple[str | None, list[str], list[str]]]],
     lock: Lock,
     stash: bool = True,
+    detail: bool = False,
 ) -> Repository:
     repo = _identify_repository(path)
     if not repo.common_dir:
@@ -408,17 +542,18 @@ def _scan_repository(
     # 首个检查线程负责共用引用；其他 worktree 等待同一个结果，避免重复 fetch 和分支查询。
     if owner:
         try:
-            future.set_result(_read_shared_refs(repo, fetch))
+            future.set_result(_read_shared_refs(repo, fetch, stash_details=stash and detail))
         except Exception as exc:
             future.set_exception(exc)
             raise
-    branches, errors = future.result()
+    branches, stashes, errors = future.result()
+    repo.stashes = list(stashes)
     repo.errors.extend(errors)
     try:
         if repo.bare:
             _read_bare_status(repo, stash)
         else:
-            _read_worktree(repo, stash)
+            _read_worktree(repo, stash, detail=detail)
     except GitScanError as exc:
         repo.errors.append(str(exc))
     if branches is not None:
@@ -426,12 +561,42 @@ def _scan_repository(
     return repo
 
 
-def _duplicate_remotes(repos: list[Repository]) -> set[str]:
-    identities: dict[str, set[str]] = defaultdict(set)
-    for repo in repos:
-        if repo.remote_url and repo.common_dir:
-            identities[repo.remote_url].add(repo.common_dir)
-    return {remote for remote, common_dirs in identities.items() if len(common_dirs) > 1}
+def _remote_groups(repos: list[Repository]) -> list[list[Repository]]:
+    parents = list(range(len(repos)))
+    owners: dict[tuple[str, str], int] = {}
+
+    def root(index: int) -> int:
+        while parents[index] != index:
+            parents[index] = parents[parents[index]]
+            index = parents[index]
+        return index
+
+    # 用地址和共用 Git 目录建立连通分量，保留跨主机、跨 worktree 的间接关联。
+    for index, repo in enumerate(repos):
+        identities = [("remote", url) for url in sorted(repo.remote_urls)]
+        if repo.common_dir:
+            identities.append(("common", repo.common_dir))
+        for identity in identities:
+            parents[root(index)] = root(owners.setdefault(identity, index))
+    components: dict[int, list[Repository]] = defaultdict(list)
+    for index, repo in enumerate(repos):
+        components[root(index)].append(repo)
+    return list(components.values())
+
+
+def _repository_statuses(repo: Repository, duplicates: set[str]) -> set[str]:
+    statuses = set(repo.statuses)
+    if repo.worktree:
+        statuses.add("worktree")
+    if repo.path in duplicates:
+        statuses.add("duplicate")
+    if repo.issues or repo.errors:
+        statuses.add("issues")
+    if repo.errors:
+        statuses.add("error")
+    if not repo.issues and not repo.errors:
+        statuses.add("clean")
+    return statuses
 
 
 def _remote_host(url: str) -> str:
@@ -445,12 +610,14 @@ def _remote_host(url: str) -> str:
         return url.partition("/")[0]
 
 
-def _group_repositories(repos: list[Repository], group_by: str) -> dict[str, dict[str, list[Repository]]]:
+def _group_repositories(remote_groups: list[list[Repository]], group_by: str) -> dict[str, dict[str, list[Repository]]]:
     grouped: dict[str, dict[str, list[Repository]]] = {}
-    for repo in repos:
-        host = _remote_host(repo.remote_url)
-        key = Path(repo.path).name if group_by == "name" else repo.remote_url or repo.path
-        grouped.setdefault(host, {}).setdefault(key, []).append(repo)
+    for repos in remote_groups:
+        remote_key = min((url for repo in repos for url in repo.remote_urls), default=min(repo.path for repo in repos))
+        host = _remote_host(remote_key) if any(repo.remote_urls for repo in repos) else _remote_host("")
+        for repo in repos:
+            key = Path(repo.path).name if group_by == "name" else remote_key
+            grouped.setdefault(host, {}).setdefault(key, []).append(repo)
     return grouped
 
 
@@ -458,22 +625,42 @@ def _group_label(
     key: str, repos: list[Repository], group_by: str, duplicates: set[str], *, compact: bool = False
 ) -> Text:
     if group_by == "remote":
-        key = key.removeprefix(f"{_remote_host(key)}/") if repos[0].remote_url else Path(key).name
+        key = key.removeprefix(f"{_remote_host(key)}/") if any(repo.remote_urls for repo in repos) else Path(key).name
     label = Text(key, style="bold cyan")
-    if any(repo.remote_url in duplicates for repo in repos):
+    if any(repo.path in duplicates for repo in repos):
         label.append(" · 重复克隆" if compact else "\n重复克隆", style="yellow")
     if group_by == "name" and len({repo.remote_url for repo in repos if repo.remote_url}) > 1:
         label.append(" · 同名仓库（远程不同）" if compact else "\n同名仓库（远程不同）", style="yellow")
     return label
 
 
-def _repository_cells(repo: Repository, group_by: str, *, compact: bool = False) -> tuple[Text, Text, Text, Text]:
+def _repository_cells(  # noqa: C901
+    repo: Repository, group_by: str, *, compact: bool = False, detail: bool = False
+) -> tuple[Text, Text, Text, Text]:
     kind = "（裸仓库）" if repo.bare else "（worktree）" if repo.worktree else ""
     remote = repo.remote_name or "—"
-    if group_by == "name" and repo.remote_url:
+    if repo.remotes:
+        remote = (" · " if compact else "\n").join(
+            f"{name}：{url}" for name, urls in repo.remotes.items() for url in urls
+        )
+    elif group_by == "name" and repo.remote_url:
         separator = " · " if compact else "\n"
         remote = f"{remote}{separator}{repo.remote_url}"
     status = Text((" · " if compact else "\n").join(repo.issues), style="yellow")
+    if detail:
+        details = []
+        for change in repo.changes:
+            path = repr(change["path"])
+            if "original_path" in change:
+                path = f"{repr(change['original_path'])} → {path}"
+            if "submodule" in change:
+                path = f"{path} {change['submodule']}"
+            details.append(f"{change['status']} {path}")
+        details.extend(repo.stashes)
+        for line in details:
+            if status:
+                status.append("\n")
+            status.append(line)
     for error in repo.errors:
         if status:
             status.append("\n")
@@ -494,46 +681,51 @@ def _print_host_table(
     duplicates: set[str],
     *,
     compact: bool = False,
+    detail: bool = False,
 ) -> None:
     repos = [repo for group in groups.values() for repo in group]
-    identities = {repo.common_dir for repo in repos if repo.common_dir}
-    caption = f"{len(groups)} 个仓库组 · {len(repos)} 个目录 · {len(identities)} 个独立仓库"
-    table = Table(title=Text(host, style="bold cyan"), caption=Text(caption), expand=True)
+    table = Table(
+        title=Text(host, style="bold cyan"),
+        caption=Text(
+            f"{len(groups)} 个仓库组 · {len(repos)} 个目录 · "
+            f"{len({repo.common_dir for repo in repos if repo.common_dir})} 个独立仓库"
+        ),
+        expand=True,
+    )
     if compact:
         compact_table(table)
     table.add_column("仓库", ratio=2, overflow="fold")
     table.add_column("目录", ratio=3, overflow="fold")
-    table.add_column("当前分支", min_width=8, max_width=20, overflow="fold")
-    table.add_column(
-        "远程",
-        ratio=2 if group_by == "name" else None,
-        max_width=None if group_by == "name" else 20,
-        no_wrap=group_by == "remote" and not compact,
-        overflow="fold" if group_by == "name" or compact else "ellipsis",
-    )
+    if detail:
+        table.add_column("当前分支", min_width=8, max_width=20, overflow="fold")
+        table.add_column("远程", ratio=2, overflow="fold")
     table.add_column("本地 / 跟踪状态", ratio=3, overflow="fold")
-    for key, group in sorted(groups.items()):
+    for key, group in groups.items():
         label = _group_label(key, group, group_by, duplicates, compact=compact)
-        for index, repo in enumerate(sorted(group, key=lambda item: item.path)):
+        for index, repo in enumerate(group):
+            cells: tuple[Text, ...] = _repository_cells(repo, group_by, compact=compact, detail=detail)
+            if not detail:
+                cells = (cells[0], cells[-1])
             # 组内留空仓库列形成纵向合并，紧凑模式取消组间横线以节省行数。
             table.add_row(
                 label if index == 0 else Text(""),
-                *_repository_cells(repo, group_by, compact=compact),
+                *cells,
                 end_section=not compact and index == len(group) - 1,
             )
     console.print(table)
 
 
-def _collect_repositories(
+def _collect_repositories(  # pylint: disable=too-many-locals
     paths: list[str],
     errors: list[DirectoryScanError],
     fetch: bool,
     exclude: tuple[str, ...] = (),
     progress: RepositoryProgress | None = None,
     stash: bool = True,
+    detail: bool = False,
 ) -> list[Repository]:
     repos: list[Repository] = []
-    scan_repository = partial(_scan_repository, fetch=fetch, shared={}, lock=Lock(), stash=stash)
+    scan_repository = partial(_scan_repository, fetch=fetch, shared={}, lock=Lock(), stash=stash, detail=detail)
 
     def report(future: Future[Repository]) -> None:
         if progress is not None and not future.cancelled():
@@ -573,24 +765,32 @@ def _build_scan_report(
     repos: list[Repository],
     errors: list[DirectoryScanError],
     group_by: str,
-    duplicates_only: bool,
+    statuses: tuple[str, ...],
     host_filter: re.Pattern[str] | None,
+    sort: list[SortField] | None = None,
 ) -> _ScanReport:
-    grouped = _group_repositories(repos, group_by)
-    duplicates = _duplicate_remotes(repos)
+    remote_groups = _remote_groups(repos)
+    duplicate_groups = [
+        group
+        for group in remote_groups
+        if any(repo.remote_urls for repo in group) and len({repo.common_dir for repo in group if repo.common_dir}) > 1
+    ]
+    duplicates = {repo.path for group in duplicate_groups for repo in group}
+    grouped = _group_repositories(remote_groups, group_by)
     selected = {}
     for host in sorted(grouped):
-        if host_filter is not None and (
-            host in ("本地路径", "无远程 / 无法识别") or host_filter.fullmatch(host) is None
-        ):
-            continue
         groups = {
-            key: group
+            key: [
+                repo
+                for repo in group
+                if "all" in statuses or _repository_statuses(repo, duplicates).intersection(statuses)
+            ]
             for key, group in grouped[host].items()
-            if not duplicates_only or any(repo.remote_url in duplicates for repo in group)
+            if host_filter is None or _matches_host(group, host_filter)
         }
+        groups = {key: group for key, group in groups.items() if group}
         if groups:
-            selected[host] = groups
+            selected[host] = sorted_repository_groups(groups, sort)
     return _ScanReport(
         selected,
         duplicates,
@@ -600,7 +800,7 @@ def _build_scan_report(
             "independent_repository_count": len({repo.common_dir for repo in repos if repo.common_dir}),
             "group_count": sum(len(groups) for groups in grouped.values()),
             "shown_group_count": sum(len(groups) for groups in selected.values()),
-            "duplicate_remote_count": len(duplicates),
+            "duplicate_group_count": len(duplicate_groups),
             "issue_repository_count": sum(bool(repo.issues or repo.errors) for repo in repos),
             "failed_repository_count": sum(bool(repo.errors) for repo in repos),
             "directory_error_count": len(errors),
@@ -608,20 +808,26 @@ def _build_scan_report(
     )
 
 
+def _matches_host(repos: list[Repository], host_filter: re.Pattern[str]) -> bool:
+    hosts = {_remote_host(url) for repo in repos for url in repo.remote_urls} - {"本地路径", "无远程 / 无法识别"}
+    return any(host_filter.fullmatch(host) for host in hosts)
+
+
 def _scan_json_repositories(report: _ScanReport) -> list[dict]:
     return [
         {
             **asdict(repo),
+            "statuses": sorted(_repository_statuses(repo, report.duplicates)),
             "host": host,
             "group_key": key,
             "kind": "bare" if repo.bare else "worktree" if repo.worktree else "normal",
-            "duplicate_clone": repo.remote_url in report.duplicates,
+            "duplicate_clone": repo.path in report.duplicates,
             "has_issues": bool(repo.issues or repo.errors),
             "failed": bool(repo.errors),
         }
         for host, groups in report.groups.items()
-        for key, group in sorted(groups.items())
-        for repo in sorted(group, key=lambda item: item.path)
+        for key, group in groups.items()
+        for repo in group
     ]
 
 
@@ -630,24 +836,26 @@ def _print_scan_results(  # pylint: disable=too-many-arguments
     repos: list[Repository],
     errors: list[DirectoryScanError],
     group_by: str,
-    duplicates_only: bool,
+    statuses: tuple[str, ...],
     fetch: bool,
     host_filter: re.Pattern[str] | None = None,
     *,
     compact: bool = False,
+    detail: bool = False,
+    sort: list[SortField] | None = None,
 ) -> None:
-    report = _build_scan_report(repos, errors, group_by, duplicates_only, host_filter)
+    report = _build_scan_report(repos, errors, group_by, statuses, host_filter, sort)
     console.print(
         "已启用远程更新；更新失败的仓库按缓存检查。" if fetch else "远程差异依据本地缓存引用；使用 --fetch 可先更新。"
     )
     for host, groups in report.groups.items():
-        _print_host_table(console, host, groups, group_by, report.duplicates, compact=compact)
+        _print_host_table(console, host, groups, group_by, report.duplicates, compact=compact, detail=detail)
     print_directory_errors(console, errors, compact=compact)
     summary = report.summary
     console.print(
         f"扫描 {summary['repository_count']} 个目录，{summary['independent_repository_count']} 个独立仓库；"
         f"展示 {summary['shown_group_count']}/{summary['group_count']} 个仓库组，"
-        f"重复远程 {summary['duplicate_remote_count']} 组，异常仓库目录 {summary['issue_repository_count']} 个，"
+        f"重复仓库 {summary['duplicate_group_count']} 组，异常仓库目录 {summary['issue_repository_count']} 个，"
         f"检查失败 {summary['failed_repository_count']} 个，扫描错误 {summary['directory_error_count']} 个。"
     )
 
@@ -655,7 +863,7 @@ def _print_scan_results(  # pylint: disable=too-many-arguments
 def scan_projects(  # pylint: disable=too-many-arguments
     paths: list[str],
     group_by: str = "remote",
-    duplicates_only: bool = False,
+    statuses: tuple[str, ...] = ("all",),
     fetch: bool = False,
     exclude: tuple[str, ...] = (),
     stash: bool = True,
@@ -663,16 +871,17 @@ def scan_projects(  # pylint: disable=too-many-arguments
     *,
     json_output: bool = False,
     compact: bool = False,
+    detail: bool = False,
+    sort: list[SortField] | None = None,
 ) -> None:
-    """扫描 paths，按 group_by 合并并用 host_filter 筛选展示主机。
-    compact 精简表格；json_output 输出 JSON 时忽略展示选项。
+    """扫描 paths，按 group_by 合并，用 statuses 和 host_filter 筛选结果。
+    detail 展示文件及 stash 详情；JSON 始终包含详情，compact 仅精简表格。
     """
-    console = Console()
     errors: list[DirectoryScanError] = []
-    with RepositoryProgress(Console(stderr=True) if json_output else console) as progress:
-        repos = _collect_repositories(paths, errors, fetch, exclude, progress, stash)
+    with RepositoryProgress(Console(stderr=json_output)) as progress:
+        repos = _collect_repositories(paths, errors, fetch, exclude, progress, stash, detail or json_output)
     if json_output:
-        report = _build_scan_report(repos, errors, group_by, duplicates_only, host_filter)
+        report = _build_scan_report(repos, errors, group_by, statuses, host_filter, sort)
         write_json_result(
             "scan",
             report.summary,
@@ -680,13 +889,16 @@ def scan_projects(  # pylint: disable=too-many-arguments
             errors,
             {
                 "group_by": group_by,
-                "duplicates_only": duplicates_only,
+                "statuses": list(statuses),
                 "fetch": fetch,
                 "stash_checked": stash,
             },
+            schema_version=2,
         )
         return
-    _print_scan_results(console, repos, errors, group_by, duplicates_only, fetch, host_filter, compact=compact)
+    _print_scan_results(
+        Console(), repos, errors, group_by, statuses, fetch, host_filter, compact=compact, detail=detail, sort=sort
+    )
 
 
 def _compile_host_glob(value: str) -> re.Pattern[str]:
@@ -701,61 +913,70 @@ def _compile_host_regex(value: str) -> re.Pattern[str]:
 
 
 def add_scan_parser(parser: argparse.ArgumentParser) -> None:
-    """为 parser 添加必选的 check、scan 子命令及各自参数，默认检查 stash。"""
+    """为 parser 添加必选的 scan 子命令及筛选、详情参数，默认检查 stash。"""
     parser.description = "递归检查 Git 仓库状态，查找重复克隆和本地差异。"  # noqa
-    parser.epilog = "示例：\n  gitrepo check -p ~/PythonProjects -d\n  gitrepo scan -p ~/PythonProjects --duplicates"
-    subparsers = parser.add_subparsers(dest="command", required=True, title="子命令", metavar="{check,scan}")
-    check = subparsers.add_parser(
-        "check",
-        help="检查有工作区修改、分支差异或 stash 的仓库",
-        description="检查 Git 仓库，展示有工作区修改、分支差异、stash 或检查错误的仓库。",
-        epilog="示例：\n  gitrepo check -p ~/PythonProjects -d\n  gitrepo check -p . --ignore-stash --json",
+    parser.epilog = (
+        "示例：\n  gitrepo scan -p ~/PythonProjects --status issues -d\n"
+        "  gitrepo scan -p ~/PythonProjects --status duplicate"
     )
+    subparsers = parser.add_subparsers(dest="command", required=True, title="子命令", metavar="{scan}")
     scan = subparsers.add_parser(
         "scan",
         help="扫描 Git 仓库，按远程主机分表并合并展示",
         description="扫描 Git 仓库，按远程主机分表，合并展示同一仓库的多个本地克隆。",
         epilog=(
             "示例：\n"
-            "  gitrepo scan -p ~/PythonProjects --duplicates\n"
+            "  gitrepo scan -p ~/PythonProjects --status duplicate\n"
+            "  gitrepo scan -p . --status ahead stash\n"
+            "  gitrepo scan -p . --status issues -d\n"
             "  gitrepo scan -p . --group-by name\n"
             "  gitrepo scan -p . --host '*.xxx.net|github.com'\n"
             "  gitrepo scan -p . --host-regex '.*\\.xxx\\.net|github\\.com' --json\n\n"
-            "远程地址优先使用 upstream，其次 origin，其余按名称排序选取。\n"
-            "默认只与本地缓存的远程跟踪引用比较，可用 --fetch 更新引用。"
+            "远程分组依据全部远程地址的直接或间接关联。\n"
+            "默认只与本地缓存的远程跟踪引用比较，可用 --fetch 更新引用。\n\n"
+            "状态（默认 all，多个值匹配任一）：\n"
+            + "\n".join(f"  {code:<16} {label}" for code, label in _STATUS_LABELS.items())
         ),
     )
-    for command in (check, scan):
-        add_compact_argument(command)
-        command.add_argument(
-            "--json",
-            dest="json_output",
-            action="store_true",
-            help="以 JSON 输出结果，默认使用表格；进度条写入标准错误",
-        )
-        command.add_argument(
-            "--ignore-stash",
-            dest="stash",
-            action="store_false",
-            default=True,
-            help="跳过 stash 检查，默认检查 stash",
-        )
-        command.add_argument(
-            "-p", "--path", nargs="+", default=[str(Path.home())], help="扫描目录，可指定多个；默认用户主目录"
-        )
-        command.add_argument(
-            "--exclude", nargs="+", default=[], help="按目录名跳过子目录，例如 node_modules .venv；默认无额外排除目录"
-        )
-    check.add_argument(
+    add_compact_argument(scan)
+    add_sort_argument(scan, SORT_FIELDS)
+    scan.add_argument(
+        "--json",
+        dest="json_output",
+        action="store_true",
+        help="以 JSON 输出结果，默认使用表格；进度条写入标准错误",
+    )
+    scan.add_argument(
+        "--ignore-stash",
+        dest="stash",
+        action="store_false",
+        default=True,
+        help="跳过 stash 检查，默认检查 stash",
+    )
+    scan.add_argument(
+        "-p", "--path", nargs="+", default=[str(Path.home())], help="扫描目录，可指定多个；默认用户主目录"
+    )
+    scan.add_argument(
+        "--exclude", nargs="+", default=[], help="按目录名跳过子目录，例如 node_modules .venv；默认无额外排除目录"
+    )
+    scan.add_argument(
         "-d", "--detail", action="store_true", help="显示工作区、分支差异及 stash 的详细信息，默认仅展示摘要"
     )
     scan.add_argument(
         "--group-by",
         choices=("remote", "name"),
         default="remote",
-        help="表内仓库合并依据：remote 远程地址、name 目录名；默认 remote",
+        help="表内仓库合并依据：remote 全部远程地址的关联组、name 目录名；默认 remote",
     )
-    scan.add_argument("--duplicates", action="store_true", help="仅展示包含重复克隆的分组，默认展示全部分组")
+    scan.add_argument(
+        "--status",
+        nargs="+",
+        action="extend",
+        choices=tuple(_STATUS_LABELS),
+        default=None,
+        metavar="STATUS",
+        help="按状态筛选目录，多个值匹配任一，可重复指定；默认 all，可用值见下方状态说明",
+    )
     scan.add_argument("--fetch", action="store_true", help="先更新所有已配置远程的引用，再检查状态；默认不更新引用")
     hosts = scan.add_mutually_exclusive_group()
     hosts.add_argument(

@@ -5,7 +5,7 @@ from __future__ import annotations
 from enum import IntEnum
 from pathlib import Path
 
-from ..utils.compat import StrEnum
+from plum_tools.utils.compat import StrEnum
 
 
 class Command(StrEnum):

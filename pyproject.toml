@@ -51,6 +51,7 @@ pfind_imports = "plum_tools.find_imports:main"
 pcompare = "plum_tools.compare:main"
 agent_usage_report = "plum_tools.agent_usage_report:main"
 pclean = "plum_tools.cleanup:main"
+pforkcheck = "plum_tools.fork_check:main"
 
 [project.urls]
 Homepage = "https://github.com/seekplum/plum_tools"

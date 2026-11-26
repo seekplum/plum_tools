@@ -19,7 +19,7 @@ from rich.progress import (
 )
 from rich.table import Column
 
-from .filesystem import display
+from plum_tools._cleanup.filesystem import display
 
 
 class ProgressDisplay:  # pylint: disable=too-many-instance-attributes

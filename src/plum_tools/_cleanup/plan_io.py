@@ -10,9 +10,9 @@ import sys
 import time
 from pathlib import Path
 
-from .constants import PlanVersion
-from .filesystem import directory_fd, signature
-from .runtime import implementation_digest
+from plum_tools._cleanup.constants import PlanVersion
+from plum_tools._cleanup.filesystem import directory_fd, signature
+from plum_tools._cleanup.runtime import implementation_digest
 
 
 def plan_file_path(value: str) -> Path:

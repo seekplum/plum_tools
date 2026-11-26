@@ -5,11 +5,11 @@ import shutil
 import subprocess
 import sys
 
-from ._cleanup.cli import parse_args
-from ._cleanup.constants import PROJECT_CATEGORIES, Command
-from ._cleanup.filesystem import Trash
-from ._cleanup.service import run
-from .utils.cli import cli_entry
+from plum_tools._cleanup.cli import parse_args
+from plum_tools._cleanup.constants import PROJECT_CATEGORIES, Command
+from plum_tools._cleanup.filesystem import Trash
+from plum_tools._cleanup.service import run
+from plum_tools.utils.cli import cli_entry
 
 
 @cli_entry

@@ -17,13 +17,13 @@ import shlex
 import subprocess
 import sys
 
-from .conf import LOCAL_HOST, PathConfig
-from .exceptions import RunCmdError, SystemTypeError
-from .utils.cli import call_process, cli_entry
-from .utils.parser import get_base_parser
-from .utils.printer import print_error, print_ok, print_text, print_warn
-from .utils.sshconf import merge_ssh_config
-from .utils.utils import YmlConfig, get_file_abspath, run_cmd
+from plum_tools.conf import LOCAL_HOST, PathConfig
+from plum_tools.exceptions import RunCmdError, SystemTypeError
+from plum_tools.utils.cli import call_process, cli_entry
+from plum_tools.utils.parser import get_base_parser
+from plum_tools.utils.printer import print_error, print_ok, print_text, print_warn
+from plum_tools.utils.sshconf import merge_ssh_config
+from plum_tools.utils.utils import YmlConfig, get_file_abspath, run_cmd
 
 
 def get_project_conf(  # noqa: C901

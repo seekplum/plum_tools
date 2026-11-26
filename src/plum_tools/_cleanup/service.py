@@ -5,14 +5,14 @@ from __future__ import annotations
 import argparse
 import sys
 
-from .constants import Command, ExitCode, PruneAction
-from .execution import CleanupExecutor
-from .filesystem import FileInspector, Trash
-from .plans import PlanStore
-from .reporting import CleanupReporter
-from .scanner import ProjectScanner
-from .state import CleanupState
-from .tools import ToolScanner
+from plum_tools._cleanup.constants import Command, ExitCode, PruneAction
+from plum_tools._cleanup.execution import CleanupExecutor
+from plum_tools._cleanup.filesystem import FileInspector, Trash
+from plum_tools._cleanup.plans import PlanStore
+from plum_tools._cleanup.reporting import CleanupReporter
+from plum_tools._cleanup.scanner import ProjectScanner
+from plum_tools._cleanup.state import CleanupState
+from plum_tools._cleanup.tools import ToolScanner
 
 
 def run(args: argparse.Namespace, trash: Trash | None) -> int:

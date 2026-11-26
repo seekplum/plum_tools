@@ -15,12 +15,13 @@ from rich.console import Console
 from rich.table import Table
 from rich.text import Text
 
-from . import _compare_remote
-from ._compare_remote import CHUNK_SIZE as _CHUNK_SIZE
-from ._compare_remote import CompareExitCode, Entry, EntryKind, StrEnum
-from .utils.cli import cli_entry, run_process
-from .utils.parser import add_compact_argument, get_base_parser
-from .utils.printer import compact_table
+from plum_tools import _compare_remote
+from plum_tools._compare_remote import CHUNK_SIZE as _CHUNK_SIZE
+from plum_tools._compare_remote import CompareExitCode, Entry, EntryKind, StrEnum
+from plum_tools.utils.cli import cli_entry, run_process
+from plum_tools.utils.parser import add_compact_argument, get_base_parser
+from plum_tools.utils.printer import compact_table
+from plum_tools.utils.sorting import add_sort_argument, sort_items
 
 
 class ShowMode(StrEnum):
@@ -392,6 +393,16 @@ def _print_json_report(
 def main() -> None:
     """解析路径参数并展示结果；退出码 0 表示一致，1 表示差异，2 表示错误。"""
     parser = get_base_parser()
+    add_sort_argument(
+        parser,
+        {
+            "path": "相对路径",
+            "name": "名称",
+            "result": "比较结果",
+            "kind": "各输入中首个存在条目的类型",
+            "size": "各输入对应条目的最大大小",
+        },
+    )
     add_compact_argument(parser)
     parser.description = "比较两个及以上目录或文件，默认仅展示不一致的条目。"  # noqa
     parser.epilog = (
@@ -475,6 +486,17 @@ def main() -> None:
                 max_depth=max_depth,
                 ignore_case=args.ignore_case,
             )
+        comparisons = sort_items(
+            comparisons,
+            args.sort,
+            {
+                "path": lambda item: str(item.path),
+                "name": lambda item: item.path.name,
+                "result": lambda item: item.result,
+                "kind": lambda item: next((entry.kind for entry in item.entries if entry is not None), None),
+                "size": lambda item: max((entry.size for entry in item.entries if entry is not None), default=None),
+            },
+        )
         if args.json_output:
             _print_json_report(
                 args.paths,

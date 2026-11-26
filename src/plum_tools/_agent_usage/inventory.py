@@ -6,8 +6,8 @@ import json
 import os
 from pathlib import Path
 
-from ..utils.compat import tomllib
-from .models import RULE_BASENAMES, RULE_FILES, RULE_ROOTS, SKILL_DIRS, Client, Kind, record
+from plum_tools._agent_usage.models import RULE_BASENAMES, RULE_FILES, RULE_ROOTS, SKILL_DIRS, Client, Kind, record
+from plum_tools.utils.compat import tomllib
 
 
 def claude_mcp_names(path: Path) -> set[str]:

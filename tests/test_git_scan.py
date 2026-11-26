@@ -55,7 +55,15 @@ def test_host_filter_preserves_grouping_and_totals(group_by: str, regex: bool, d
         _compile_host_regex(r".*\.xxx\.net|github\.com") if regex else _compile_host_glob("*.xxx.net|github.com")
     )
     output = StringIO()
-    _print_scan_results(Console(file=output, width=200), repos, [], group_by, duplicates_only, False, host_filter)
+    _print_scan_results(
+        Console(file=output, width=200),
+        repos,
+        [],
+        group_by,
+        ("duplicate",) if duplicates_only else ("all",),
+        False,
+        host_filter,
+    )
     rendered = output.getvalue()
     assert "github.com" in rendered
     assert "/one/project" in rendered
@@ -77,7 +85,9 @@ def test_host_glob_excludes_non_hosts(pattern: str) -> None:
         Repository("/three/unknown"),
     ]
     output = StringIO()
-    _print_scan_results(Console(file=output, width=200), repos, [], "remote", False, False, _compile_host_glob(pattern))
+    _print_scan_results(
+        Console(file=output, width=200), repos, [], "remote", ("all",), False, _compile_host_glob(pattern)
+    )
     rendered = output.getvalue()
     assert "本地路径" not in rendered
     assert "无远程 / 无法识别" not in rendered
@@ -103,7 +113,7 @@ def test_host_glob_matching(pattern: str, matching: str, excluded: str) -> None:
 def test_host_regex_uses_full_matching() -> None:
     output = StringIO()
     repos = [Repository("/one/project", remote_url="github.com/team/project")]
-    _print_scan_results(Console(file=output), repos, [], "remote", False, False, _compile_host_regex("github"))
+    _print_scan_results(Console(file=output), repos, [], "remote", ("all",), False, _compile_host_regex("github"))
     assert "展示 0/1 个仓库组" in output.getvalue()
     assert _compile_host_regex(r"GITHUB\.COM").fullmatch("github.com")
 
@@ -148,14 +158,14 @@ def test_scan_stash_queries_and_status(
     with (
         mock.patch("plum_tools.git_scan.iter_repositories", return_value=iter(["/project"])) as discover,
         mock.patch("plum_tools.git_scan._identify_repository", return_value=repo) as identify,
-        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=(branch_refs, [])) as refs,
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=(branch_refs, [], [])) as refs,
         mock.patch("plum_tools.git_scan._git", side_effect=responses) as git,
     ):
         scan_projects(["/projects"], stash=stash, json_output=json_output)
     assert discover.call_count == 1
     assert discover.call_args.args[:3] == (["/projects"], [], ())
     identify.assert_called_once_with("/project")
-    refs.assert_called_once_with(repo, False)
+    refs.assert_called_once_with(repo, False, stash_details=stash and json_output)
     git.assert_has_calls(expected_calls)
     assert git.call_count == len(expected_calls)
     assert repo.branch == "main"
@@ -189,6 +199,7 @@ def test_scan_json_filtering_preserves_all_scan_totals(
             remote_url="github.com/team/project",
             branch="main",
             issues=["stash 2"],
+            statuses=["stash"],
         ),
         Repository("/two/project", common_dir="/two/.git", remote_url="github.com/team/project"),
         Repository(
@@ -214,12 +225,14 @@ def test_scan_json_filtering_preserves_all_scan_totals(
         exclude: tuple[str, ...],
         progress: object,
         stash: bool,
+        detail: bool,
     ) -> list[Repository]:
         assert paths == ["/projects"]
         assert fetch is True
         assert exclude == (".venv",)
         assert progress is not None
         assert stash is False
+        assert detail is True
         errors.append(error)
         return repos
 
@@ -228,7 +241,7 @@ def test_scan_json_filtering_preserves_all_scan_totals(
         scan_projects(
             ["/projects"],
             group_by,
-            duplicates_only,
+            ("duplicate",) if duplicates_only else ("all",),
             True,
             (".venv",),
             stash=False,
@@ -237,22 +250,21 @@ def test_scan_json_filtering_preserves_all_scan_totals(
         )
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["command"] == "scan"
     assert payload["options"] == {
         "group_by": group_by,
-        "duplicates_only": duplicates_only,
+        "statuses": ["duplicate"] if duplicates_only else ["all"],
         "fetch": True,
         "stash_checked": False,
     }
-    only_remote_duplicates = duplicates_only and group_by == "remote"
     assert payload["summary"] == {
         "repository_count": 7,
-        "shown_repository_count": 2 if only_remote_duplicates else 4,
+        "shown_repository_count": 2 if duplicates_only else 4,
         "independent_repository_count": 6,
         "group_count": 5 if group_by == "remote" else 4,
         "shown_group_count": 2 if group_by == "remote" and not duplicates_only else 1,
-        "duplicate_remote_count": 1,
+        "duplicate_group_count": 1,
         "issue_repository_count": 2,
         "failed_repository_count": 1,
         "directory_error_count": 1,
@@ -260,7 +272,7 @@ def test_scan_json_filtering_preserves_all_scan_totals(
     rows = {item["path"]: item for item in payload["repositories"]}
     assert set(rows) == (
         {"/one/project", "/two/project"}
-        if only_remote_duplicates
+        if duplicates_only
         else {
             "/one/project",
             "/two/project",
@@ -278,6 +290,11 @@ def test_scan_json_filtering_preserves_all_scan_totals(
         "worktree": False,
         "issues": ["stash 2"],
         "errors": [],
+        "remotes": {},
+        "statuses": ["duplicate", "issues", "stash"],
+        "changes": [],
+        "stashes": [],
+        "counts": {},
         "host": "github.com",
         "group_key": "project" if group_by == "name" else "github.com/team/project",
         "kind": "normal",
@@ -286,7 +303,7 @@ def test_scan_json_filtering_preserves_all_scan_totals(
         "failed": False,
     }
     assert rows["/two/project"]["has_issues"] is False
-    if not only_remote_duplicates:
+    if not duplicates_only:
         assert rows["/three/project"]["errors"] == ['fetch 失败："断开"\n请重试']
         assert rows["/three/project"]["failed"] is True
         assert rows["/three/project"]["has_issues"] is True
@@ -508,6 +525,7 @@ def test_identify_repository_sets_bare_and_worktree_flags() -> None:
         "true\n/repo/.git\n/repo/.git\n",
         "origin\n",
         "git@github.com:team/project.git\n",
+        "git@github.com:team/project.git\n",
     ]
     with mock.patch("plum_tools.git_scan._git", side_effect=responses):
         repo = _identify_repository("/repo")
@@ -521,6 +539,7 @@ def test_identify_repository_marks_worktree() -> None:
     responses = [
         "false\n/repo/.git\n/repo/.git/worktrees/wt\n",
         "origin\n",
+        "git@github.com:team/project.git\n",
         "git@github.com:team/project.git\n",
     ]
     with mock.patch("plum_tools.git_scan._git", side_effect=responses):
@@ -536,7 +555,7 @@ def test_identify_repository_appends_no_remote_issue() -> None:
 
 
 def test_identify_repository_raises_on_empty_remote_url() -> None:
-    responses = ["false\n/repo/.git\n/repo/.git\n", "origin\n", ""]
+    responses = ["false\n/repo/.git\n/repo/.git\n", "origin\n", "", ""]
     with mock.patch("plum_tools.git_scan._git", side_effect=responses):
         repo = _identify_repository("/repo")
     assert any("未配置地址" in error for error in repo.errors)
@@ -657,7 +676,8 @@ def test_read_bare_status_detects_stash() -> None:
 def test_read_shared_refs_skips_fetch_when_disabled() -> None:
     repo = Repository("/repo")
     with mock.patch("plum_tools.git_scan._git", return_value="") as git_call:
-        refs, errors = _read_shared_refs(repo, fetch=False)
+        refs, stashes, errors = _read_shared_refs(repo, fetch=False)
+    assert stashes == []
     assert refs == ""
     assert errors == []
     assert git_call.call_count == 1
@@ -669,7 +689,8 @@ def test_read_shared_refs_appends_fetch_error() -> None:
         "plum_tools.git_scan._git",
         side_effect=[GitScanError("fetch 失败"), ""],
     ):
-        refs, errors = _read_shared_refs(repo, fetch=True)
+        refs, stashes, errors = _read_shared_refs(repo, fetch=True)
+    assert stashes == []
     assert refs == ""
     assert len(errors) == 1
     assert "远程更新失败" in errors[0]
@@ -678,7 +699,8 @@ def test_read_shared_refs_appends_fetch_error() -> None:
 def test_read_shared_refs_appends_for_each_ref_error() -> None:
     repo = Repository("/repo")
     with mock.patch("plum_tools.git_scan._git", side_effect=GitScanError("for-each-ref 失败")):
-        refs, errors = _read_shared_refs(repo, fetch=False)
+        refs, stashes, errors = _read_shared_refs(repo, fetch=False)
+    assert stashes == []
     assert refs is None
     assert errors == ["for-each-ref 失败"]
 
@@ -688,15 +710,21 @@ def test_scan_repository_reuses_shared_future() -> None:
     lock = mock.MagicMock()
     with (
         mock.patch(
-            "plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")
+            "plum_tools.git_scan._identify_repository",
+            side_effect=[
+                Repository("/repo", common_dir="/repo/.git"),
+                Repository("/worktree", common_dir="/repo/.git", worktree=True),
+            ],
         ),
-        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [])) as refs,
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", ["stash@{0}: 保留详情"], [])) as refs,
         mock.patch("plum_tools.git_scan._read_worktree"),
     ):
-        repo1 = _scan_repository("/repo", fetch=False, shared=shared, lock=lock)
-        repo2 = _scan_repository("/repo", fetch=False, shared=shared, lock=lock)
-    assert refs.call_count == 1
+        repo1 = _scan_repository("/repo", fetch=False, shared=shared, lock=lock, detail=True)
+        repo2 = _scan_repository("/worktree", fetch=False, shared=shared, lock=lock, detail=True)
+    refs.assert_called_once_with(repo1, False, stash_details=True)
     assert repo1.errors == repo2.errors == []
+    assert repo1.stashes == repo2.stashes == ["stash@{0}: 保留详情"]
+    assert repo1.stashes is not repo2.stashes
 
 
 def test_scan_repository_returns_repo_without_common_dir() -> None:
@@ -715,7 +743,7 @@ def test_scan_repository_appends_read_errors() -> None:
         mock.patch(
             "plum_tools.git_scan._identify_repository", return_value=Repository("/repo", common_dir="/repo/.git")
         ),
-        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=(None, ["ref error"])),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=(None, [], ["ref error"])),
         mock.patch("plum_tools.git_scan._read_worktree", side_effect=GitScanError("status 失败")),
     ):
         repo = _scan_repository("/repo", fetch=False, shared=shared, lock=lock)
@@ -738,7 +766,7 @@ def test_remote_host(url: str, expected: str) -> None:
 
 def test_group_label_adds_duplicate_note() -> None:
     repos = [Repository("/repo", remote_url="github.com/team/project")]
-    label = _group_label("github.com/team/project", repos, "remote", {"github.com/team/project"})
+    label = _group_label("github.com/team/project", repos, "remote", {"/repo"})
     assert "重复克隆" in label.plain
 
 
@@ -796,7 +824,7 @@ def test_collect_repositories_processes_all_paths(tmp_path: Path) -> None:
     with (
         mock.patch("plum_tools.git_scan.iter_repositories", return_value=iter(["/one/repo", "/two/repo"])),
         mock.patch("plum_tools.git_scan._identify_repository", side_effect=repos),
-        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [])),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [], [])),
         mock.patch("plum_tools.git_scan._read_worktree"),
     ):
         result = _collect_repositories(["/projects"], [], fetch=False)
@@ -820,7 +848,7 @@ def test_collect_repositories_with_progress(tmp_path: Path) -> None:
     with (
         mock.patch("plum_tools.git_scan.iter_repositories", side_effect=fake_iter),
         mock.patch("plum_tools.git_scan._identify_repository", return_value=repo),
-        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [])),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=("", [], [])),
         mock.patch("plum_tools.git_scan._read_worktree"),
     ):
         result = _collect_repositories(["/projects"], [], fetch=False, progress=progress)
@@ -843,7 +871,7 @@ def test_scan_json_repositories_produces_enriched_rows() -> None:
         "github.com": {"team/project": [repos[0]]},
         "gitlab.com": {"team/repo": [repos[1]]},
     }
-    report = _ScanReport(grouped, {"github.com/team/project"}, {})
+    report = _ScanReport(grouped, {"/one/repo"}, {})
     rows = _scan_json_repositories(report)
 
     assert len(rows) == 2

@@ -5,12 +5,12 @@ from __future__ import annotations
 import shutil
 from typing import TYPE_CHECKING
 
-from .cli import _build_parser, _resolve_roots, _validate_options
-from .constants import PLAN_OPTIONS, PROJECT_CATEGORIES, Category, SnapshotMode
-from .filesystem import display
-from .models import Candidate, Note
-from .plan_io import plan_checksum, plan_file_path, plan_runtime, read_plan, write_plan
-from .projects import Repository
+from plum_tools._cleanup.cli import _build_parser, _resolve_roots, _validate_options
+from plum_tools._cleanup.constants import PLAN_OPTIONS, PROJECT_CATEGORIES, Category, SnapshotMode
+from plum_tools._cleanup.filesystem import display
+from plum_tools._cleanup.models import Candidate, Note
+from plum_tools._cleanup.plan_io import plan_checksum, plan_file_path, plan_runtime, read_plan, write_plan
+from plum_tools._cleanup.projects import Repository
 
 if TYPE_CHECKING:
     from .filesystem import FileInspector

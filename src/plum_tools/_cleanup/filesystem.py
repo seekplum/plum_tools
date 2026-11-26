@@ -22,7 +22,7 @@ from trashcli.put.fs.real_fs import RealFs
 from trashcli.put.main import RandomIntGenerator, make_cmd
 from trashcli.put.my_logger import StreamBackend
 
-from .constants import (
+from plum_tools._cleanup.constants import (
     BUILD_DIRS,
     CATEGORY_PROTECTED_PATTERNS,
     DEPENDENCIES,

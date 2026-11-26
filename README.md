@@ -97,20 +97,19 @@ pcompare 版本: 0.6.6（2026-11-19） 提交: a1b2c3d4e5f6
 ## 紧凑模式
 
 在宽终端中使用 `--compact` 减少结果占用的行数，默认关闭。
-支持 `gitrepo check`、`gitrepo scan`、`pfind_imports`、`pping`、
+支持 `gitrepo scan`、`pfind_imports`、`pping`、
 `pcompare` 和 `pipmi`：
 
 ```bash
 gitrepo scan -p ~/PythonProjects --compact
-gitrepo check -p ~/PythonProjects -d --compact
+gitrepo scan -p ~/PythonProjects --status issues -d --compact
 pfind_imports -p . --compact
 pping -p 192.168.1 --compact
 pcompare ./backup_a ./backup_b --compact
 pipmi -l 192.168.1.10 -s 20 21 -c 'power status' --compact
 ```
 
-Git 仓库和文件比较表格精简边框，仓库状态使用同行排列；
-`gitrepo check -d` 移除正常检查结果详情中的空行，检查失败详情完整保留。
+Git 仓库和文件比较表格精简边框，仓库状态摘要使用同行排列，文件及 stash 详情逐项展示。
 `pfind_imports` 按标准库、第三方库分组并分栏，导入名与包名不同时显示
 `导入名→包名`，相同时仅显示一次。`pping` 按 IP 地址顺序分栏。
 分栏数量随终端宽度调整，长路径和错误内容继续换行显示。
@@ -123,20 +122,24 @@ Git 仓库和文件比较表格精简边框，仓库状态使用同行排列；
 
 ## gitrepo
 
-必须指定 `check` 或 `scan` 子命令，业务参数统一放在子命令后。
-使用 `check` 查找有未提交修改、分支差异或 stash 的 Git 仓库：
+必须指定 `scan` 子命令，业务参数统一放在子命令后。
+原 `check` 已合并到 `scan`，旧命令不再接受，改用 `--status issues` 筛选异常仓库：
 
 ```bash
-gitrepo check -p ~/PythonProjects -d
+gitrepo scan -p ~/PythonProjects --status issues -d
 ```
 
-`check` 使用 Rich 表格展示异常仓库，`-d` 展示详细状态；检查失败的原因始终显示。
-工作区修改和 stash 同时存在时，详细状态保留两者的信息。
-所有仓库正常且无目录扫描错误时不输出表格。
+默认展示仓库、目录和状态摘要；`-d/--detail` 额外展示“当前分支”“远程”两列，
+以及文件路径、变更类型和 stash 条目。检查失败原因始终显示。
+文件变更使用 Git 的两位状态码，第一位表示暂存区，第二位表示工作区，`.` 表示无变化，
+`??` 表示未跟踪，重命名显示原路径与新路径；路径使用引号和转义保留空格、换行等特殊字符。
+工作区修改和 stash 同时存在时，两者详情都会展示。
+`issues` 匹配任意检查异常或错误，单纯重复克隆或 worktree 不计为异常。
+筛选无结果且没有目录错误时不输出仓库表格，仍显示扫描统计。
 
 使用 `scan` 子命令扫描并通过 Rich 表格聚合展示仓库，默认扫描家目录，
 按远程主机分表，例如 `github.com`、`gitlab.com` 各一张表。
-表内默认按完整远程地址合并同一仓库的多个目录：
+表内默认按全部远程地址的直接或间接关联合并仓库目录：
 
 ```bash
 # 扫描多个目录，按远程主机分表、远程地址合并仓库
@@ -145,13 +148,19 @@ gitrepo scan -p ~/PythonProjects ~/work
 # 按远程主机分表、仓库目录名合并仓库
 gitrepo scan -p ~/PythonProjects --group-by name
 
-# 仅展示包含重复克隆的分组
-gitrepo scan -p ~/PythonProjects --duplicates
+# 仅展示重复克隆的目录
+gitrepo scan -p ~/PythonProjects --status duplicate
+
+# 展示领先或存在 stash 的目录，多个状态按“或”匹配
+gitrepo scan -p ~/PythonProjects --status ahead stash
+
+# 仅展示链接工作树
+gitrepo scan -p ~/PythonProjects --status worktree
 
 # 更新远程引用后检查
 gitrepo scan -p ~/PythonProjects --fetch
 
-# 按目录名跳过不需要遍历的子目录，check 同样支持
+# 按目录名跳过不需要遍历的子目录
 gitrepo scan -p ~/PythonProjects --exclude node_modules .venv
 
 # 只展示匹配主机的表格，多个通配模式用 | 分隔
@@ -160,77 +169,111 @@ gitrepo scan -p ~/PythonProjects --host '*.xxx.net|github.com'
 # 使用正则完整匹配主机，与 --host 互斥
 gitrepo scan -p ~/PythonProjects --host-regex '.*\.xxx\.net|github\.com'
 
-# 忽略 stash，check 同样支持
+# 忽略 stash
 gitrepo scan -p ~/PythonProjects --ignore-stash
-gitrepo check -p ~/PythonProjects --ignore-stash
 ```
 
-主机筛选不区分大小写、不含端口，依据优先选定的 remote，
+主机筛选不区分大小写、不含端口，匹配分组内任一远程主机即可保留该组，
 两种 `--group-by` 模式均适用。`--host` 支持 `*`、`?`、`[]` 通配符。
-启用筛选后不展示本地远程路径及无远程 / 无法识别的仓库表格；
+仅含本地远程路径，或无远程 / 无法识别的分组不匹配主机筛选；
 筛选仅影响展示，所有仓库仍会扫描，统计保留扫描总数。
 无效的 `--host-regex` 在扫描前报错。
 
-`check` 和 `scan` 默认检查并展示 stash，使用 `--ignore-stash` 跳过 stash 查询和展示，
+`--status` 默认 `all`，支持空格分隔多个值，也可重复指定参数，匹配任一状态即保留目录。
+指定 `all` 时不限制状态；状态筛选与主机筛选同时生效，空分组不展示。
+重复关联在筛选前计算，隐藏连接两个仓库的中间仓库不会改变已有分组或重复标记。
+
+| 状态 | 含义 |
+| --- | --- |
+| `all` | 全部目录，默认值 |
+| `issues` | 任意本地 / 跟踪异常或检查错误，不含单纯重复克隆和 worktree |
+| `duplicate` | 远程关联组内存在至少两个独立 Git 仓库 |
+| `worktree` | 链接工作树，不包含主工作树 |
+| `clean` | 工作区和跟踪状态正常，且无检查错误 |
+| `staged` / `unstaged` / `untracked` / `conflict` | 暂存 / 未暂存 / 未跟踪 / 冲突 |
+| `submodule` | 父仓库检测到子模块变更，包括提交指针变化、模块内文件修改或未跟踪文件 |
+| `stash` | 存在 stash |
+| `ahead` / `behind` | 任一本地分支领先 / 落后于跟踪引用 |
+| `no-upstream` / `gone` / `local-upstream` | 无 upstream / upstream 失效 / 跟踪本地分支 |
+| `detached` / `unborn` / `no-remote` | 游离 HEAD / 尚无提交 / 未配置远程 |
+| `error` | 检查失败，包含远程更新失败 |
+
+`clean` 可与 `duplicate`、`worktree` 同时成立。
+原 `--duplicates` 已移除，使用 `--status duplicate` 替代；多个状态按“或”匹配。
+
+`scan` 默认检查并展示 stash，使用 `--ignore-stash` 跳过 stash 查询和展示，
 stash 不再计入异常，其他工作区和分支检查照常执行。
 不再接受 `-s/--stash`、省略子命令的写法或放在子命令前的业务参数。
 
-`check`、`scan` 均支持 `--json`：
+`scan` 支持 `--json`：
 
 ```bash
-gitrepo check -p ~/PythonProjects --json
-gitrepo check -p ~/PythonProjects --json --ignore-stash
+gitrepo scan -p ~/PythonProjects --json
+gitrepo scan -p ~/PythonProjects --json --ignore-stash
 gitrepo scan -p ~/PythonProjects --json --host '*.xxx.net|github.com'
-gitrepo scan -p ~/PythonProjects --json --duplicates | jq '.repositories[].path'
+gitrepo scan -p ~/PythonProjects --json --status duplicate | jq '.repositories[].path'
 ```
 
 JSON 模式的 stdout 只输出一个 JSON 对象，进度条写入 stderr；stderr 不是终端时关闭动态进度。
-顶层包含 `schema_version`（当前为 `1`）、`command`（`check` 或 `scan`）、
-`options`、`summary`、`repositories` 和 `directory_errors`。
+顶层包含 `schema_version`（`2`）、`command`（`scan`）、
 无结果时两个数组为空，目录扫描错误逐条保留 `path` 和 `reason`。
 
-`check` 的 `repositories` 包含全部已检查仓库，每项提供 `path`、`has_issues`、`failed`、`output`。
-JSON 中的详情不受 `-d` 限制；正常仓库的 `output` 为空字符串。
+JSON 始终收集文件与 stash 详情，不受 `-d` 限制；`--ignore-stash` 同时跳过 stash 详情查询。
 `scan` 的每项提供 `path`、`common_dir`、`remote_name`、规范化的 `remote_url`、`branch`、
-`bare`、`worktree`、`issues`、`errors`，以及 `host`、`group_key`、`kind`、
+`bare`、`worktree`、`issues`、`errors`、`remotes`、`statuses`、`changes`、`stashes`、`counts`，以及 `host`、`group_key`、`kind`、
 `duplicate_clone`、`has_issues`、`failed`。
 `kind` 为 `normal`、`bare` 或 `worktree`；`host` 不含端口，
 本地及无远程仓库的 `host` 分别为 `本地路径`、`无远程 / 无法识别`。
-`issues`、`errors` 和 `check` 的 `output` 是可读消息；仓库检查失败或扫描到错误目录后仍会输出其余结果。
+`remotes` 按 remote 名称保存规范化后的全部 fetch/push 地址，重复地址只保留一次；
+`remote_name`、`remote_url` 保留首选 remote 及其首个有效地址。
+`statuses` 保存实际命中的状态码，可同时包含 `clean`、`duplicate`、`worktree` 等多个状态。
+`changes` 保存每个文件的 `status`、`path`，重命名或复制时另有 `original_path`。
+子模块变更条目还包含 `submodule` 字段，值为中文说明，例如 `"submodule": "子模块（提交指针变更）"`。
+`stashes` 保存完整 stash 条目，正常仓库的两个详情数组均为空。
+`counts` 保存已读取的文件状态、stash 和分支差异计数；未读取的指标不包含在该对象中。
+`issues`、`errors` 是可读消息；仓库检查失败或扫描到错误目录后仍会输出其余结果。
 
 `summary` 的 `repository_count`、`issue_repository_count`、`failed_repository_count`、
 `directory_error_count` 是全量扫描统计，`shown_repository_count` 对应 JSON 中的仓库条目数。
-`scan` 另有 `independent_repository_count`、`group_count`、`shown_group_count` 和 `duplicate_remote_count`。
-`scan` 的 `repositories` 沿用主机过滤、重复克隆筛选及分组规则，
-`--group-by name --duplicates` 会保留重复克隆所在同名组的所有成员。
-`options.stash_checked` 表示是否启用 stash 检查；`scan` 另记录 `group_by`、`duplicates_only`、`fetch`。
+`scan` 另有 `independent_repository_count`、`group_count`、`shown_group_count` 和 `duplicate_group_count`。
+`duplicate_group_count` 按全量扫描的远程关联组计数，不受展示分组与筛选影响。
+`scan` 的 `repositories` 沿用主机过滤、状态筛选及分组规则，
+两种分组模式都只保留状态命中的目录。
+`options.stash_checked` 表示是否启用 stash 检查；`scan` 另记录 `group_by`、`statuses`、`fetch`。
+`scan` JSON 已升级为版本 `2`：`options.duplicates_only` 由 `options.statuses` 替代，
+`summary.duplicate_remote_count` 由 `summary.duplicate_group_count` 替代。
 
-远程地址优先选择名为 `upstream` 的 remote，其次选择 `origin`，
-Git 不记录 remote 的添加时间，其余 remote 按名称排序选择第一个。
+首选远程优先选择名为 `upstream` 的 remote，其次选择 `origin`，
+其余 remote 按名称排序选择第一个有效地址，仅用于保留首选远程字段。
+分组和重复判断使用所有 remote 的全部 fetch/push 地址。
 分支的 upstream 指各分支配置的跟踪目标，
 独立于用于分组的 remote。
 
 远程分组将同一主机及仓库路径的 SSH、HTTPS 地址和 `.git` 后缀规范化，
 保留仓库路径大小写及非默认端口。本地路径与 `file://` 地址按实际路径聚合，
 SSH 主机别名不会自动解析为相同主机。
-同一远程地址对应多个独立仓库时标记为重复克隆；worktree 逐个展示，
-共用 Git 数据的目录不计为独立克隆。
+任意远程地址相同即关联仓库，并合并间接关联：A 的地址为 `{a,b}`，
+B 为 `{b,c}`，C 为 `{c}` 或 `{c,d}` 时，A/B/C 同属一个关联组。
+同组存在多个独立 Git 仓库时，组内全部目录标记为重复克隆。
+worktree 逐个展示并带有 `worktree` 状态，共用 Git 数据的目录不计为独立克隆。
 两种模式使用相同布局：同一仓库的名称仅在首行显示，后续行留空，
-仓库组之间加分隔线，形成纵向合并效果；每个目录保留自己的分支、remote 名称和状态。
-`--group-by name` 按同一主机下的目录名合并，并逐行保留远程地址，
+仓库组之间加分隔线，形成纵向合并效果；每个目录保留自己的状态，
+开启 `--detail` 后额外展示当前分支和全部远程地址。
+远程关联组以规范化地址排序后的首项作为稳定分组标识，以该地址的主机决定表格归属；
+跨主机的关联组只展示一次，筛选其他关联主机时仍显示在该代表主机下。
+`--group-by name` 按代表主机下的目录名合并，开启 `--detail` 后逐行展示远程地址，
 同名但远程不同的仓库会单独标记。非默认端口仍用于区分远程仓库，
 相同主机不同端口的仓库放在同一张表。
 本地远程路径和无远程 / 无法识别的仓库分别集中到独立表格。
-`--duplicates` 先筛选包含重复克隆的仓库组，再按主机汇总展示，
-重复克隆仍依据完整远程地址判断。
+`--status duplicate` 只展示重复克隆关联组内的目录。
 
 扫描支持普通仓库、嵌套仓库、worktree、子模块和裸仓库；
 重叠扫描路径会去重，扫描时跳过 `.git` 内部目录，不递归跟随目录符号链接。
-两个子命令都显示目录发现和仓库检查进度、耗时及检查失败数量，
+扫描显示目录发现和仓库检查进度、耗时及检查失败数量，
 输出重定向时关闭动态进度条。默认不排除其他目录，
 可通过 `--exclude` 按名称跳过子目录，显式指定的扫描根目录仍会检查。
 `scan` 在发现仓库后立即提交有界并发检查，合并工作区、当前分支和 stash 查询，
-同一仓库的 worktree 共用分支读取及 fetch；`check` 按仓库数量和 CPU 数限制进程数。
+同一仓库的 worktree 共用分支、stash 详情读取及 fetch。
 表格同时展示暂存、未暂存、未跟踪、冲突及 stash 数量，
 并检查所有本地分支的领先、落后、无 upstream、upstream 失效及游离 HEAD 状态。
 无远程、空仓库、读取失败及远程更新失败也会显示。

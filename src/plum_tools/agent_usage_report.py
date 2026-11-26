@@ -1,7 +1,7 @@
 """汇总本机技能、MCP 和规则的可观察使用记录。"""
 
-from ._agent_usage.cli import main as report_main
-from .utils.cli import cli_entry
+from plum_tools._agent_usage.cli import main as report_main
+from plum_tools.utils.cli import cli_entry
 
 
 @cli_entry

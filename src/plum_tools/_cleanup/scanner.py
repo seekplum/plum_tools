@@ -14,7 +14,7 @@ from pathlib import Path
 from queue import Empty, SimpleQueue
 from typing import TYPE_CHECKING
 
-from .constants import (
+from plum_tools._cleanup.constants import (
     BUILD_DIRS,
     DEPENDENCIES,
     GO_BINARY_HEADERS,
@@ -27,9 +27,9 @@ from .constants import (
     SnapshotMode,
     Tool,
 )
-from .filesystem import directory_fd, display, is_within, query_text, signature
-from .models import Candidate, CandidateResult, Note, ProjectScope
-from .projects import Project, Repository, repository_at
+from plum_tools._cleanup.filesystem import directory_fd, display, is_within, query_text, signature
+from plum_tools._cleanup.models import Candidate, CandidateResult, Note, ProjectScope
+from plum_tools._cleanup.projects import Project, Repository, repository_at
 
 if TYPE_CHECKING:
     from .filesystem import FileInspector
@@ -97,19 +97,7 @@ class ProjectScanner:
         if is_dir is None:
             is_dir = path.is_dir()
         if name in DEPENDENCIES:
-            if Category.DEPS not in self.state.args.categories:
-                return None
-            if name == "vendor" and is_dir and ProjectKind.GO in project.kinds:
-                return self._go_vendor_match(path, project)
-            if name in {"node_modules", ".node_modules"} and ProjectKind.NODE in project.rebuild:
-                return Category.DEPS, project.rebuild[ProjectKind.NODE]
-            if name in {".venv", "venv"} and ProjectKind.PYTHON in project.rebuild and (path / "pyvenv.cfg").is_file():
-                return Category.DEPS, project.rebuild[ProjectKind.PYTHON]
-            if name == ".tox" and any(item.name in {"tox.ini", "pyproject.toml"} for item in project.manifests):
-                return Category.DEPS, "tox"
-            if name == ".nox" and any(item.name == "noxfile.py" for item in project.manifests):
-                return Category.DEPS, "nox"
-            return None
+            return self._dependency_match(path, project, is_dir)
         category = self._project_file_category(name, project)
         if ProjectKind.GO in project.kinds and (
             name in GO_COVERAGE_FILES or name.endswith((".coverprofile", ".test", ".test.exe"))
@@ -133,6 +121,23 @@ class ProjectScanner:
             if not is_dir and ProjectKind.GO in project.kinds and Category.BUILD in self.state.args.categories
             else None
         )
+
+    def _dependency_match(self, path: Path, project: Project, is_dir: bool) -> tuple[Category, str] | None:
+        """仅接收已选择且能从项目配置重建的依赖环境。"""
+        if Category.DEPS not in self.state.args.categories:
+            return None
+        name = path.name
+        if name == "vendor" and is_dir and ProjectKind.GO in project.kinds:
+            return self._go_vendor_match(path, project)
+        if name in {"node_modules", ".node_modules"} and ProjectKind.NODE in project.rebuild:
+            return Category.DEPS, project.rebuild[ProjectKind.NODE]
+        if name in {".venv", "venv"} and ProjectKind.PYTHON in project.rebuild and (path / "pyvenv.cfg").is_file():
+            return Category.DEPS, project.rebuild[ProjectKind.PYTHON]
+        if name == ".tox" and any(item.name in {"tox.ini", "pyproject.toml"} for item in project.manifests):
+            return Category.DEPS, "tox"
+        if name == ".nox" and any(item.name == "noxfile.py" for item in project.manifests):
+            return Category.DEPS, "nox"
+        return None
 
     @staticmethod
     def _go_vendor_match(path: Path, project: Project) -> tuple[Category, str] | None:
@@ -262,17 +267,21 @@ class ProjectScanner:
                 self.state.skipped_repositories.add(root)
                 self.state.add_note("保留无法校验的 Git 仓库", str(exc), root)
         self.state.progress.describe(f"候选计量与安全检查 · {len(pending):,} 个候选", unit="个节点")
-        eligible = []
-        for item in pending:
-            if item.repository:
-                if item.repository in self.state.skipped_repositories:
-                    continue
-                repository = self.state.repositories[item.repository]
-                if repository.contains_tracked(item.path) or item.path not in ignored:
-                    continue
-                item.reason = ignored[item.path]
-            eligible.append(item)
-        self._add_candidates(eligible)
+        self._add_candidates([item for item in pending if self._prepare_git_candidate(item, ignored)])
+
+    def _prepare_git_candidate(self, item: Candidate, ignored: dict[Path, str]) -> bool:
+        """应用仓库保护与忽略规则，仅为可接收的候选补充清理依据。"""
+        if not item.repository:
+            return True
+        if item.repository in self.state.skipped_repositories:
+            return False
+        if self.state.repositories[item.repository].contains_tracked(item.path):
+            self.state.add_note("保留 Git 已跟踪文件或包含跟踪文件的目录", path=item.path)
+            return False
+        if item.path not in ignored:
+            return False
+        item.reason = ignored[item.path]
+        return True
 
     def _candidate_covered(self, item: Candidate) -> bool:
         """判断候选是否已由此前接收的路径覆盖。"""
@@ -453,11 +462,12 @@ class ProjectScanner:
         self, path: Path, info: os.stat_result, category: Category, repository: Repository | None
     ) -> bool:
         """缓存只选择过期且未被 Git 跟踪的普通文件。"""
-        return (
-            stat.S_ISREG(info.st_mode)
-            and info.st_mtime <= self.inspector.cutoff(category)
-            and (not repository or not repository.contains_tracked(path))
-        )
+        if not stat.S_ISREG(info.st_mode) or info.st_mtime > self.inspector.cutoff(category):
+            return False
+        if repository and repository.contains_tracked(path):
+            self.state.add_note("保留 Git 已跟踪文件或包含跟踪文件的目录", path=path)
+            return False
+        return True
 
     def _scan_project_entries(
         self,

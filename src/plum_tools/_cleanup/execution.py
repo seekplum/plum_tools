@@ -10,11 +10,19 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .constants import PROJECT_CATEGORIES, QUERY_ENV, Category, Command, ExecutionLimits, ExitCode, SnapshotMode
-from .filesystem import Trash, directory_fd, display, human_size, remove_candidate, signature
-from .models import Candidate, ExecutionSnapshot, ToolTask
-from .plan_io import plan_checksum, read_plan
-from .projects import Project, Repository, repository_at
+from plum_tools._cleanup.constants import (
+    PROJECT_CATEGORIES,
+    QUERY_ENV,
+    Category,
+    Command,
+    ExecutionLimits,
+    ExitCode,
+    SnapshotMode,
+)
+from plum_tools._cleanup.filesystem import Trash, directory_fd, display, human_size, remove_candidate, signature
+from plum_tools._cleanup.models import Candidate, ExecutionSnapshot, ToolTask
+from plum_tools._cleanup.plan_io import plan_checksum, read_plan
+from plum_tools._cleanup.projects import Project, Repository, repository_at
 
 if TYPE_CHECKING:
     from .filesystem import FileInspector
@@ -101,15 +109,19 @@ class CleanupExecutor:
                         item.rebuild,
                     ):
                         raise ValueError(f"项目配置或生成物规则已变化: {display(item.path)}")
-            if item.repository and (
-                repositories[item.repository].contains_tracked(item.path)
-                or (
-                    item.category in {Category.PROJECT_CACHE, Category.BUILD, Category.DEPS}
-                    and item.path not in ignored
-                )
-            ):
-                raise ValueError(f"Git 跟踪或忽略状态已变化: {display(item.path)}")
+            self._revalidate_git_candidate(item, repositories, ignored)
             self.state.progress.advance(item.path)
+
+    def _revalidate_git_candidate(
+        self, item: Candidate, repositories: dict[Path, Repository], ignored: dict[Path, str]
+    ) -> None:
+        """再次确认候选未被 Git 跟踪，项目产物仍满足忽略规则。"""
+        if not item.repository:
+            return
+        if repositories[item.repository].contains_tracked(item.path):
+            raise ValueError(f"Git 跟踪或忽略状态已变化，已出现跟踪文件，拒绝清理: {display(item.path)}")
+        if item.category in {Category.PROJECT_CACHE, Category.BUILD, Category.DEPS} and item.path not in ignored:
+            raise ValueError(f"Git 跟踪或忽略状态已变化: {display(item.path)}")
 
     def revalidate_task(self, task: ToolTask) -> None:
         """复核工具缓存的目录身份和查询范围。"""

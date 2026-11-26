@@ -10,10 +10,10 @@ import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from .constants import PRUNE_TOOLS, Category, DockerTask, Tool
-from .filesystem import directory_fd, query_text
-from .models import BuilderSnapshot, ToolTask, ToolVerification
-from .projects import repository_at
+from plum_tools._cleanup.constants import PRUNE_TOOLS, Category, DockerTask, Tool
+from plum_tools._cleanup.filesystem import directory_fd, query_text
+from plum_tools._cleanup.models import BuilderSnapshot, ToolTask, ToolVerification
+from plum_tools._cleanup.projects import repository_at
 
 if TYPE_CHECKING:
     from .filesystem import FileInspector

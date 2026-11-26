@@ -20,10 +20,10 @@ from typing import Any
 
 import yaml
 
-from ..conf import OsCommand, PathConfig
-from ..exceptions import RunCmdError, RunCmdTimeout
-from .cli import managed_process
-from .printer import print_error, print_text
+from plum_tools.conf import OsCommand, PathConfig
+from plum_tools.exceptions import RunCmdError, RunCmdTimeout
+from plum_tools.utils.cli import managed_process
+from plum_tools.utils.printer import print_error, print_text
 
 
 class cd:  # pylint: disable=invalid-name

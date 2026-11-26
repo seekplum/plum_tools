@@ -10,13 +10,13 @@ from pathlib import Path
 
 from rich.console import Console
 
-from .constants import PlanFile
-from .filesystem import Trash
-from .models import Candidate, ExecutionSnapshot, Note, ToolTask
-from .plan_io import plan_file_path, read_plan
-from .progress import ProgressDisplay
-from .projects import Repository
-from .runtime import implementation_paths
+from plum_tools._cleanup.constants import PlanFile
+from plum_tools._cleanup.filesystem import Trash
+from plum_tools._cleanup.models import Candidate, ExecutionSnapshot, Note, ToolTask
+from plum_tools._cleanup.plan_io import plan_file_path, read_plan
+from plum_tools._cleanup.progress import ProgressDisplay
+from plum_tools._cleanup.projects import Repository
+from plum_tools._cleanup.runtime import implementation_paths
 
 
 class CleanupState:  # pylint: disable=too-many-instance-attributes

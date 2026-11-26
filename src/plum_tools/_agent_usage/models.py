@@ -5,7 +5,7 @@ from __future__ import annotations
 import re
 from datetime import datetime, timedelta, timezone
 
-from ..utils.compat import StrEnum
+from plum_tools.utils.compat import StrEnum
 
 
 class Client(StrEnum):

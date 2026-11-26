@@ -14,10 +14,10 @@
 
 import os
 
-from .conf import SSHConfig
-from .utils.cli import cli_entry
-from .utils.parser import get_base_parser
-from .utils.sshconf import merge_ssh_config
+from plum_tools.conf import SSHConfig
+from plum_tools.utils.cli import cli_entry
+from plum_tools.utils.parser import get_base_parser
+from plum_tools.utils.sshconf import merge_ssh_config
 
 
 def get_login_ssh_cmd(hostname: str, user: str, port: int, identityfile: str) -> str:

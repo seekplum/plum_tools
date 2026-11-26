@@ -20,13 +20,13 @@ from typing import Any
 
 import paramiko
 
-from .conf import COMMAND_TIMEOUT, OsCommand, PathConfig
-from .exceptions import RunCmdError, SSHException
-from .utils.cli import cli_entry
-from .utils.parser import add_compact_argument, get_base_parser
-from .utils.printer import print_error, print_text
-from .utils.sshconf import get_host_ip
-from .utils.utils import YmlConfig, ensure_str, get_file_abspath
+from plum_tools.conf import COMMAND_TIMEOUT, OsCommand, PathConfig
+from plum_tools.exceptions import RunCmdError, SSHException
+from plum_tools.utils.cli import cli_entry
+from plum_tools.utils.parser import add_compact_argument, get_base_parser
+from plum_tools.utils.printer import print_error, print_text
+from plum_tools.utils.sshconf import get_host_ip
+from plum_tools.utils.utils import YmlConfig, ensure_str, get_file_abspath
 
 
 class PSSHClient(paramiko.SSHClient):

@@ -5,6 +5,7 @@ import sys
 import typing as t
 from dataclasses import dataclass, field
 from enum import StrEnum
+from operator import itemgetter
 from pathlib import Path
 
 from rich.console import Console
@@ -12,9 +13,10 @@ from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.table import Table
 from rich.text import Text
 
-from .utils.cli import cli_entry
-from .utils.parser import add_compact_argument, add_extra_argument, get_base_parser
-from .utils.printer import compact_table, print_columns
+from plum_tools.utils.cli import cli_entry
+from plum_tools.utils.parser import add_compact_argument, add_extra_argument, get_base_parser
+from plum_tools.utils.printer import compact_table, print_columns
+from plum_tools.utils.sorting import add_sort_argument, sort_items
 
 # 使用当前 Python 解释器提供的标准库模块集合。
 STD_LIB_MODULE_NAMES = sys.stdlib_module_names
@@ -248,6 +250,7 @@ def _print_results(
 def main() -> None:
     """解析命令行参数，扫描导入并输出 Rich 表格或 JSON，进度写入 stderr。"""
     parser = get_base_parser()
+    add_sort_argument(parser, {"name": "导入名", "package_name": "包名", "mode": "分类"})
     add_compact_argument(parser)
     parser.description = "扫描 Python 项目的导入语句，按模块分类输出包名及扫描错误。"  # noqa
     parser.epilog = (
@@ -310,6 +313,7 @@ def main() -> None:
             ),
             args.extra,
         )
+    modules = sort_items(modules, args.sort, {name: itemgetter(name) for name in ("name", "package_name", "mode")})
     if args.json_output:
         json.dump(
             {

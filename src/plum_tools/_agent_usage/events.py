@@ -7,8 +7,8 @@ from collections.abc import Iterator
 from pathlib import Path
 from typing import Any
 
-from .inventory import rule_name
-from .models import SKILL_READ, Client, Kind, earlier, later, timestamp
+from plum_tools._agent_usage.inventory import rule_name
+from plum_tools._agent_usage.models import SKILL_READ, Client, Kind, earlier, later, timestamp
 
 
 def iter_events(path: Path, stats: dict) -> Iterator[tuple[int, dict, str | None]]:

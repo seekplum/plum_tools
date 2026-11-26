@@ -7,16 +7,27 @@ import sqlite3
 import sys
 from pathlib import Path
 
-from ..utils.compat import tomllib
-from ..utils.parser import get_base_parser
-from .collectors import collect
-from .models import CLIENTS, DEFAULT_CLIENTS, Client, Kind, OutputFormat, ReportMode, localize_report, observed
-from .reporting import print_rich
+from plum_tools._agent_usage.collectors import collect
+from plum_tools._agent_usage.models import (
+    CLIENTS,
+    DEFAULT_CLIENTS,
+    Client,
+    Kind,
+    OutputFormat,
+    ReportMode,
+    localize_report,
+    observed,
+)
+from plum_tools._agent_usage.reporting import SORT_FIELDS, print_rich, sort_usage_rows
+from plum_tools.utils.compat import tomllib
+from plum_tools.utils.parser import get_base_parser
+from plum_tools.utils.sorting import add_sort_argument
 
 
 def main() -> int:
     """解析命令行参数并生成报告。"""
     parser = get_base_parser()
+    add_sort_argument(parser, SORT_FIELDS)
     parser.description = "汇总本机技能、MCP 和规则的可观察使用记录。"
     parser.add_argument(
         "--home", type=Path, default=Path.home(), metavar="目录", help="待分析的用户目录，默认当前用户目录"
@@ -64,8 +75,9 @@ def main() -> int:
     if args.mode == ReportMode.CONCISE:
         report["items"] = [row for row in report["items"] if observed(row)]
     localize_report(report)
+    report["items"] = sort_usage_rows(report["items"], args.sort)
     if args.format == OutputFormat.JSON:
         print(json.dumps(report, ensure_ascii=False, indent=2))
     else:
-        print_rich(report)
+        print_rich(report, **({"sort": args.sort} if args.sort else {}))
     return 0

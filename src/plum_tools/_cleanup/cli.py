@@ -6,8 +6,7 @@ import argparse
 import os
 from pathlib import Path
 
-from ..utils.parser import get_base_parser
-from .constants import (
+from plum_tools._cleanup.constants import (
     CATEGORY_LABELS,
     DEPENDENCIES,
     PROJECT_CATEGORIES,
@@ -21,7 +20,9 @@ from .constants import (
     ScanTuning,
     Tool,
 )
-from .filesystem import directory_fd, display
+from plum_tools._cleanup.filesystem import directory_fd, display
+from plum_tools.utils.parser import get_base_parser
+from plum_tools.utils.sorting import add_sort_argument
 
 # 帮助文字集中说明默认扫描范围、重建条件和原生工具限制。
 HELP_EPILOG = """示例:
@@ -75,6 +76,8 @@ HELP_EPILOG = """示例:
   all 包含 deps；移除依赖后需要重新安装，精确恢复版本取决于锁文件。
   deps 按项目声明重建，未记录的手工安装或环境内本地修改无法恢复。
   项目在 Git 内时必须被忽略且不含已跟踪文件；Git 外必须识别到项目标记。
+  所有文件候选（包括 .venv、.node_modules 等目录）含 Git 已跟踪文件时保留并提示。
+  --sort 仅调整预览顺序，不改变已保存计划或清理执行顺序。
   用户缓存按修改时间筛选，不代表文件一定未被使用；建议先退出相关应用。
   不读取 .chezmoiignore 作为清理规则，不跟随软链接，不自动提权或安装工具。
 """
@@ -102,6 +105,7 @@ def _build_parser() -> argparse.ArgumentParser:
         yes=False,
         json=False,
         prune_action=None,
+        sort=None,
     )
     subparsers = parser.add_subparsers(
         dest="command",
@@ -260,6 +264,17 @@ def _add_plan_arguments(commands: dict[Command, argparse.ArgumentParser]) -> Non
     """绑定已有计划的展示与执行参数。"""
     for command in (Command.SHOW, Command.RUN):
         commands[command].add_argument("--from-plan", metavar="文件", help=f"加载已有计划，默认 {PlanFile.DEFAULT}")
+    for command in (Command.SCAN, Command.SHOW, Command.RUN):
+        add_sort_argument(
+            commands[command],
+            {
+                "path": "路径",
+                "category": "类别",
+                "size": "占用字节数",
+                "files": "文件数",
+                "reason": "清理依据",
+            },
+        )
     for command in (Command.SCAN, Command.SHOW):
         commands[command].add_argument("--json", action="store_true", help="以 JSON 输出预览")
     commands[Command.RUN].add_argument("--yes", action="store_true", help="跳过交互确认")

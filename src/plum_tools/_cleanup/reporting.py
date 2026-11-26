@@ -14,9 +14,10 @@ from rich.table import Table
 from rich.text import Text
 from rich.tree import Tree
 
-from .constants import CATEGORY_LABELS, Command, PruneAction, SnapshotMode
-from .filesystem import display, format_reason, human_size, is_within
-from .models import Candidate, ToolTask
+from plum_tools._cleanup.constants import CATEGORY_LABELS, Command, PruneAction, SnapshotMode
+from plum_tools._cleanup.filesystem import display, format_reason, human_size, is_within
+from plum_tools._cleanup.models import Candidate, ToolTask
+from plum_tools.utils.sorting import sort_items
 
 if TYPE_CHECKING:
     from .state import CleanupState
@@ -51,7 +52,7 @@ class CleanupReporter:
                     "rebuild": item.rebuild,
                     "snapshot": item.snapshot,
                 }
-                for item in self.state.candidates
+                for item in self._sorted_candidates(self.state.candidates)
             ],
             "tools": [
                 {
@@ -74,8 +75,13 @@ class CleanupReporter:
             print(json.dumps(self.report_data(), ensure_ascii=False, indent=2))
             return
         self._report_summary()
-        for category, label in CATEGORY_LABELS.items():
-            candidates = [item for item in self.state.candidates if item.category == category]
+        ordered = self._sorted_candidates(self.state.candidates)
+        categories = list(CATEGORY_LABELS)
+        if self.state.args.sort:
+            categories = list(dict.fromkeys([item.category for item in ordered] + categories))
+        for category in categories:
+            label = CATEGORY_LABELS[category]
+            candidates = [item for item in ordered if item.category == category]
             tasks = [task for task in self.state.tasks if task.category == category]
             if not candidates and not tasks:
                 continue
@@ -220,10 +226,15 @@ class CleanupReporter:
         for item in candidates:
             key = format_reason(item.reason), item.rebuild
             groups.setdefault(key, []).append(item)
-        for (reason, rebuild), items in sorted(
-            groups.items(),
-            key=lambda group: -sum(item.size or 0 for item in group[1]),
-        ):
+        ordered_groups = (
+            list(groups.items())
+            if self.state.args.sort
+            else sorted(
+                groups.items(),
+                key=lambda group: -sum(item.size or 0 for item in group[1]),
+            )
+        )
+        for (reason, rebuild), items in ordered_groups:
             files, size = self._candidate_totals(items)
             paths = Table(
                 box=box.SIMPLE,
@@ -259,6 +270,19 @@ class CleanupReporter:
                 paths,
             )
             self.state.console.print(Panel(details, border_style="cyan"))
+
+    def _sorted_candidates(self, candidates: list[Candidate]) -> list[Candidate]:
+        return sort_items(
+            candidates,
+            self.state.args.sort,
+            {
+                "path": lambda item: str(item.path),
+                "category": lambda item: item.category,
+                "size": lambda item: item.size,
+                "files": lambda item: item.files,
+                "reason": lambda item: item.reason,
+            },
+        )
 
     def _report_tasks(self, tasks: list[ToolTask]) -> None:
         """展示原生命令、固定清理范围及工具提供的占用说明。"""

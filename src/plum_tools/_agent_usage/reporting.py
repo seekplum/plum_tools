@@ -2,11 +2,61 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+from functools import partial
+
 from rich import box
 from rich.console import Console
 from rich.table import Table
 
-from .models import CLIENT_LABELS, Client, Kind, display_time, later, observed
+from plum_tools._agent_usage.models import CLIENT_LABELS, Client, Kind, display_time, later, observed
+from plum_tools.utils.sorting import SortField, sort_items
+
+# count 与 time 使用各类别实际展示的次数和时间，其余字段保留原始统计口径。
+SORT_FIELDS = {
+    "name": "名称",
+    "kind": "类别",
+    "count": "使用次数",
+    "time": "最近证据时间",
+    "calls": "调用数",
+    "expansions": "展开数",
+    "reads": "读取数",
+    "attributed_sessions": "归因会话数",
+    "hook_calls": "钩子调用数",
+    "last_used": "最后调用",
+    "last_expanded": "最后展开",
+    "last_attributed": "最后归因",
+    "last_read": "最后读取",
+}
+
+
+def usage_sort_value(row: dict, name: str) -> str | int | float | None:
+    """返回排序指标，规则按读取数、命令按展开数、技能与 MCP 按调用数。"""
+    if name == "count":
+        name = {Kind.RULE: "reads", Kind.COMMAND: "expansions"}.get(row["kind"], "calls")
+    if name == "time":
+        fields = {
+            Kind.SKILL: ("last_used", "last_expanded", "last_attributed"),
+            Kind.RULE: ("last_read",),
+            Kind.COMMAND: ("last_expanded",),
+        }.get(row["kind"], ("last_used",))
+        return max(
+            (
+                datetime.fromisoformat(row[field].replace("Z", "+00:00")).timestamp()
+                for field in fields
+                if row.get(field)
+            ),
+            default=None,
+        )
+    value = row.get(name)
+    if name.startswith("last_"):
+        return datetime.fromisoformat(value.replace("Z", "+00:00")).timestamp() if value else None
+    return value
+
+
+def sort_usage_rows(rows: list[dict], sort: list[SortField] | None) -> list[dict]:
+    """按统一指标排序统计记录，保持相同键记录的原顺序。"""
+    return sort_items(rows, sort, {name: partial(usage_sort_value, name=name) for name in SORT_FIELDS})
 
 
 def rich_cells(kind: Kind, row: dict, clients: tuple[Client, ...]) -> tuple:
@@ -66,13 +116,30 @@ def print_rich_coverage(console: Console, report: dict) -> None:
         console.print("注意: " + note, style="yellow")
 
 
-def print_mcp_tools(console: Console, rows: list[dict]) -> None:
+def print_mcp_tools(console: Console, rows: list[dict], sort: list[SortField] | None = None) -> None:
     """展示 MCP 服务下各工具的调用次数。"""
 
     tools = sorted(
         ((row["name"], tool, calls) for row in rows for tool, calls in row["tool_calls"].items()),
         key=lambda item: (-item[2], item[0], item[1]),
     )
+    if sort:
+        by_name = {row["name"]: row for row in rows}
+        # fmt: off
+        keys = {
+            name: lambda item, name=name: (
+                f"{item[0]}/{item[1]}"
+                if name == "name"
+                else (
+                    item[2]
+                    if name in {"count", "calls"}
+                    else usage_sort_value(by_name[item[0]], name) if name in {"kind", "time", "last_used"} else None
+                )
+            )
+            for name in SORT_FIELDS
+        }
+        # fmt: on
+        tools = sort_items(tools, sort, keys)
     if not tools:
         return
     detail = Table(
@@ -91,7 +158,7 @@ def print_mcp_tools(console: Console, rows: list[dict]) -> None:
 
 
 # pylint: disable=too-many-locals
-def print_rich(report: dict) -> None:
+def print_rich(report: dict, sort: list[SortField] | None = None) -> None:
     """按技能、MCP 和命令分组展示使用证据。"""
 
     console = Console()
@@ -122,7 +189,7 @@ def print_rich(report: dict) -> None:
         (Kind.COMMAND, "斜杠命令", ("名称", "展开", "最后展开")),
     )
     for kind, title, columns in groups:
-        rows = [row for row in report["items"] if row["kind"] == kind]
+        rows = sort_usage_rows([row for row in report["items"] if row["kind"] == kind], sort)
         if not rows:
             continue
         table = Table(
@@ -157,7 +224,7 @@ def print_rich(report: dict) -> None:
         console.print(table)
         console.print()
         if kind == Kind.MCP:
-            print_mcp_tools(console, rows)
+            print_mcp_tools(console, rows, sort)
     if not report["items"]:
         console.print("当前筛选条件下没有可显示的使用记录。")
         console.print()

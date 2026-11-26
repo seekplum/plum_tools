@@ -15,13 +15,13 @@
 import os
 import sys
 
-from .conf import STASH_UUID, GitCommand
-from .exceptions import RunCmdError
-from .utils.cli import cli_entry
-from .utils.git import check_repository_modify_status, check_repository_stash, get_current_branch_name
-from .utils.parser import get_base_parser
-from .utils.printer import print_warn
-from .utils.utils import cd, run_cmd
+from plum_tools.conf import STASH_UUID, GitCommand
+from plum_tools.exceptions import RunCmdError
+from plum_tools.utils.cli import cli_entry
+from plum_tools.utils.git import check_repository_modify_status, check_repository_stash, get_current_branch_name
+from plum_tools.utils.parser import get_base_parser
+from plum_tools.utils.printer import print_warn
+from plum_tools.utils.utils import cd, run_cmd
 
 
 class GitCheckoutStash:

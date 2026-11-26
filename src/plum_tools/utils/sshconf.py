@@ -13,8 +13,8 @@
 import re
 import sys
 
-from ..conf import PathConfig
-from .utils import YmlConfig, print_error
+from plum_tools.conf import PathConfig
+from plum_tools.utils.utils import YmlConfig, print_error
 
 
 class SSHConf:

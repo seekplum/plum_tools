@@ -51,7 +51,7 @@ def test_run(capsys: pytest.CaptureFixture) -> None:
 
 def test_main() -> None:
     mock_parser = mock.Mock()
-    mock_args = mock.Mock(type="1", prefix_host="1.1.1")
+    mock_args = mock.Mock(type="1", prefix_host="1.1.1", sort=None)
     mock_parser.parse_args.return_value = mock_args
     with (
         mock.patch("plum_tools.pping.get_base_parser", return_value=mock_parser) as mock_argparse,
@@ -125,7 +125,7 @@ def test_run_compact_mode_uses_columns() -> None:
 def test_main_with_compact_flag() -> None:
     """验证 main 函数在 compact 参数为 True 时传递 compact=True。"""
     mock_parser = mock.MagicMock()
-    mock_parser.parse_args.return_value = mock.MagicMock(compact=True, type="test", prefix_host="1.1.1")
+    mock_parser.parse_args.return_value = mock.MagicMock(compact=True, type="test", prefix_host="1.1.1", sort=None)
 
     with (
         mock.patch("plum_tools.pping.get_base_parser", return_value=mock_parser),

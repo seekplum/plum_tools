@@ -164,7 +164,12 @@ def test_find_imports_respects_mode_and_collects_parse_errors(
 def test_main_prints_extra_and_builtin_name_mapping(capsys: pytest.CaptureFixture[str]) -> None:
     mock_parser = mock.Mock()
     mock_args = mock.Mock(
-        project_dir=".", mode=FindMode.ALL, ignore_paths=["tests"], extra={"custom": "renamed"}, json_output=False
+        project_dir=".",
+        mode=FindMode.ALL,
+        ignore_paths=["tests"],
+        extra={"custom": "renamed"},
+        json_output=False,
+        sort=None,
     )
     mock_parser.parse_args.return_value = mock_args
     modules = [
@@ -349,6 +354,7 @@ def test_main_outputs_json(tmp_path: Path, monkeypatch: pytest.MonkeyPatch, caps
         ignore_paths=None,
         extra={},
         json_output=True,
+        sort=None,
     )
     mock_parser.parse_args.return_value = mock_args
     modules = [{"name": "requests", "origin_name": "requests", "type": "import", "mode": FindMode.THIRD_PARTY}]

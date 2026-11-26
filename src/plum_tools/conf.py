@@ -13,7 +13,7 @@
 import os
 from enum import IntEnum, StrEnum
 
-from . import _version
+from plum_tools import _version
 
 # 兼容此前从 conf 导入版本号的调用。
 VERSION = _version.VERSION

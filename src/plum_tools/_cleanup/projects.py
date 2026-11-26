@@ -12,8 +12,7 @@ import stat
 from dataclasses import dataclass, field
 from pathlib import Path
 
-from ..utils.compat import tomllib
-from .constants import (
+from plum_tools._cleanup.constants import (
     BUILD_COMMANDS,
     NODE_INSTALL_COMMANDS,
     PROJECT_MARKERS,
@@ -21,7 +20,8 @@ from .constants import (
     PYTHON_MARKERS,
     ProjectKind,
 )
-from .filesystem import display, query, query_text, signature
+from plum_tools._cleanup.filesystem import display, query, query_text, signature
+from plum_tools.utils.compat import tomllib
 
 
 @dataclass

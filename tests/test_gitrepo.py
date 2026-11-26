@@ -13,200 +13,97 @@
 import errno
 import json
 import os
+import subprocess
 import sys
 from collections.abc import Callable
 from io import StringIO
 from pathlib import Path
+from threading import Lock
 from unittest import mock
 
 import pytest
 from rich.console import Console
 
-from plum_tools.git_scan import DirectoryScanError
-from plum_tools.gitrepo import _print_check_results, check_project, check_projects, find_git_project_for_python, main
-from tests.common import MockPool
-
-
-# @mock.patch("builtins.os")
-@mock.patch(
-    "plum_tools.gitrepo.check_is_git_repository",
-    side_effect=[True, True, False, True, True],
+from plum_tools.git_scan import (
+    DirectoryScanError,
+    GitScanError,
+    Repository,
+    _git,
+    _print_scan_results,
+    _scan_repository,
+    iter_repositories,
+    scan_projects,
 )
-def test_find_git_project_for_python(mock_check: mock.MagicMock) -> None:
-    mock_os_result: list[tuple[str, list[str], list[str]]] = [(f"/tmp/{i + 1}", [], []) for i in range(5)]
-
-    with mock.patch("plum_tools.git_scan.os.walk") as mock_walk:
-        mock_walk.return_value = mock_os_result
-        result = list(find_git_project_for_python("/tmp"))
-        assert result == ["/tmp/1", "/tmp/2", "/tmp/4", "/tmp/5"]
-    mock_walk.assert_called_once_with(Path("/tmp").resolve(), onerror=mock.ANY)
-    mock_check.assert_has_calls(
-        [
-            mock.call("/tmp/1"),
-            mock.call("/tmp/2"),
-            mock.call("/tmp/3"),
-            mock.call("/tmp/4"),
-            mock.call("/tmp/5"),
-        ]
-    )
+from plum_tools.gitrepo import main
 
 
-def test_check_project_with_modify() -> None:
-    with (
-        mock.patch("plum_tools.gitrepo.check_repository_modify_status", return_value=(True, "test1")) as mock_modify,
-        mock.patch("plum_tools.gitrepo.check_repository_stash", return_value=(True, "test2")) as mock_stash,
-    ):
-        result = check_project("/tmp")
-        assert result == {
-            "path": "/tmp",
-            "status": True,
-            "output": "test1\ntest2",
-        }
-        mock_modify.assert_called_once_with("/tmp")
-        mock_stash.assert_called_once_with("/tmp")
-    with (
-        mock.patch(
-            "plum_tools.gitrepo.check_repository_modify_status",
-            return_value=(False, "test1"),
-        ) as mock_modify,
-        mock.patch("plum_tools.gitrepo.check_repository_stash", return_value=(True, "test2")) as mock_stash,
-    ):
-        result = check_project("/tmp")
-        assert result == {
-            "path": "/tmp",
-            "status": True,
-            "output": "test2",
-        }
-        mock_modify.assert_called_once_with("/tmp")
-        mock_stash.assert_called_once_with("/tmp")
-    with (
-        mock.patch(
-            "plum_tools.gitrepo.check_repository_modify_status",
-            return_value=(False, "test1"),
-        ) as mock_modify,
-        mock.patch("plum_tools.gitrepo.check_repository_stash", return_value=(False, "test2")) as mock_stash,
-    ):
-        result = check_project("/tmp")
-        assert result == {
-            "path": "/tmp",
-            "status": False,
-        }
-        mock_modify.assert_called_once_with("/tmp")
-        mock_stash.assert_called_once_with("/tmp")
+def test_discover_repository_paths() -> None:
+    """迁移目录发现检查，统一识别普通仓库与链接工作树。"""
+    directories = [(f"/tmp/{i}", [".git"] if i in (1, 2, 4) else [], [".git"] if i == 5 else []) for i in range(1, 6)]
+    with mock.patch("plum_tools.git_scan.os.walk", return_value=directories) as walk:
+        assert list(iter_repositories(["/tmp"], [])) == ["/tmp/1", "/tmp/2", "/tmp/4", "/tmp/5"]
+    walk.assert_called_once_with(Path("/tmp").resolve(), onerror=mock.ANY)
 
 
-@mock.patch(
-    "plum_tools.gitrepo.check_is_git_repository",
-    side_effect=[True, True, False, True, True],
-)
-def test_check_projects(mock_check: mock.MagicMock, capsys: pytest.CaptureFixture) -> None:
-    mock_os_result: list[tuple[str, list[str], list[str]]] = [(f"/tmp/{i + 1}", [], []) for i in range(5)]
-
-    with (
-        mock.patch("plum_tools.gitrepo.Pool", return_value=MockPool()) as mock_pool,
-        mock.patch("plum_tools.git_scan.os.walk") as mock_walk,
-        mock.patch(
-            "plum_tools.gitrepo.check_repository_modify_status",
-            side_effect=[
-                (True, "test1"),
-                (True, "test2"),
-                (False, "test3"),
-                (False, "test4"),
-            ],
-        ) as mock_modify,
-        mock.patch(
-            "plum_tools.gitrepo.check_repository_stash",
-            side_effect=[(False, ""), (False, ""), (True, "test5"), (False, "test6")],
-        ) as mock_stash,
-    ):
-        mock_walk.return_value = mock_os_result
-        check_projects(["/tmp"], True)
-    mock_pool.assert_called_once_with(processes=min(4, os.cpu_count() or 2))
-    mock_walk.assert_called_once_with(Path("/tmp").resolve(), onerror=mock.ANY)
-    mock_check.assert_has_calls(
-        [
-            mock.call("/tmp/1"),
-            mock.call("/tmp/2"),
-            mock.call("/tmp/3"),
-            mock.call("/tmp/4"),
-            mock.call("/tmp/5"),
-        ]
-    )
-    mock_modify.assert_has_calls(
-        [
-            mock.call("/tmp/1"),
-            mock.call("/tmp/2"),
-            mock.call("/tmp/4"),
-            mock.call("/tmp/5"),
-        ]
-    )
-    mock_stash.assert_has_calls([mock.call(f"/tmp/{index}") for index in (1, 2, 4, 5)], any_order=True)
-    assert mock_stash.call_count == 4
-
-    captured = capsys.readouterr()
-    assert "/tmp/1" in captured.out
-    assert "/tmp/2" in captured.out
-    assert "/tmp/3" not in captured.out
-    assert "/tmp/4" in captured.out
-    assert "/tmp/5" not in captured.out
-    assert "test5" in captured.out
+def test_scan_repository_with_changes_and_stash() -> None:
+    """迁移修改与 stash 同时存在、仅 stash 及正常仓库的检查场景。"""
+    for modified, stash in ((True, True), (False, True), (False, False)):
+        repo = Repository("/tmp", common_dir="/tmp/.git")
+        output = "# branch.head main\0" + ("? test1\0" if modified else "") + ("# stash 1\0" if stash else "")
+        with (
+            mock.patch("plum_tools.git_scan._identify_repository", return_value=repo),
+            mock.patch(
+                "plum_tools.git_scan._read_shared_refs",
+                return_value=(
+                    "main\0refs/remotes/origin/main\0origin/main\0\0origin",
+                    ["stash@{0}: test2"] if stash else [],
+                    [],
+                ),
+            ) as refs,
+            mock.patch("plum_tools.git_scan._git", return_value=output),
+        ):
+            result = _scan_repository("/tmp", False, {}, Lock(), detail=True)
+        assert bool(result.issues) is (modified or stash)
+        assert result.changes == ([{"status": "??", "path": "test1"}] if modified else [])
+        assert result.stashes == (["stash@{0}: test2"] if stash else [])
+        refs.assert_called_once_with(repo, False, stash_details=True)
 
 
-@mock.patch(
-    "plum_tools.gitrepo.check_is_git_repository",
-    side_effect=[True, True, False, True, True],
-)
-def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pytest.CaptureFixture) -> None:
-    mock_os_result: list[tuple[str, list[str], list[str]]] = [(f"/tmp/{i + 1}", [], []) for i in range(5)]
+def test_scan_issues_details(capsys: pytest.CaptureFixture[str]) -> None:
+    """迁移异常过滤与详情场景，重复克隆和 worktree 本身不算异常。"""
+    repos = [
+        Repository("/tmp/1", issues=["未跟踪 1"], changes=[{"status": "??", "path": "test1"}]),
+        Repository("/tmp/2", issues=["未暂存 1"]),
+        Repository("/tmp/4", issues=["stash 1"], stashes=["stash@{0}: test5"]),
+        Repository("/tmp/5", common_dir="/one/.git", remote_url="github.com/team/repo"),
+        Repository("/tmp/6", common_dir="/two/.git", remote_url="github.com/team/repo", worktree=True),
+    ]
+    with mock.patch("plum_tools.git_scan._collect_repositories", return_value=repos) as collect:
+        scan_projects(["/tmp"], statuses=("issues",), detail=True)
+    assert collect.call_args.args[-1] is True
+    output = capsys.readouterr().out
+    for path in ("/tmp/1", "/tmp/2", "/tmp/4"):
+        assert path in output
+    for path in ("/tmp/5", "/tmp/6"):
+        assert path not in output
+    assert "test1" in output
+    assert "test5" in output
 
-    with (
-        mock.patch("plum_tools.gitrepo.Pool", return_value=MockPool()) as mock_pool,
-        mock.patch("plum_tools.git_scan.os.walk") as mock_walk,
-        mock.patch(
-            "plum_tools.gitrepo.check_repository_modify_status",
-            side_effect=[
-                (True, "test1"),
-                (True, "test2"),
-                (False, "test3"),
-                (False, "test4"),
-            ],
-        ) as mock_modify,
-        mock.patch(
-            "plum_tools.gitrepo.check_repository_stash",
-            side_effect=[(False, ""), (False, ""), (True, "test5"), (False, "test6")],
-        ) as mock_stash,
-    ):
-        mock_walk.return_value = mock_os_result
-        check_projects(["/tmp"], False)
-    mock_pool.assert_called_once_with(processes=min(4, os.cpu_count() or 2))
-    mock_walk.assert_called_once_with(Path("/tmp").resolve(), onerror=mock.ANY)
-    mock_check.assert_has_calls(
-        [
-            mock.call("/tmp/1"),
-            mock.call("/tmp/2"),
-            mock.call("/tmp/3"),
-            mock.call("/tmp/4"),
-            mock.call("/tmp/5"),
-        ]
-    )
-    mock_modify.assert_has_calls(
-        [
-            mock.call("/tmp/1"),
-            mock.call("/tmp/2"),
-            mock.call("/tmp/4"),
-            mock.call("/tmp/5"),
-        ]
-    )
-    mock_stash.assert_has_calls([mock.call(f"/tmp/{index}") for index in (1, 2, 4, 5)], any_order=True)
-    assert mock_stash.call_count == 4
 
-    captured = capsys.readouterr()
-    assert "/tmp/1" in captured.out
-    assert "/tmp/2" in captured.out
-    assert "/tmp/3" not in captured.out
-    assert "/tmp/4" in captured.out
-    assert "/tmp/5" not in captured.out
-    assert "test5" not in captured.out
+def test_scan_issues_summary(capsys: pytest.CaptureFixture[str]) -> None:
+    """迁移默认摘要展示，不收集额外 stash 详情。"""
+    repos = [
+        Repository("/tmp/1", issues=["未跟踪 1"], changes=[{"status": "??", "path": "test1"}]),
+        Repository("/tmp/4", issues=["stash 1"], stashes=["stash@{0}: test5"]),
+        Repository("/tmp/5"),
+    ]
+    with mock.patch("plum_tools.git_scan._collect_repositories", return_value=repos) as collect:
+        scan_projects(["/tmp"], statuses=("issues",))
+    assert collect.call_args.args[-1] is False
+    output = capsys.readouterr().out
+    assert "/tmp/1" in output and "/tmp/4" in output
+    assert "/tmp/5" not in output
+    assert "test1" not in output and "test5" not in output
 
 
 @pytest.mark.parametrize(
@@ -218,7 +115,7 @@ def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pyte
         ["--json", "check"],
         ["--ignore-stash", "scan"],
         ["-d", "check"],
-        ["check", "-s"],
+        ["check"],
         ["check", "--stash"],
         ["scan", "-s"],
         ["scan", "--stash"],
@@ -227,7 +124,6 @@ def test_check_projects_with_not_detail(mock_check: mock.MagicMock, capsys: pyte
 def test_main(options: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     with (
         mock.patch("sys.argv", ["gitrepo", *options]),
-        mock.patch("plum_tools.gitrepo.check_projects") as check,
         mock.patch("plum_tools.gitrepo.scan_projects") as scan,
         pytest.raises(SystemExit) as exc,
     ):
@@ -236,26 +132,27 @@ def test_main(options: list[str], capsys: pytest.CaptureFixture[str]) -> None:
     captured = capsys.readouterr()
     assert "用法：" in captured.err
     assert captured.out == ""
-    check.assert_not_called()
     scan.assert_not_called()
 
 
 @pytest.mark.parametrize("modified", [False, True])
-def test_check_project_ignores_stash(modified: bool) -> None:
+def test_scan_repository_ignores_stash_details(modified: bool) -> None:
+    """迁移忽略 stash 场景，详情模式下也不查询 stash。"""
+    repo = Repository("/tmp/project", common_dir="/tmp/project/.git")
+    output = "# branch.head main\0" + ("? 工作区修改\0" if modified else "")
     with (
+        mock.patch("plum_tools.git_scan._identify_repository", return_value=repo),
         mock.patch(
-            "plum_tools.gitrepo.check_repository_modify_status", return_value=(modified, "工作区修改")
-        ) as modify,
-        mock.patch("plum_tools.gitrepo.check_repository_stash") as stash,
+            "plum_tools.git_scan._read_shared_refs",
+            return_value=("main\0refs/remotes/origin/main\0origin/main\0\0origin", [], []),
+        ) as refs,
+        mock.patch("plum_tools.git_scan._git", return_value=output) as git,
     ):
-        result = check_project("/tmp/project", stash=False)
-    assert result == (
-        {"path": "/tmp/project", "status": True, "output": "工作区修改"}
-        if modified
-        else {"path": "/tmp/project", "status": False}
-    )
-    modify.assert_called_once_with("/tmp/project")
-    stash.assert_not_called()
+        result = _scan_repository(repo.path, False, {}, Lock(), stash=False, detail=True)
+    assert bool(result.issues) is modified
+    assert not result.stashes
+    refs.assert_called_once_with(repo, False, stash_details=False)
+    assert "--show-stash" not in git.call_args.args
 
 
 @pytest.mark.parametrize(
@@ -267,18 +164,26 @@ def test_check_project_ignores_stash(modified: bool) -> None:
         (["--ignore-stash", "--exclude", ".venv"], False, (".venv",)),
     ],
 )
-def test_main_check_stash_options(options: list[str], stash: bool, exclude: tuple[str, ...]) -> None:
+def test_main_scan_issues_stash_options(options: list[str], stash: bool, exclude: tuple[str, ...]) -> None:
     with (
-        mock.patch("sys.argv", ["gitrepo", "check", *options, "-p", "/tmp/project"]),
-        mock.patch("plum_tools.gitrepo.check_projects") as check,
+        mock.patch("sys.argv", ["gitrepo", "scan", "--status", "issues", "-d", *options, "-p", "/tmp/project"]),
         mock.patch("plum_tools.gitrepo.scan_projects") as scan,
     ):
         main()
-    check.assert_called_once_with(["/tmp/project"], False, stash, exclude, json_output=False)
-    scan.assert_not_called()
+    scan.assert_called_once_with(
+        ["/tmp/project"],
+        "remote",
+        ("issues",),
+        False,
+        exclude,
+        stash=stash,
+        host_filter=None,
+        json_output=False,
+        detail=True,
+    )
 
 
-@pytest.mark.parametrize("options", [["check"], ["scan", "--host", "github.com"]])
+@pytest.mark.parametrize("options", [["scan", "--status", "issues"], ["scan", "--host", "github.com"]])
 def test_main_groups_directory_errors(options: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     def walk_with_errors(path: Path, *, onerror: Callable[[OSError], None]) -> list:
         onerror(PermissionError(errno.EACCES, "Permission denied", str(path / "one")))
@@ -299,11 +204,10 @@ def test_main_groups_directory_errors(options: list[str], tmp_path: Path, capsys
     assert "2 种原因 · 3 个目录" in rendered
     for name in ("one", "two", "three"):
         assert str(tmp_path / name) in rendered
-    if "scan" in options:
-        assert "扫描错误 3 个" in rendered
+    assert "扫描错误 3 个" in rendered
 
 
-@pytest.mark.parametrize("options", [["check"], ["scan"]])
+@pytest.mark.parametrize("options", [["scan", "--status", "issues"], ["scan"]])
 def test_main_hides_directory_error_table_without_errors(
     options: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]
 ) -> None:
@@ -314,31 +218,27 @@ def test_main_hides_directory_error_table_without_errors(
         main()
     rendered = capsys.readouterr().out
     assert "目录扫描错误" not in rendered
-    if "scan" in options:
-        assert "扫描错误 0 个" in rendered
-    else:
-        assert rendered == ""
+    assert "扫描错误 0 个" in rendered
 
 
 @pytest.mark.parametrize("options", [[], ["--ignore-stash"], ["--ignore-stash", "--group-by", "name"]])
 def test_main_scan_stash_options(options: list[str]) -> None:
     with (
         mock.patch("sys.argv", ["gitrepo", "scan", "-p", "/tmp/project", *options]),
-        mock.patch("plum_tools.gitrepo.check_projects") as check,
         mock.patch("plum_tools.gitrepo.scan_projects") as scan,
     ):
         main()
     scan.assert_called_once_with(
         ["/tmp/project"],
         "name" if "name" in options else "remote",
-        False,
+        ("all",),
         False,
         (),
         stash="--ignore-stash" not in options,
         host_filter=None,
         json_output=False,
+        detail=False,
     )
-    check.assert_not_called()
 
 
 @pytest.mark.parametrize(
@@ -352,7 +252,7 @@ def test_main_scan_host_options(option: str, pattern: str) -> None:
     ):
         main()
     assert scan.call_count == 1
-    assert scan.call_args.args == (["/tmp/project"], "remote", False, False, ())
+    assert scan.call_args.args == (["/tmp/project"], "remote", ("all",), False, ())
     assert scan.call_args.kwargs["stash"] is False
     assert scan.call_args.kwargs["json_output"] is False
     pattern_filter = scan.call_args.kwargs["host_filter"]
@@ -377,9 +277,9 @@ def test_main_rejects_invalid_host_options(options: list[str], capsys: pytest.Ca
 @pytest.mark.parametrize(
     ("options", "command", "stash"),
     [
-        (["check", "--json"], "check", True),
-        (["check", "--json", "-d"], "check", True),
-        (["check", "--json", "--ignore-stash"], "check", False),
+        (["scan", "--json", "--status", "issues"], "scan", True),
+        (["scan", "--json", "-d"], "scan", True),
+        (["scan", "--json", "--ignore-stash", "--status", "issues"], "scan", False),
         (["scan", "--json"], "scan", True),
         (["scan", "--json", "--ignore-stash"], "scan", False),
     ],
@@ -396,7 +296,7 @@ def test_main_json_empty_results_and_progress_stream(
         main()
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
-    assert payload["schema_version"] == 1
+    assert payload["schema_version"] == 2
     assert payload["command"] == command
     assert payload["options"]["stash_checked"] is stash
     assert payload["repositories"] == []
@@ -408,8 +308,8 @@ def test_main_json_empty_results_and_progress_stream(
     walk.assert_called_once_with(tmp_path.resolve(), onerror=mock.ANY)
 
 
-@pytest.mark.parametrize("command", ["check", "scan"])
-def test_main_json_directory_errors(command: str, tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+@pytest.mark.parametrize("options", [["scan", "--status", "issues"], ["scan"]])
+def test_main_json_directory_errors(options: list[str], tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
     denied = str(tmp_path / '配置[red]"目录\n')
 
     def walk_with_errors(path: Path, *, onerror: Callable[[OSError], None]) -> list:
@@ -418,7 +318,7 @@ def test_main_json_directory_errors(command: str, tmp_path: Path, capsys: pytest
         return []
 
     with (
-        mock.patch("sys.argv", ["gitrepo", command, "--json", "-p", str(tmp_path)]),
+        mock.patch("sys.argv", ["gitrepo", *options, "--json", "-p", str(tmp_path)]),
         mock.patch("plum_tools.git_scan.os.walk", side_effect=walk_with_errors) as walk,
     ):
         main()
@@ -433,155 +333,124 @@ def test_main_json_directory_errors(command: str, tmp_path: Path, capsys: pytest
 
 @pytest.mark.parametrize("detail", [False, True])
 @pytest.mark.parametrize("stash", [False, True])
-def test_check_json_includes_all_results(detail: bool, stash: bool, capsys: pytest.CaptureFixture[str]) -> None:
+def test_scan_json_includes_all_results_and_details(
+    detail: bool, stash: bool, capsys: pytest.CaptureFixture[str]
+) -> None:
     paths = ["/projects/failed", '/projects/修改[red]"目录', "/projects/clean"]
-    output = '未提交 "文件"\n第二行\\路径'
+    changes = [{"status": ".M", "path": '未提交 "文件"\n第二行\\路径'}]
     results = [
-        {"path": paths[0], "status": True, "error": True, "output": "检查失败：超时"},
-        {"path": paths[1], "status": True, "output": output},
-        {"path": paths[2], "status": False},
+        Repository(paths[0], errors=["超时"]),
+        Repository(paths[1], issues=["未暂存 1"], changes=changes),
+        Repository(paths[2]),
     ]
-    with (
-        mock.patch("plum_tools.gitrepo.walk_directories", return_value=[(path, [], []) for path in paths]) as walk,
-        mock.patch("plum_tools.gitrepo.check_is_git_repository", return_value=True) as identify,
-        mock.patch("plum_tools.gitrepo.Pool", return_value=MockPool()) as pool,
-        mock.patch("plum_tools.gitrepo.check_project", side_effect=results) as check,
-    ):
-        check_projects(["/projects"], detail, stash, (".venv",), json_output=True)
+    with mock.patch("plum_tools.git_scan._collect_repositories", return_value=results) as collect:
+        scan_projects(["/projects"], stash=stash, exclude=(".venv",), detail=detail, json_output=True)
     captured = capsys.readouterr()
     payload = json.loads(captured.out)
-    assert payload == {
-        "schema_version": 1,
-        "command": "check",
-        "options": {"stash_checked": stash},
-        "summary": {
-            "repository_count": 3,
-            "shown_repository_count": 3,
-            "issue_repository_count": 2,
-            "failed_repository_count": 1,
-            "directory_error_count": 0,
-        },
-        "repositories": [
-            {"path": paths[2], "has_issues": False, "failed": False, "output": ""},
-            {"path": paths[0], "has_issues": True, "failed": True, "output": "检查失败：超时"},
-            {"path": paths[1], "has_issues": True, "failed": False, "output": output},
-        ],
-        "directory_errors": [],
-    }
+    assert payload["schema_version"] == 2
+    assert payload["command"] == "scan"
+    assert payload["options"]["stash_checked"] is stash
+    assert payload["summary"]["repository_count"] == 3
+    assert payload["summary"]["issue_repository_count"] == 2
+    assert payload["summary"]["failed_repository_count"] == 1
+    rows = {row["path"]: row for row in payload["repositories"]}
+    assert rows[paths[1]]["changes"] == changes
+    assert rows[paths[0]]["errors"] == ["超时"]
+    assert rows[paths[2]]["has_issues"] is False
+    assert rows[paths[2]]["changes"] == rows[paths[2]]["stashes"] == []
     assert "修改" in captured.out
     assert captured.err == ""
-    walk.assert_called_once_with(["/projects"], [], (".venv",))
-    assert identify.call_args_list == [mock.call(path) for path in paths]
-    pool.assert_called_once_with(processes=min(3, os.cpu_count() or 2))
-    assert check.call_args_list == [mock.call(path, stash=stash) for path in paths]
+    assert collect.call_args.args[:4] == (["/projects"], [], False, (".venv",))
+    assert collect.call_args.args[-2:] == (stash, True)
 
 
 @pytest.mark.parametrize("detail", [False, True])
-def test_check_rich_table_preserves_literal_paths_and_failure_details(detail: bool) -> None:
+def test_scan_rich_table_preserves_literal_paths_and_failure_details(detail: bool) -> None:
     result = [
-        {"path": "/projects/clean", "status": False},
-        {"path": "/projects/[red]修改", "status": True, "output": "[bold]工作区修改"},
-        {"path": "/projects/failed", "status": True, "error": True, "output": "检查失败：[red]超时"},
+        Repository("/projects/clean"),
+        Repository("/projects/[red]修改", issues=["未跟踪 1"], changes=[{"status": "??", "path": "[bold]工作区修改"}]),
+        Repository("/projects/failed", errors=["[red]超时"]),
     ]
     output = StringIO()
-    _print_check_results(
-        Console(file=output, width=200), result, [DirectoryScanError("/protected", "Permission denied")], detail
+    _print_scan_results(
+        Console(file=output, width=240),
+        result,
+        [DirectoryScanError("/protected", "Permission denied")],
+        "remote",
+        ("issues",),
+        False,
+        detail=detail,
     )
     rendered = output.getvalue()
-    assert "仓库检查结果" in rendered
     assert "│" in rendered
-    assert "目录" in rendered
-    assert "状态" in rendered
-    assert "详细信息" in rendered
+    assert "目录" in rendered and "状态" in rendered
     assert "/projects/clean" not in rendered
     assert "/projects/[red]修改" in rendered
     assert "检查失败：[red]超时" in rendered
     assert ("[bold]工作区修改" in rendered) is detail
-    assert "检查 3 个仓库 · 异常 2 个 · 检查失败 1 个" in rendered
+    assert "异常仓库目录 2 个" in rendered
+    assert "检查失败 1 个" in rendered
     assert "目录扫描错误" in rendered
     assert "Permission denied" in rendered
 
 
-def test_check_project_catches_runcmd_error() -> None:
-    """验证 check_project 捕获 RunCmdError 并标记错误状态。"""
-    from plum_tools.exceptions import RunCmdError
-
-    with mock.patch(
-        "plum_tools.gitrepo.check_repository_modify_status",
-        side_effect=RunCmdError("git status 失败", out_msg="", err_msg="error"),
+def test_scan_repository_keeps_command_errors() -> None:
+    """迁移 Git 命令失败场景，错误不阻断扫描。"""
+    repo = Repository("/repo", common_dir="/repo/.git")
+    with (
+        mock.patch("plum_tools.git_scan._identify_repository", return_value=repo),
+        mock.patch("plum_tools.git_scan._read_shared_refs", return_value=(None, [], ["引用失败"])),
+        mock.patch("plum_tools.git_scan._git", side_effect=GitScanError("git status 失败")),
     ):
-        result = check_project("/repo")
-
-    assert result["error"] is True
-    assert result["status"] is True
-    assert "检查失败" in result["output"]
-    assert "git status 失败" in result["output"]
+        result = _scan_repository("/repo", False, {}, Lock(), detail=True)
+    assert result.errors == ["引用失败", "git status 失败"]
 
 
-def test_check_project_catches_runcmd_timeout() -> None:
-    """验证 check_project 捕获 RunCmdTimeout。"""
-    from plum_tools.exceptions import RunCmdTimeout
-
-    with mock.patch(
-        "plum_tools.gitrepo.check_repository_modify_status",
-        side_effect=RunCmdTimeout("git status 超时"),
+def test_scan_command_catches_timeout() -> None:
+    """迁移命令超时场景，统一转换为可展示的扫描错误。"""
+    with (
+        mock.patch("plum_tools.git_scan.shutil.which", return_value="/usr/bin/git"),
+        mock.patch("plum_tools.git_scan.run_process", side_effect=subprocess.TimeoutExpired("git status", 30)),
+        pytest.raises(GitScanError, match="超时"),
     ):
-        result = check_project("/repo")
-
-    assert result["error"] is True
-    assert result["status"] is True
-    assert "检查失败" in result["output"]
-    assert "超时" in result["output"]
+        _git("/repo", "status")
 
 
-def test_check_project_catches_oserror() -> None:
-    """验证 check_project 捕获 OSError。"""
-    with mock.patch(
-        "plum_tools.gitrepo.check_repository_modify_status",
-        side_effect=OSError("文件未找到"),
+def test_scan_command_catches_oserror() -> None:
+    """迁移系统错误场景，保留原始失败原因。"""
+    with (
+        mock.patch("plum_tools.git_scan.shutil.which", return_value="/usr/bin/git"),
+        mock.patch("plum_tools.git_scan.run_process", side_effect=OSError(errno.ENOENT, "文件未找到")),
+        pytest.raises(GitScanError, match="文件未找到"),
     ):
-        result = check_project("/repo")
-
-    assert result["error"] is True
-    assert result["status"] is True
-    assert "检查失败" in result["output"]
-    assert "文件未找到" in result["output"]
+        _git("/repo", "status")
 
 
-def test_print_check_results_compact_mode(capsys: pytest.CaptureFixture[str]) -> None:
-    """验证紧凑模式下表格使用紧凑样式。"""
-    from plum_tools.gitrepo import _print_check_results
-
+def test_scan_compact_details(capsys: pytest.CaptureFixture[str]) -> None:
+    """迁移紧凑模式下的文件与 stash 详情展示。"""
     result = [
-        {"path": "/repo", "status": True, "output": "工作区有修改"},
+        Repository(
+            "/repo",
+            issues=["未跟踪 1"],
+            changes=[{"status": "??", "path": "工作区有修改"}],
+            stashes=["stash@{0}: 暂存"],
+        )
     ]
-
-    _print_check_results(Console(), result, [], detail=True, compact=True)
-
+    _print_scan_results(Console(), result, [], "remote", ("issues",), False, detail=True, compact=True)
     rendered = capsys.readouterr().out
-    assert "仓库检查结果" in rendered
     assert "/repo" in rendered
     assert "工作区有修改" in rendered
+    assert "stash@{0}" in rendered
 
 
-def test_print_check_results_compact_mode_filters_empty_lines() -> None:
-    """验证紧凑模式下过滤详细信息中的空行。"""
-    from plum_tools.gitrepo import _print_check_results
-
+def test_scan_compact_details_escape_empty_lines() -> None:
+    """迁移紧凑详情展示，文件名中的空行仍须保留可辨识形式。"""
     output = StringIO()
-    result = [
-        {
-            "path": "/repo",
-            "status": True,
-            "output": "\n\n工作区修改\n\n未暂存变更\n\n",
-        },
-    ]
-
-    _print_check_results(Console(file=output, width=200), result, [], detail=True, compact=True)
-
+    result = [Repository("/repo", issues=["未跟踪 1"], changes=[{"status": "??", "path": "工作区修改\n\n未暂存变更"}])]
+    _print_scan_results(
+        Console(file=output, width=200), result, [], "remote", ("issues",), False, detail=True, compact=True
+    )
     rendered = output.getvalue()
-    # 紧凑模式下应过滤空行
-    assert "工作区修改" in rendered
-    assert "未暂存变更" in rendered
-    # 不应有连续多个换行（紧凑模式去除了空行）
+    assert "工作区修改" in rendered and "未暂存变更" in rendered
+    assert r"\n\n" in rendered
     assert "\n\n\n" not in rendered

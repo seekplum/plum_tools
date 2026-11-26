@@ -11,19 +11,22 @@
 """
 
 import json
+from ipaddress import ip_address
+from typing import Any
 
 from rich.console import Console
 from rich.progress import BarColumn, Progress, TextColumn, TimeElapsedColumn
 from rich.text import Text
 
-from .conf import PROCESSES_NUMBER, OsCommand
-from .exceptions import RunCmdError
-from .utils.cli import cli_entry
-from .utils.cli import process_pool as Pool
-from .utils.parser import add_compact_argument, get_base_parser
-from .utils.printer import print_columns, print_text
-from .utils.sshconf import get_prefix_host_ip
-from .utils.utils import run_cmd
+from plum_tools.conf import PROCESSES_NUMBER, OsCommand
+from plum_tools.exceptions import RunCmdError
+from plum_tools.utils.cli import cli_entry
+from plum_tools.utils.cli import process_pool as Pool
+from plum_tools.utils.parser import add_compact_argument, get_base_parser
+from plum_tools.utils.printer import print_columns, print_text
+from plum_tools.utils.sorting import SortField, add_sort_argument, sort_items
+from plum_tools.utils.sshconf import get_prefix_host_ip
+from plum_tools.utils.utils import run_cmd
 
 
 def ping(ip: str) -> str | None:
@@ -40,7 +43,14 @@ def ping(ip: str) -> str | None:
     return ip
 
 
-def run(host_type: str, prefix_host: str, *, compact: bool = False, json_output: bool = False) -> None:
+def run(
+    host_type: str,
+    prefix_host: str,
+    *,
+    compact: bool = False,
+    json_output: bool = False,
+    sort: list[SortField] | None = None,
+) -> None:
     """探测 prefix_host 指定网段，为空时读取 host_type 配置。
     按地址顺序输出可达 IP；json_output 输出 JSON，否则 compact 仅在终端分栏。
     """
@@ -76,6 +86,7 @@ def run(host_type: str, prefix_host: str, *, compact: bool = False, json_output:
                 reachable.add(ip)
             progress.update(task, advance=1, reachable=len(reachable))
     addresses = [ip for ip in targets if ip in reachable]
+    addresses = sort_items(addresses, sort, {"ip": lambda address: int(ip_address(address))})
     if json_output:
         print(
             json.dumps(
@@ -107,6 +118,7 @@ def run(host_type: str, prefix_host: str, *, compact: bool = False, json_output:
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()
+    add_sort_argument(parser, {"ip": "IP 地址数值"})
     parser.description = "并发探测指定网段内 1 至 254 号地址，输出可达 IP。"  # noqa
     parser.epilog = (
         "示例：\n  pping -p 192.168.1\n  pping -t default\n  pping -p 192.168.1 --json | jq -r '.reachable[]'"
@@ -138,9 +150,11 @@ def main() -> None:
         help="以 JSON 输出探测结果，忽略 --compact；进度条写入标准错误",
     )
     args = parser.parse_args()
-    display_options = {}
+    display_options: dict[str, Any] = {}
     if args.compact is True:
         display_options["compact"] = True
     if args.json_output is True:
         display_options["json_output"] = True
+    if args.sort:
+        display_options["sort"] = args.sort
     run(args.type, args.prefix_host, **display_options)

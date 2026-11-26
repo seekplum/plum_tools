@@ -4,8 +4,7 @@ import sys
 import typing as t
 
 from plum_tools._version import COMMIT_ID, RELEASE_DATE, VERSION
-
-from .printer import get_green
+from plum_tools.utils.printer import get_green
 
 # 仅翻译 argparse 的消息模板，保留参数名、用户输入及外部诊断原文。
 _ERROR_TRANSLATIONS = (
