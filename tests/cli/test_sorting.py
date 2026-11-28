@@ -68,8 +68,8 @@ def test_gitrepo_captures_counts_without_details() -> None:
         _read_worktree(repo, detail=False)
     _read_branches(
         repo,
-        "main\0refs/remotes/origin/main\0origin/main\0ahead 10, behind 2\0origin\n"
-        "dev\0refs/remotes/origin/dev\0origin/dev\0ahead 3\0origin\n",
+        "main\0refs/remotes/origin/main\0origin/main\0ahead 10, behind 2\0origin\0\n"
+        "dev\0refs/remotes/origin/dev\0origin/dev\0ahead 3\0origin\0\n",
     )
     assert repo.counts == {
         "stash": 12,

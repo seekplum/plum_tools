@@ -274,6 +274,8 @@ def _add_plan_arguments(commands: dict[Command, argparse.ArgumentParser]) -> Non
                 "files": "文件数",
                 "reason": "清理依据",
             },
+            default_order="扫描候选按 size 降序、path 升序，show/run 候选按计划顺序；"
+            "表格按类别分区，依据组按总占用降序",
         )
     for command in (Command.SCAN, Command.SHOW):
         commands[command].add_argument("--json", action="store_true", help="以 JSON 输出预览")

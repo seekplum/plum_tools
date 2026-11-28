@@ -11,12 +11,22 @@
 """
 
 from collections.abc import Sequence
+from pathlib import Path
 from typing import Any
 
 from rich.columns import Columns
 from rich.console import Console
 from rich.table import Table
 from rich.text import Text
+
+
+def display_path(path: str | Path) -> str:
+    """返回展示用路径，将当前用户主目录及其子路径的前缀缩写为 ~。"""
+    value = str(path)
+    home = str(Path.home())
+    if value == home or value.startswith(f"{home}/"):
+        return f"~{value[len(home) :]}"
+    return value
 
 
 def compact_table(table: Table) -> None:

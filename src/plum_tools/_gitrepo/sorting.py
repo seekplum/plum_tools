@@ -14,6 +14,8 @@ if TYPE_CHECKING:
 
 
 def _repository_value(repo: Repository, name: str) -> str | int | None:
+    if name == "commit-time":
+        return repo.commit_time
     if name == "name":
         return Path(repo.path).name
     if name == "remote":

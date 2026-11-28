@@ -153,6 +153,9 @@ gitrepo scan -p ~/PythonProjects --group-by name
 # 仅展示重复克隆的目录
 gitrepo scan -p ~/PythonProjects --status duplicate
 
+# 按 HEAD 提交时间从新到旧排列重复克隆
+gitrepo scan -p ~/PythonProjects --status duplicate --sort commit-time
+
 # 展示领先或有已储藏记录的目录，多个状态按“或”匹配
 gitrepo scan -p ~/PythonProjects --status ahead stash
 
@@ -270,6 +273,27 @@ JSON 始终收集文件与 stash 详情，不受 `-d` 限制；`--ignore-stash` 
 SSH 主机别名不会自动解析为相同主机。
 任意远程地址相同即关联仓库，并合并间接关联：A 的地址为 `{a,b}`，
 B 为 `{b,c}`，C 为 `{c}` 或 `{c,d}` 时，A/B/C 同属一个关联组。
+重复组中 HEAD 提交者时间最大的目录标记为「提交时间最新」，
+多个目录的时间同秒并列时标记为「提交时间并列最新」。无提交的目录排序时放在最后。
+JSON 中 `commit_time` 为 Unix 秒数或 null，`latest_commit_time` 表示时间是否最大，
+`tied_latest_commit_time` 表示是否并列最大。时间标记按完整远程关联组计算。
+
+重复目录还显示短 HEAD ID，并逐对注明相对目标目录的提交关系。
+相同 HEAD 显示「提交相同」，领先或落后显示差异提交数，
+已分叉显示双方各自独有的提交数，无共同历史则单独标记。
+浅克隆、无提交或历史读取失败时显示「关系未知」及原因。
+历史仅在重复组存在不同 HEAD 时读取，按完整提交 ID 缓存，读取使用本地对象。
+相同 HEAD 的完整副本可为浅克隆提供可达历史。
+时间相同的目录可能具有不同提交，工作区状态仍独立检查。
+状态和主机筛选以及 `--group-by name` 保留完整重复组的关系信息。
+
+JSON 中 `commit` 保存已读取的完整 HEAD ID，未取得提交时为空字符串。
+`commit_relations` 保存重复组内相对每个其他目录的关系，非重复目录为空数组。
+每项包含 `path`、`status`、`local_only`、`other_only` 和 `reason`。
+`status` 可取 `equal`、`ahead`、`behind`、`diverged`、`unrelated`、`unknown`，
+数量分别表示当前目录与目标目录各自独有的提交数，无法判断时为 null。
+`reason` 在关系未知时说明原因，其余情况为空字符串。
+
 同组存在多个独立 Git 仓库时，组内全部目录标记为重复克隆。
 worktree 逐个展示并带有 `worktree` 状态，共用 Git 数据的目录不计为独立克隆。
 两种模式使用相同布局：同一仓库的名称仅在首行显示，后续行留空，
@@ -479,6 +503,9 @@ JSON 仍遵循排除规则和扫描深度限制；`options.max_depth` 不为 `nu
 排除项不会被读取、计算摘要，也不参与比较和统计。
 规则仅作用于输入目录内的子项，不排除直接传入的根目录或文件；
 普通及通配符路径不能是绝对路径、`.` 或包含 `..`。
+
+比较至少两个 Git 仓库根目录时，输入旁显示当前分支和短提交号，并逐对显示提交相同、领先数量、已分叉或没有共同历史。未初始化提交、历史不可读或浅克隆缺少完整历史时显示「关系未知」，相同 HEAD 仍可直接判定。文件差异及退出码继续按选定的内容比较范围计算。仅关注工作区内容时可加 `--exclude-name .git`。
+本地和 SSH 输入均支持该展示。JSON 的 `git.heads` 按输入顺序保存分支和完整提交号，`git.relations` 用从 1 开始的编号标识两个输入，`left_only` 和 `right_only` 为各自独有的提交数，未知时为 null。
 
 `--quick` 默认只扫描 2 层；`--max-depth N`（简写 `-L N`）可单独使用，
 也可覆盖 `--quick` 的默认层级，`N` 必须为正整数。根目录是第 0 层，

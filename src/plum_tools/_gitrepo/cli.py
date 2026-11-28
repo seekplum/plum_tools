@@ -49,7 +49,11 @@ def add_scan_parser(parser: argparse.ArgumentParser) -> None:
         ),
     )
     add_compact_argument(scan)
-    add_sort_argument(scan, {field.value: field.desc for field in RepositorySortField})
+    add_sort_argument(
+        scan,
+        {field.value: field.desc for field in RepositorySortField},
+        default_order="按远程主机、仓库组键、组内路径依次升序",
+    )
     scan.add_argument(
         "--json",
         dest="json_output",
@@ -70,7 +74,10 @@ def add_scan_parser(parser: argparse.ArgumentParser) -> None:
         "--exclude", nargs="+", default=[], help="按目录名跳过子目录，例如 node_modules .venv；默认无额外排除目录"
     )
     scan.add_argument(
-        "-d", "--detail", action="store_true", help="显示工作区、分支差异及已储藏记录的详细信息，默认仅展示摘要"
+        "-d",
+        "--detail",
+        action="store_true",
+        help="显示工作区、分支差异、已储藏记录及重复仓库提交关系的详细信息，默认仅展示摘要",
     )
     scan.add_argument(
         "--group-by",

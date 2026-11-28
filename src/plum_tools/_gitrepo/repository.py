@@ -24,15 +24,19 @@ _SUBMODULE_RECORD = re.compile(r"[12u] .. (?:S|N\.\.\. (?:[0-7]{6} ){0,2}160000 
 # 一次读取所有本地分支的跟踪状态，供共用 Git 数据的目录复用。
 _BRANCH_FORMAT = (
     "%(refname:short)%00%(upstream)%00%(upstream:short)%00%(upstream:track,nobracket)%00%(upstream:remotename)"
+    "%00%(committerdate:unix)"
 )
 
 
-def _git(path: str, *args: str, allowed_codes: tuple[int, ...] = (0,)) -> str:
+def _git(path: str, *args: str, allowed_codes: tuple[int, ...] = (0,), local_history: bool = False) -> str:
     executable = shutil.which("git")
     if not executable:
         raise GitScanError("未找到 git 可执行文件")
     env = {**os.environ, "LC_ALL": "C", "GIT_TERMINAL_PROMPT": "0", "GCM_INTERACTIVE": "never"}
     options = ["--no-optional-locks", "-c", "color.ui=false"]
+    if local_history:
+        env.update(GIT_NO_LAZY_FETCH="1", GIT_ALLOW_PROTOCOL="", GIT_NO_REPLACE_OBJECTS="1")
+        options.append("--no-replace-objects")
     if args[0] == "status":
         # 父仓库的 --untracked-files 不传入子模块，进程级配置可让嵌套的 status 也扫描未跟踪文件。
         options.extend(("-c", "status.showUntrackedFiles=all"))
@@ -201,15 +205,16 @@ def _read_worktree(
     repo.counts.update({"stash": 0} if stash else {})
     entries = iter(output.split("\0"))
     commit = ""
-    ignore_pointer = "submodule-pointer" in ignored_statuses
     for record in entries:
         # -z 模式下原路径另占一项，即使忽略变更也必须先消费。
         original_path = next(entries, "") if record.startswith("2 ") else ""
-        entry = _without_worktree_pointer(record) if ignore_pointer else record
+        entry = _without_worktree_pointer(record) if "submodule-pointer" in ignored_statuses else record
         if not entry:
             continue
         if entry.startswith("# branch.oid "):
-            commit = entry.removeprefix("# branch.oid ")[:7]
+            repo.commit = entry.removeprefix("# branch.oid ")
+            repo.commit = "" if repo.commit == "(initial)" else repo.commit
+            commit = repo.commit[:7]
         elif entry.startswith("# branch.head "):
             repo.branch = entry.removeprefix("# branch.head ")
         elif entry.startswith("# stash ") and stash:
@@ -245,7 +250,9 @@ def _read_branches(repo: Repository, output: str, ignored_statuses: tuple[str, .
         repo.issues.append("尚无提交")
         repo.statuses.append("unborn")
     for line in output.splitlines():
-        name, upstream, upstream_name, tracking, remote = line.split("\0")
+        name, upstream, upstream_name, tracking, remote, timestamp = line.split("\0")
+        if name == repo.branch and timestamp:
+            repo.commit_time = int(timestamp)
         if not upstream:
             repo.issues.append(f"{name}：无 upstream")
             repo.statuses.append("no-upstream")
@@ -338,6 +345,8 @@ def _scan_repository(
             _read_bare_status(repo, stash, ignored_statuses)
         else:
             _read_worktree(repo, stash, detail=detail, ignored_statuses=ignored_statuses)
+        if repo.branch.startswith("HEAD@"):
+            repo.commit_time = int(_git(path, "show", "-s", "--format=%ct", "HEAD").strip())
     except GitScanError as exc:
         repo.errors.append(str(exc))
     if branches is not None:

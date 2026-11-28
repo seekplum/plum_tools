@@ -2,6 +2,7 @@
 
 import json
 from collections.abc import Sequence
+from dataclasses import asdict
 from pathlib import Path
 
 from rich.console import Console
@@ -9,9 +10,10 @@ from rich.table import Table
 from rich.text import Text
 
 from plum_tools._compare.comparison import _split_remote
+from plum_tools._compare.history import GitComparison
 from plum_tools._compare.models import CompareResult, Comparison, ShowMode
 from plum_tools._compare.remote import EntryKind
-from plum_tools.utils.printer import compact_table
+from plum_tools.utils.printer import compact_table, display_path
 
 
 def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool, *, compact: bool = False) -> Table:
@@ -34,10 +36,22 @@ def _report_table(rows: Sequence[Comparison], path_count: int, identical: bool, 
             group = row_groups.setdefault(identity, len(row_groups) + 1)
             label = f"{entry.kind}/组{group}" if compact else f"{entry.kind} · 组{group}"
             if entry.kind == EntryKind.LINK:
-                label += f" → {entry.target}"
+                label += f" → {display_path(entry.target)}"
             labels.append(Text(label))
         table.add_row(Text(str(item.path)), *labels, item.result)
     return table
+
+
+def _print_inputs(paths: Sequence[str | Path], console: Console, git: GitComparison | None) -> None:
+    for index, path in enumerate(paths, start=1):
+        label = str(path) if _split_remote(path) is not None else display_path(Path(path).expanduser().absolute())
+        head = git.heads[index - 1] if git else None
+        if head:
+            label += f" · {head.branch or 'HEAD'} · {head.commit[:12] or '无可用提交'}"
+        console.print(Text(f"[{index}] {label}"))
+    if git:
+        for relation in git.relations:
+            console.print(Text(relation.label(), style=relation.status.style))
 
 
 def print_report(  # pylint: disable=too-many-arguments,too-many-locals
@@ -50,6 +64,7 @@ def print_report(  # pylint: disable=too-many-arguments,too-many-locals
     max_depth: int | None = None,
     ignore_case: bool = False,
     display_depth: int | None = None,
+    git: GitComparison | None = None,
 ) -> None:
     """按 show 类型及可选展示深度输出表格，汇总始终包含全部已比较条目。"""
     if show not in tuple(ShowMode):
@@ -58,9 +73,7 @@ def print_report(  # pylint: disable=too-many-arguments,too-many-locals
         isinstance(display_depth, bool) or not isinstance(display_depth, int) or display_depth < 0
     ):
         raise ValueError("展示深度必须是大于等于 0 的整数")
-    for index, path in enumerate(paths, start=1):
-        label = str(path) if _split_remote(path) is not None else str(Path(path).expanduser().absolute())
-        console.print(Text(f"[{index}] {label}"))
+    _print_inputs(paths, console, git)
     if ignore_case:
         console.print("忽略相对路径大小写，仍比较条目类型、文件内容和链接目标。")
     if max_depth is None:
@@ -94,6 +107,7 @@ def _print_json_report(
     options: dict[str, object],
     *,
     display_depth: int | None = None,
+    git: GitComparison | None = None,
 ) -> None:
     """按 display_depth 输出 comparisons 的 JSON 条目，汇总保留全部比较结果及 options。"""
     same = sum(item.result == CompareResult.IDENTICAL for item in comparisons)
@@ -107,6 +121,7 @@ def _print_json_report(
                     for path in paths
                 ],
                 "options": options,
+                **({"git": asdict(git)} if git else {}),
                 "summary": {
                     "entry_count": len(comparisons),
                     "identical_count": same,

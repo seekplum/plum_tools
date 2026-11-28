@@ -42,7 +42,8 @@ def _decode_remote_tree(output: str) -> dict[Path, Entry]:
         key = Path(relative)
         if key.is_absolute() or ".." in key.parts or str(key) != relative:
             raise ValueError("无效的相对路径")
-        entry = Entry(**{**row, "path": Path(row["path"])})
+        head = row.get("git_head")
+        entry = Entry(**{**row, "path": Path(row["path"]), "git_head": remote.GitHead(**head) if head else None})
         if entry.kind not in tuple(EntryKind) or not isinstance(entry.target, str):
             raise ValueError("无效的条目类型或链接目标")
         if not isinstance(entry.size, int) or isinstance(entry.size, bool) or entry.size < 0:
@@ -58,30 +59,15 @@ def _decode_remote_tree(output: str) -> dict[Path, Entry]:
     return entries
 
 
-def _scan_remote(
-    host: str,
-    path: str,
-    exclude_names: Sequence[str] = (),
-    exclude_paths: Sequence[str] = (),
-    default_excludes: bool = True,
-    max_depth: int | None = None,
-) -> dict[Path, Entry]:
+def _remote_output(host: str, path: str, options: dict) -> str:
     # 复用同一份标准库扫描代码，避免远端依赖安装及两端比较规则漂移。
     script = Path(remote.__file__).read_text(encoding="utf-8")
     ssh = shutil.which("ssh")
     if ssh is None:
         raise OSError("找不到 ssh 命令，请先安装 OpenSSH 客户端")
-    options = json.dumps(
-        {
-            "exclude_names": list(exclude_names),
-            "exclude_paths": list(exclude_paths),
-            "default_excludes": default_excludes,
-            "max_depth": max_depth,
-        }
-    )
     # 本地按参数列表调用，远端路径单独转义，避免路径中的 shell 字符被执行。
     process: subprocess.CompletedProcess[str] = run_process(
-        [ssh, "-T", "-o", "ConnectTimeout=10", "--", host, shlex.join(["python3", "-", path, options])],
+        [ssh, "-T", "-o", "ConnectTimeout=10", "--", host, shlex.join(["python3", "-", path, json.dumps(options)])],
         input=script,
         capture_output=True,
         encoding="utf-8",
@@ -91,8 +77,29 @@ def _scan_remote(
     if process.returncode:
         detail = process.stderr.strip() or f"退出码 {process.returncode}"
         raise OSError(f"远端读取失败（{host}:{path}）：{detail}")
+    return process.stdout
+
+
+def _scan_remote(
+    host: str,
+    path: str,
+    exclude_names: Sequence[str] = (),
+    exclude_paths: Sequence[str] = (),
+    default_excludes: bool = True,
+    max_depth: int | None = None,
+) -> dict[Path, Entry]:
+    output = _remote_output(
+        host,
+        path,
+        {
+            "exclude_names": list(exclude_names),
+            "exclude_paths": list(exclude_paths),
+            "default_excludes": default_excludes,
+            "max_depth": max_depth,
+        },
+    )
     try:
-        return _decode_remote_tree(process.stdout)
+        return _decode_remote_tree(output)
     except (ValueError, TypeError, KeyError) as exc:
         raise ValueError(f"远端返回的文件清单无效（{host}:{path}）：{exc}") from exc
 

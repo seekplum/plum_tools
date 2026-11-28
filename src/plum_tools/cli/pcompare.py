@@ -5,6 +5,7 @@ from rich.text import Text
 
 from plum_tools._compare import remote
 from plum_tools._compare.comparison import compare_paths
+from plum_tools._compare.history import compare_heads
 from plum_tools._compare.models import CompareExitCode, CompareResult, ShowMode
 from plum_tools._compare.reporting import _print_json_report, print_report
 from plum_tools.utils.cli import cli_entry
@@ -25,6 +26,7 @@ def main() -> None:
             "kind": "各输入中首个存在条目的类型",
             "size": "各输入对应条目的最大大小",
         },
+        default_order="按相对路径升序，表格按一致与不一致分组展示",
     )
     add_compact_argument(parser)
     parser.description = "比较两个及以上目录或文件，默认仅展示不一致的条目。"  # noqa
@@ -42,6 +44,7 @@ def main() -> None:
         f"  pcompare ./old ./new --show {ShowMode.ALL} --display-depth 2\n"
         "  pcompare ./old ./new --quick\n"
         "  pcompare ./old ./new -L 3 --no-default-excludes\n\n"
+        "Git 仓库根目录另显示当前提交关系。\n"
         "目录递归比较，文件按内容比较，符号链接仅比较链接目标。\n"
         "远端路径使用 [user@]host:path，支持 SSH 别名；远端需要 Python 3.9+。\n"
         "退出码：" + "，".join(f"{code} {code.desc}" for code in CompareExitCode) + "。"
@@ -107,6 +110,7 @@ def main() -> None:
                 max_depth=max_depth,
                 ignore_case=args.ignore_case,
             )
+            git = compare_heads(args.paths, comparisons)
         comparisons = sort_items(
             comparisons,
             args.sort,
@@ -131,6 +135,7 @@ def main() -> None:
                     "display_depth": args.display_depth,
                 },
                 display_depth=args.display_depth,
+                git=git,
             )
         else:
             print_report(
@@ -142,6 +147,7 @@ def main() -> None:
                 max_depth=max_depth,
                 ignore_case=args.ignore_case,
                 display_depth=args.display_depth,
+                git=git,
             )
     except (OSError, ValueError) as exc:
         Console(stderr=True).print(Text(f"比较失败：{exc}", style="red"))

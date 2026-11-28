@@ -19,7 +19,11 @@ from plum_tools.utils.sorting import add_sort_argument, sort_items
 def main() -> None:
     """解析命令行参数，扫描导入并输出 Rich 表格或 JSON，进度写入 stderr。"""
     parser = get_base_parser()
-    add_sort_argument(parser, {"name": "导入名", "package_name": "包名", "mode": "分类"})
+    add_sort_argument(
+        parser,
+        {"name": "导入名", "package_name": "包名", "mode": "分类"},
+        default_order="按 mode、name 依次升序",
+    )
     add_compact_argument(parser)
     parser.description = "扫描 Python 项目的导入语句，按模块分类输出包名及扫描错误。"  # noqa
     parser.epilog = (

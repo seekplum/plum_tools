@@ -108,7 +108,7 @@ def run(
 def main() -> None:
     """程序主入口"""
     parser = get_base_parser()
-    add_sort_argument(parser, {"ip": "IP 地址数值"})
+    add_sort_argument(parser, {"ip": "IP 地址数值"}, default_order="按 IP 地址数值升序")
     parser.description = "并发探测指定网段内 1 至 254 号地址，输出可达 IP。"  # noqa
     parser.epilog = (
         "示例：\n  pping -p 192.168.1\n  pping -t default\n  pping -p 192.168.1 --json | jq -r '.reachable[]'"

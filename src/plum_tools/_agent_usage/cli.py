@@ -27,7 +27,11 @@ from plum_tools.utils.sorting import add_sort_argument
 def main() -> int:
     """解析命令行参数并生成报告。"""
     parser = get_base_parser()
-    add_sort_argument(parser, SORT_FIELDS)
+    add_sort_argument(
+        parser,
+        SORT_FIELDS,
+        default_order="按 count 降序（技能与 MCP 按调用数，规则按读取数，命令按展开数）",
+    )
     parser.description = "汇总本机技能、MCP 和规则的可观察使用记录。"
     parser.add_argument(
         "--home", type=Path, default=Path.home(), metavar="目录", help="待分析的用户目录，默认当前用户目录"

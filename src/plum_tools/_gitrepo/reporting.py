@@ -15,7 +15,7 @@ from rich.text import Text
 
 from plum_tools._gitrepo.grouping import _build_scan_report, _remote_host, _repository_statuses
 from plum_tools._gitrepo.models import DirectoryScanError, Repository, _ScanReport
-from plum_tools.utils.printer import compact_table
+from plum_tools.utils.printer import compact_table, display_path
 from plum_tools.utils.sorting import SortField
 
 
@@ -119,7 +119,9 @@ def print_directory_errors(console: Console, errors: list[DirectoryScanError], *
     for reason, paths in sorted(grouped.items()):
         for index, path in enumerate(sorted(paths)):
             table.add_row(
-                Text(reason if index == 0 else ""), Text(path), end_section=not compact and index == len(paths) - 1
+                Text(reason if index == 0 else ""),
+                Text(display_path(path)),
+                end_section=not compact and index == len(paths) - 1,
             )
     console.print(table)
 
@@ -144,11 +146,11 @@ def _repository_cells(  # noqa: C901
     remote = repo.remote_name or "—"
     if repo.remotes:
         remote = (" · " if compact else "\n").join(
-            f"{name}：{url}" for name, urls in repo.remotes.items() for url in urls
+            f"{name}：{display_path(url)}" for name, urls in repo.remotes.items() for url in urls
         )
     elif group_by == "name" and repo.remote_url:
         separator = " · " if compact else "\n"
-        remote = f"{remote}{separator}{repo.remote_url}"
+        remote = f"{remote}{separator}{display_path(repo.remote_url)}"
     status = Text((" · " if compact else "\n").join(repo.issues), style="yellow")
     if detail:
         details = []
@@ -173,10 +175,10 @@ def _repository_cells(  # noqa: C901
         if compact:
             clean = "干净 / 跟踪一致" if not repo.bare else "跟踪一致"
         status.append(clean_label or clean, style="green")
-    return Text(f"{repo.path}{kind}"), Text(repo.branch or "—"), Text(remote), status
+    return Text(f"{display_path(repo.path)}{kind}"), Text(repo.branch or "—"), Text(remote), status
 
 
-def _print_host_table(  # pylint: disable=too-many-arguments
+def _print_host_table(  # pylint: disable=too-many-arguments,too-many-locals
     console: Console,
     host: str,
     groups: dict[str, list[Repository]],
@@ -186,6 +188,8 @@ def _print_host_table(  # pylint: disable=too-many-arguments
     compact: bool = False,
     detail: bool = False,
     clean_label: str = "",
+    latest_paths: set[str] | None = None,
+    tied_latest_paths: set[str] | None = None,
 ) -> None:
     repos = [repo for group in groups.values() for repo in group]
     table = Table(
@@ -209,6 +213,14 @@ def _print_host_table(  # pylint: disable=too-many-arguments
             cells: tuple[Text, ...] = _repository_cells(
                 repo, group_by, compact=compact, detail=detail, clean_label=clean_label
             )
+            if repo.path in duplicates:
+                cells[0].append(f" · HEAD {repo.commit[:7] or '未知'}", style="cyan")
+            if latest_paths and repo.path in latest_paths:
+                label = "提交时间并列最新" if tied_latest_paths and repo.path in tied_latest_paths else "提交时间最新"
+                cells[0].append(f" · {label}", style="bold cyan")
+            if detail:
+                for relation in repo.commit_relations:
+                    cells[0].append(f"\n{relation.label()}", style=relation.status.style)
             if not detail:
                 cells = (cells[0], cells[-1])
             # 组内留空仓库列形成纵向合并，紧凑模式取消组间横线以节省行数。
@@ -228,6 +240,8 @@ def _scan_json_repositories(report: _ScanReport) -> list[dict]:
             "host": host,
             "group_key": key,
             "kind": "bare" if repo.bare else "worktree" if repo.worktree else "normal",
+            "latest_commit_time": repo.path in report.latest_paths,
+            "tied_latest_commit_time": repo.path in report.tied_latest_paths,
             "duplicate_clone": repo.path in report.duplicates,
             "has_issues": bool(repo.issues or repo.errors),
             "failed": bool(repo.errors),
@@ -263,6 +277,8 @@ def _print_scan_results(  # pylint: disable=too-many-arguments
             groups,
             group_by,
             report.duplicates,
+            latest_paths=report.latest_paths,
+            tied_latest_paths=report.tied_latest_paths,
             compact=compact,
             detail=detail,
             clean_label="其余检查正常" if ignored_statuses else "",

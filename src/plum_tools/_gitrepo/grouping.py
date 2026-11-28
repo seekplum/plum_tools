@@ -48,6 +48,15 @@ def _repository_statuses(repo: Repository, duplicates: set[str]) -> set[str]:
     return statuses
 
 
+def duplicate_groups(repos: list[Repository]) -> list[list[Repository]]:
+    """返回含多个独立克隆的完整远程关联组，保留组内 worktree。"""
+    return [
+        group
+        for group in _remote_groups(repos)
+        if any(repo.remote_urls for repo in group) and len({repo.common_dir for repo in group if repo.common_dir}) > 1
+    ]
+
+
 def _remote_host(url: str) -> str:
     if not url:
         return "无远程 / 无法识别"
@@ -70,6 +79,15 @@ def _group_repositories(remote_groups: list[list[Repository]], group_by: str) ->
     return grouped
 
 
+def _latest_paths(duplicate_repos: list[list[Repository]]) -> set[str]:
+    latest_paths: set[str] = set()
+    for group in duplicate_repos:
+        latest = max((repo.commit_time for repo in group if repo.commit_time is not None), default=None)
+        if latest is not None:
+            latest_paths.update(repo.path for repo in group if repo.commit_time == latest)
+    return latest_paths
+
+
 def _build_scan_report(
     repos: list[Repository],
     errors: list[DirectoryScanError],
@@ -79,12 +97,8 @@ def _build_scan_report(
     sort: list[SortField] | None = None,
 ) -> _ScanReport:
     remote_groups = _remote_groups(repos)
-    duplicate_groups = [
-        group
-        for group in remote_groups
-        if any(repo.remote_urls for repo in group) and len({repo.common_dir for repo in group if repo.common_dir}) > 1
-    ]
-    duplicates = {repo.path for group in duplicate_groups for repo in group}
+    duplicate_repos = duplicate_groups(repos)
+    duplicates = {repo.path for group in duplicate_repos for repo in group}
     grouped = _group_repositories(remote_groups, group_by)
     selected = {}
     for host in sorted(grouped):
@@ -109,10 +123,18 @@ def _build_scan_report(
             "independent_repository_count": len({repo.common_dir for repo in repos if repo.common_dir}),
             "group_count": sum(len(groups) for groups in grouped.values()),
             "shown_group_count": sum(len(groups) for groups in selected.values()),
-            "duplicate_group_count": len(duplicate_groups),
+            "duplicate_group_count": len(duplicate_repos),
             "issue_repository_count": sum(bool(repo.issues or repo.errors) for repo in repos),
             "failed_repository_count": sum(bool(repo.errors) for repo in repos),
             "directory_error_count": len(errors),
+        },
+        _latest_paths(duplicate_repos),
+        {
+            repo.path
+            for group in duplicate_repos
+            if len(latest := _latest_paths([group])) > 1
+            for repo in group
+            if repo.path in latest
         },
     )
 

@@ -35,7 +35,7 @@ def test_scan_repository_with_changes_and_stash() -> None:
             mock.patch(
                 "plum_tools._gitrepo.repository._read_shared_refs",
                 return_value=(
-                    "main\0refs/remotes/origin/main\0origin/main\0\0origin",
+                    "main\0refs/remotes/origin/main\0origin/main\0\0origin\0",
                     ["stash@{0}: test2"] if stash else [],
                     [],
                 ),
@@ -95,7 +95,7 @@ def test_scan_repository_ignores_stash_details(modified: bool) -> None:
         mock.patch("plum_tools._gitrepo.repository._identify_repository", return_value=repo),
         mock.patch(
             "plum_tools._gitrepo.repository._read_shared_refs",
-            return_value=("main\0refs/remotes/origin/main\0origin/main\0\0origin", [], []),
+            return_value=("main\0refs/remotes/origin/main\0origin/main\0\0origin\0", [], []),
         ) as refs,
         mock.patch("plum_tools._gitrepo.repository._git", return_value=output) as git,
     ):

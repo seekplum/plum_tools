@@ -12,6 +12,7 @@ from threading import Lock
 from rich.console import Console
 
 from plum_tools._gitrepo.grouping import _build_scan_report
+from plum_tools._gitrepo.history import compare_duplicate_heads
 from plum_tools._gitrepo.models import DirectoryScanError, Repository
 from plum_tools._gitrepo.reporting import (
     RepositoryProgress,
@@ -161,6 +162,8 @@ def scan_projects(  # pylint: disable=too-many-arguments
             detail or json_output,
             **({"ignored_statuses": ignored_statuses} if ignored_statuses else {}),
         )
+        progress.update(progress.checking, description="比较重复仓库")
+        compare_duplicate_heads(repos)
     if json_output:
         report = _build_scan_report(repos, errors, group_by, statuses, host_filter, sort)
         write_json_result(

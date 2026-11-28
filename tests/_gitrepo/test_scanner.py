@@ -127,7 +127,7 @@ def test_scan_stash_queries_and_status(
         status += f"# stash {stash_count}\0"
     if not bare:
         status += "? changed.txt\0"
-    branch_refs = "main\0refs/remotes/origin/main\0origin/main\0\0origin\n"
+    branch_refs = "main\0refs/remotes/origin/main\0origin/main\0\0origin\0\n"
     responses = ["main\n"] if bare else [status]
     expected_calls = [mock.call("/project", "symbolic-ref", "--quiet", "--short", "HEAD", allowed_codes=(0, 1))]
     if bare and stash:
@@ -196,8 +196,9 @@ def test_scan_json_filtering_preserves_all_scan_totals(
             branch="main",
             issues=["已储藏 2"],
             statuses=["stash"],
+            commit="a" * 40,
         ),
-        Repository("/two/project", common_dir="/two/.git", remote_url="github.com/team/project"),
+        Repository("/two/project", common_dir="/two/.git", remote_url="github.com/team/project", commit="a" * 40),
         Repository(
             "/three/project",
             common_dir="/three/.git",
@@ -295,6 +296,13 @@ def test_scan_json_filtering_preserves_all_scan_totals(
         "group_key": "project" if group_by == "name" else "github.com/team/project",
         "kind": "normal",
         "duplicate_clone": True,
+        "commit_time": None,
+        "commit": "a" * 40,
+        "commit_relations": [
+            {"path": "/two/project", "status": "equal", "local_only": 0, "other_only": 0, "reason": ""}
+        ],
+        "latest_commit_time": False,
+        "tied_latest_commit_time": False,
         "has_issues": True,
         "failed": False,
     }
@@ -622,10 +630,10 @@ def test_read_worktree_propagates_git_error() -> None:
 def test_read_branches_detects_issues() -> None:
     repo = Repository("/repo", branch="main")
     output = (
-        "main\0refs/remotes/origin/main\0origin/main\0ahead 2\0origin\n"
-        "feature\0\0\0\0\n"
-        "bugfix\0refs/remotes/origin/bugfix\0origin/bugfix\0gone\0origin\n"
-        "local\0refs/heads/other\0other\0\0.\n"
+        "main\0refs/remotes/origin/main\0origin/main\0ahead 2\0origin\0\n"
+        "feature\0\0\0\0\0\n"
+        "bugfix\0refs/remotes/origin/bugfix\0origin/bugfix\0gone\0origin\0\n"
+        "local\0refs/heads/other\0other\0\0.\0\n"
     )
     _read_branches(repo, output)
     issues = repo.issues

@@ -2,6 +2,33 @@
 
 from dataclasses import dataclass, field
 
+from plum_tools.utils.git_history import CommitRelationStatus
+from plum_tools.utils.printer import display_path
+
+
+@dataclass(frozen=True)
+class RepositoryRelation:
+    """保存当前目录相对目标目录的提交关系及无法判断的原因。"""
+
+    path: str
+    status: CommitRelationStatus
+    local_only: int | None = None
+    other_only: int | None = None
+    reason: str = ""
+
+    def label(self) -> str:
+        """返回包含目标目录和提交数量的中文关系说明。"""
+        target = repr(display_path(self.path))
+        status = self.status
+        if status == CommitRelationStatus.AHEAD:
+            return f"{status.desc}目录 {target} {self.local_only} 个提交"
+        if status == CommitRelationStatus.BEHIND:
+            return f"{status.desc}目录 {target} {self.other_only} 个提交"
+        if status == CommitRelationStatus.DIVERGED:
+            return f"与目录 {target} {status.desc}，各自独有 {self.local_only} / {self.other_only} 个提交"
+        reason = f"（{self.reason}）" if self.reason else ""
+        return f"与目录 {target} {status.desc}{reason}"
+
 
 @dataclass
 class Repository:  # pylint: disable=too-many-instance-attributes
@@ -21,6 +48,10 @@ class Repository:  # pylint: disable=too-many-instance-attributes
     changes: list[dict[str, str]] = field(default_factory=list)
     stashes: list[str] = field(default_factory=list)
     counts: dict[str, int] = field(default_factory=dict)
+
+    commit_time: int | None = None
+    commit: str = ""
+    commit_relations: list[RepositoryRelation] = field(default_factory=list)
 
     @property
     def remote_urls(self) -> set[str]:
@@ -49,3 +80,5 @@ class _ScanReport:
     groups: dict[str, dict[str, list[Repository]]]
     duplicates: set[str]
     summary: dict[str, int]
+    latest_paths: set[str] = field(default_factory=set)
+    tied_latest_paths: set[str] = field(default_factory=set)

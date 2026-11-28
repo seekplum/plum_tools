@@ -31,6 +31,7 @@ class Status(DocStrEnum):
 class RepositorySortField(DocStrEnum):
     """仓库排序字段及其含义。"""
 
+    COMMIT_TIME = "commit-time", "HEAD 提交者时间"
     PATH = "path", "路径"
     NAME = "name", "目录名"
     BRANCH = "branch", "分支"

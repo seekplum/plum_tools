@@ -44,15 +44,18 @@ class _SortAction(argparse.Action):
         setattr(namespace, self.dest, fields)
 
 
-def add_sort_argument(parser: argparse.ArgumentParser, fields: Mapping[str, str]) -> None:
-    """注册字段及中文说明，返回参数中的 sort 为字段列表或 None。"""
+def add_sort_argument(
+    parser: argparse.ArgumentParser, fields: Mapping[str, str], *, default_order: str = "保留原顺序"
+) -> None:
+    """注册字段及默认排序说明，返回参数中的 sort 为字段列表或 None。"""
     parser.add_argument(
         "--sort",
         action=_SortAction,
         fields=fields,
         metavar="字段[:方向],...",
         help="按字段优先级排序，可重复传入；方向 asc 升序、desc 降序，省略方向默认 desc；"
-        "空值排最后；未指定时保留原顺序。字段：" + "、".join(f"{name}（{label}）" for name, label in fields.items()),
+        f"空值排最后，同值保留原顺序；默认{default_order}。可用字段为"
+        + "、".join(f"{name}（{label}）" for name, label in fields.items()),
     )
 
 

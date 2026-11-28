@@ -31,6 +31,7 @@ def build_parser() -> argparse.ArgumentParser:
             "parent_hits": "父仓库命中目录数",
             "hits": "命中目录数合计",
         },
+        default_order="按输入顺序（index 升序）",
     )
     parser.description = "检查 fork / 父仓库在指定本地目录下的存在状态。"
     parser.epilog = (

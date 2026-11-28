@@ -55,8 +55,10 @@ def usage_sort_value(row: dict, name: str) -> str | int | float | None:
 
 
 def sort_usage_rows(rows: list[dict], sort: list[SortField] | None) -> list[dict]:
-    """按统一指标排序统计记录，保持相同键记录的原顺序。"""
-    return sort_items(rows, sort, {name: partial(usage_sort_value, name=name) for name in SORT_FIELDS})
+    """按统一指标排序统计记录，默认使用次数降序，同值保留原顺序。"""
+    return sort_items(
+        rows, sort or [SortField("count")], {name: partial(usage_sort_value, name=name) for name in SORT_FIELDS}
+    )
 
 
 def rich_cells(kind: Kind, row: dict, clients: tuple[Client, ...]) -> tuple:

@@ -7,7 +7,9 @@ import hashlib
 import json
 import os
 import re
+import shutil
 import stat
+import subprocess
 import sys
 from collections.abc import Callable, Sequence
 from dataclasses import asdict, dataclass, replace
@@ -50,6 +52,58 @@ class EntryKind(StrEnum):
 
 
 @dataclass(frozen=True)
+class GitHead:
+    """保存扫描时检出的分支与完整提交号，空提交号表示 HEAD 无法解析。"""
+
+    branch: str
+    commit: str
+
+
+def _git_output(path: Path, *args: str) -> str | None:
+    git = shutil.which("git")
+    if not git:
+        return None
+    git_dir = path / ".git" if (path / ".git").exists() else path
+    try:
+        # 固定仓库路径，避免从父目录或调用者的 GIT_DIR 读到另一个仓库。
+        result = subprocess.run(  # nosec B603
+            [git, "--no-replace-objects", "--git-dir", str(git_dir), *args],
+            capture_output=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=30,
+            check=False,
+            env={**os.environ, "GIT_NO_LAZY_FETCH": "1", "GIT_ALLOW_PROTOCOL": "", "GIT_TERMINAL_PROMPT": "0"},
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return None
+    return result.stdout.rstrip("\n") if result.returncode == 0 else None
+
+
+def read_git_head(path: Path) -> GitHead | None:
+    """读取仓库根目录的 HEAD，普通目录返回 None。"""
+    if not (path / ".git").exists() and not ((path / "HEAD").is_file() and (path / "objects").is_dir()):
+        return None
+    git_dir = _git_output(path, "rev-parse", "--absolute-git-dir")
+    if not git_dir:
+        return None
+    if not (path / ".git").exists() and Path(git_dir).resolve() != path.resolve():
+        return None
+    branch = _git_output(path, "symbolic-ref", "--quiet", "--short", "HEAD")
+    commit = _git_output(path, "rev-parse", "--verify", "HEAD^{commit}")
+    return GitHead(branch or "", commit or "")
+
+
+def commit_history(path: Path, commit: str) -> str:
+    """按固定提交读取祖先列表，历史不完整或读取失败时返回空串。"""
+    if not re.fullmatch(r"(?:[0-9a-f]{40}|[0-9a-f]{64})", commit):
+        return ""
+    if _git_output(path, "rev-parse", "--is-shallow-repository") != "false":
+        return ""
+    return _git_output(path, "rev-list", commit, "--") or ""
+
+
+@dataclass(frozen=True)
 class Entry:
     """保存条目的路径、类型、大小、链接目标及可选的远端摘要。"""
 
@@ -58,6 +112,7 @@ class Entry:
     size: int = 0
     target: str = ""
     digest: str | None = None
+    git_head: GitHead | None = None
 
 
 def read_entry(path: Path) -> Entry:
@@ -170,6 +225,8 @@ def scan(
         raise ValueError("比较深度必须是大于等于 1 的整数")
     names = (*exclude_names, *(DEFAULT_EXCLUDE_NAMES if default_excludes else ()))
     is_excluded = exclusion_matcher(names, exclude_paths)
+    if root.kind == EntryKind.DIRECTORY:
+        root = replace(root, git_head=read_git_head(root.path))
     entries = {Path("."): root}
     pending = [Path(".")] if root.kind == EntryKind.DIRECTORY else []
     while pending:
@@ -195,7 +252,11 @@ def main() -> None:
         if sys.version_info < (3, 9):
             raise ValueError(f"远端需要 Python 3.9+，当前版本为 {sys.version.split()[0]}")
         exclusions = json.loads(sys.argv[2]) if len(sys.argv) > 2 else {}
-        root = read_entry(Path(sys.argv[1]).expanduser().absolute())
+        path = Path(sys.argv[1]).expanduser().absolute()
+        if "history" in exclusions:
+            print(commit_history(path, exclusions["history"]))
+            return
+        root = read_entry(path)
         entries = scan(root, hash_files=True, **exclusions)
         print(json.dumps({str(key): {**asdict(entry), "path": str(entry.path)} for key, entry in entries.items()}))
     except (OSError, ValueError) as exc:
