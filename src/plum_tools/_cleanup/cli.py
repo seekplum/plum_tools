@@ -28,10 +28,10 @@ from plum_tools.utils.sorting import add_sort_argument
 HELP_EPILOG = """示例:
   pclean scan
   pclean scan --category user-cache
-  pclean scan --root ~/PythonProjects --root ~/WebProjects --category project-cache,build,deps
+  pclean scan --root ~/PythonProjects ~/WebProjects --category project-cache build deps
   pclean scan --root ~/PythonProjects --fast-deps
   pclean scan --root ~/PythonProjects --workers 4
-  pclean scan --root ~/GolangProjects --category project-cache,build,deps
+  pclean scan --root ~/GolangProjects --category project-cache build deps
   pclean scan --category tools --tool brew
   pclean scan --root ~/PythonProjects --category project-cache --include-generated .mycache
   pclean scan --root . --save-plan /tmp/pclean-plan.json
@@ -40,7 +40,7 @@ HELP_EPILOG = """示例:
   pclean run
   pclean run --from-plan /tmp/pclean-plan.json
   pclean prune show
-  pclean prune show --category tools --tool uv --tool pnpm
+  pclean prune show --category tools --tool uv pnpm
   pclean prune show --category tools --tool go
   pclean prune run --category docker --older-than 30
   pclean prune run --category tools --tool pip --yes
@@ -204,29 +204,30 @@ def _add_scan_arguments(scan: argparse.ArgumentParser) -> None:
     """绑定文件扫描与计量参数。"""
     scan.add_argument(
         "--category",
-        action="append",
-        metavar="类别,...",
-        help="默认 all（项目缓存、构建产物、依赖）；另支持 user-cache、tools（仅 Homebrew）；原生工具用 prune",
+        nargs="+",
+        metavar="类别",
+        help="多个类别用空格分隔，默认 all（项目缓存、构建产物、依赖）；"
+        "另支持 user-cache、tools（仅 Homebrew）；原生工具用 prune",
     )
     scan.add_argument(
         "--root",
-        action="append",
+        nargs="+",
         metavar="目录",
-        help="限定项目扫描目录，默认当前工作目录；显式指定时仅支持项目类别，可重复指定",
+        help="限定项目扫描目录，多个目录用空格分隔，默认当前工作目录；显式指定时仅支持项目类别",
     )
     scan.add_argument(
         "--exclude",
-        action="append",
+        nargs="+",
         default=[],
         metavar="规则",
-        help="排除绝对路径、相对路径或名称，支持通配符",
+        help="排除文件或目录子树，支持名称、绝对路径、~ 和相对各扫描根目录的路径及通配符；多个规则用空格分隔",
     )
     scan.add_argument(
         "--include-generated",
-        action="append",
+        nargs="+",
         default=[],
         metavar="目录名",
-        help="额外生成物目录的准确名称，仍需通过项目与 Git 检查",
+        help="额外生成物目录的准确名称，多个名称用空格分隔，仍需通过项目与 Git 检查",
     )
     scan.add_argument(
         "--older-than",
@@ -248,10 +249,10 @@ def _add_scan_arguments(scan: argparse.ArgumentParser) -> None:
     )
     scan.add_argument(
         "--tool",
-        action="append",
+        nargs="+",
         choices=tuple(Tool),
         type=Tool,
-        help="文件计划仅支持 brew；其他工具请使用 prune show/run --tool，需要 tools 类别",
+        help="多个工具用空格分隔，文件计划仅支持 brew；其他工具请使用 prune show/run --tool，需要 tools 类别",
     )
     scan.add_argument(
         "--save-plan",
@@ -297,16 +298,16 @@ def _add_prune_arguments(parser: argparse.ArgumentParser) -> None:
         child = actions.add_parser(action, help=description, description=description)
         child.add_argument(
             "--category",
-            action="append",
-            metavar="类别,...",
-            help="默认 all；支持 tools、system-cache、docker，可重复指定",
+            nargs="+",
+            metavar="类别",
+            help="默认 all；支持 tools、system-cache、docker，多个类别用空格分隔",
         )
         child.add_argument(
             "--tool",
-            action="append",
+            nargs="+",
             choices=PRUNE_TOOLS,
             type=Tool,
-            help="选择 tools 中的工具，可重复；Homebrew 下载缓存请用 scan --category tools",
+            help="选择 tools 中的工具，多个工具用空格分隔；Homebrew 下载缓存请用 scan --category tools",
         )
         child.add_argument(
             "--older-than",
@@ -325,7 +326,7 @@ def _add_prune_arguments(parser: argparse.ArgumentParser) -> None:
 def _resolve_categories(args: argparse.Namespace, parser: argparse.ArgumentParser) -> None:
     """解析类别名称并按命令展开 all。"""
     args.category = args.category or [Category.ALL]
-    requested = {part for value in args.category for part in value.split(",")}
+    requested = set(args.category)
     unknown = requested - set(Category)
     if unknown:
         parser.error(f"未知类别: {', '.join(sorted(unknown))}")

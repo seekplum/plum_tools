@@ -127,7 +127,7 @@ def main() -> None:  # pylint: disable=R0914
         required=False,
         dest="exclude",
         default=[],
-        help="追加排除的文件或目录，可指定多个；默认使用项目及全局排除配置",
+        help="追加 rsync 排除规则，按传输范围内的名称或相对路径匹配，多个规则用空格分隔；默认使用项目及全局配置",
     )
     parser.add_argument(
         "--include",

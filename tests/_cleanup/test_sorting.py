@@ -196,7 +196,7 @@ def test_cleanup_sort_preview_does_not_reorder_saved_plan(
 def test_cleanup_multifield_sort_keeps_unmeasured_last(tmp_path: Path, direction: str) -> None:
     """快速依赖的未知占用始终置后，多字段排序保持状态清单不变。"""
     root = tmp_path.resolve()
-    state = _state(root, "--sort", f"size:{direction},path:asc")
+    state = _state(root, "--sort", f"size:{direction}", "path:asc")
     state.candidates = [
         Candidate(root / name, root, Category.PROJECT_CACHE, "缓存", "重建", size=size)
         for name, size in (("unknown", None), ("ten", 10), ("two-b", 2), ("two-a", 2))

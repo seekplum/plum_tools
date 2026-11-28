@@ -41,7 +41,9 @@ def test_gitrepo_sort_preserves_groups_and_numeric_priority(
             "--group-by",
             group_by,
             "--sort",
-            "stash,untracked,path:asc",
+            "stash",
+            "untracked",
+            "path:asc",
             *format_args,
         ],
     )
@@ -142,7 +144,7 @@ def test_usage_cli_sorts_count_then_time(
         "limitations": [],
         "missing_sources": [],
     }
-    monkeypatch.setattr("sys.argv", ["agent_usage_report", "--sort", "count,time:asc", *format_args])
+    monkeypatch.setattr("sys.argv", ["agent_usage_report", "--sort", "count", "time:asc", *format_args])
     with mock.patch("plum_tools._agent_usage.cli.collect", return_value=report):
         assert usage_cli.main() == 0
     output = capsys.readouterr().out
@@ -206,7 +208,7 @@ def test_import_sort_uses_mapped_package_name(
     (tmp_path / "imports.py").write_text("import requests\nimport yaml\n", encoding="utf-8")
     monkeypatch.setattr(
         "sys.argv",
-        ["pfind_imports", "-p", str(tmp_path), "-e", "yaml=aaa", "--sort", "package_name:asc,name", *format_args],
+        ["pfind_imports", "-p", str(tmp_path), "-e", "yaml=aaa", "--sort", "package_name:asc", "name", *format_args],
     )
     pfind_imports.main()
     output = capsys.readouterr().out
@@ -228,7 +230,7 @@ def test_compare_sorts_by_maximum_size_across_inputs(
     (roots[1] / "SORT_ALPHA").write_bytes(b"b")
     (roots[0] / "SORT_BETA").write_bytes(b"a" * 2)
     (roots[1] / "SORT_BETA").write_bytes(b"b" * 10)
-    monkeypatch.setattr("sys.argv", ["pcompare", *map(str, roots), "--sort", "size,name:asc", *format_args])
+    monkeypatch.setattr("sys.argv", ["pcompare", *map(str, roots), "--sort", "size", "name:asc", *format_args])
     with pytest.raises(SystemExit) as error:
         pcompare.main()
     assert error.value.code == 1
@@ -261,7 +263,8 @@ def test_forkcheck_sorts_by_hits_then_source_index(
             "--target",
             str(tmp_path),
             "--sort",
-            "hits,index:asc",
+            "hits",
+            "index:asc",
             *format_args,
         ],
     )

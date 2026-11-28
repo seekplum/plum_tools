@@ -91,6 +91,22 @@ pcompare 版本: 0.6.6（2026-11-19） 提交: a1b2c3d4e5f6
 所有命令的 `--help` 均使用中文说明，并提供示例命令。存在默认值或可选值的参数会说明其取值或配置来源。
 参数名、JSON 字段和枚举值保持原样；外部命令及系统的原始诊断保留原文。
 
+列表型选项用空格分隔多个值，例如 `--root ./python ./web`、`--client claude codex`、
+`--sort count name:asc`。
+成对或映射型选项每次接收一项，通过重复选项指定多项，例如
+`--pair alice/a upstream/a --pair alice/b upstream/b` 和 `--extra yaml=PyYAML --extra PIL=pillow`。
+`pcompare` 的待比较路径放在列表型选项之前。
+
+```bash
+pclean scan --root ~/PythonProjects ~/WebProjects --category project-cache build deps \
+  --exclude './cache/' '~/GolangProjects/.cache'
+agent_usage_report --client claude codex --sort count name:asc
+```
+
+`pclean --exclude` 支持名称、绝对路径、`~` 和相对各扫描根目录的路径及通配符，
+匹配目录时排除整个子树，绝对路径规则也作用于位于该子树内部的扫描根目录。
+`prn --exclude` 使用 rsync 过滤规则，按传输范围内的名称或相对路径匹配。
+
 所有命令支持 Ctrl+C 取消：停止当前任务并清理资源，向标准错误输出“已取消”，
 以退出码 `130` 结束，不打印 Python 异常堆栈。扫描、等待子命令及输出表格时均可取消，
 进程池和线程池会停止后续任务，加载动画和进度条自动关闭。
@@ -190,8 +206,8 @@ gitrepo scan -p ~/PythonProjects --ignore-stash
 筛选仅影响展示，所有仓库仍会扫描，统计保留扫描总数。
 无效的 `--host-regex` 在扫描前报错。
 
-`--status` 默认 `all`，支持空格分隔多个值，也可重复指定参数，匹配任一状态即保留目录。
-`--ignore-status` 支持多个值和重复传参，在统计、展示及 `--status` 筛选前逐项忽略：
+`--status` 默认 `all`，支持空格分隔多个值，匹配任一状态即保留目录。
+`--ignore-status` 支持空格分隔多个值，在统计、展示及 `--status` 筛选前逐项忽略：
 
 - `submodule-pointer` 忽略未暂存的子模块提交指针变化，保留已暂存的指针、模块内文件修改及未跟踪文件。
 - `ahead`、`behind` 分别忽略本地分支领先、落后于跟踪分支的状态。
@@ -311,7 +327,8 @@ worktree 逐个展示并带有 `worktree` 状态，共用 Git 数据的目录不
 重叠扫描路径会去重，扫描时跳过 `.git` 内部目录，不递归跟随目录符号链接。
 扫描显示目录发现和仓库检查进度、耗时及检查失败数量，
 输出重定向时关闭动态进度条。默认不排除其他目录，
-可通过 `--exclude` 按名称跳过子目录，显式指定的扫描根目录仍会检查。
+可通过 `--exclude` 按名称跳过子目录，或按绝对路径、`~`、相对当前目录的路径排除整个子树。
+路径排除也作用于显式指定的扫描根目录，名称排除仅作用于子目录。
 `scan` 在发现仓库后立即提交有界并发检查，合并工作区、当前分支和 stash 查询，
 同一仓库的 worktree 共用分支、stash 详情读取及 fetch。
 表格同时展示暂存、未暂存、未跟踪、冲突及已储藏条目数，
@@ -336,8 +353,8 @@ pfind_imports -p ./project
 # 展示标准库和第三方库
 pfind_imports -p ./project --mode all
 
-# 精确忽略指定 Python 文件，并添加导入名到包名的映射
-pfind_imports -p ./project -i ./project/ignored.py -e custom=custom-package
+# 忽略指定 Python 文件及目录子树，并添加导入名到包名的映射
+pfind_imports -p ./project -i ignored.py tests examples -e custom=custom-package -e yaml=PyYAML
 
 # 使用 JSON 结果提取包名
 pfind_imports -p ./project --json | jq -r '.modules[].package_name'
@@ -345,6 +362,7 @@ pfind_imports -p ./project --json | jq -r '.modules[].package_name'
 
 `--mode` 支持 `std`、`3rd-party`、`all`。同一顶层导入名仅保留首次发现的记录，
 排除相对导入、项目根目录和 `src` 下的本地模块名，跳过 `.venv`、`__pycache__`。
+`--ignore-path/-i` 支持文件和目录，路径可为绝对路径、`~` 或相对项目目录的路径。
 内置 `PIL → pillow`、`grpc → grpcio` 映射，优先于 `--extra/-e`；
 同一包有多个导入名时仍按导入名分别展示。
 
@@ -378,7 +396,7 @@ pcompare 'seekplum:~/Downloads' ~/Downloads --ignore-case
 
 # 按名称排除所有层级的依赖目录，按相对路径排除指定目录
 pcompare 'seekplum:~/Downloads' ~/Downloads \
-  --exclude-name node_modules --exclude-name .venv \
+  --exclude-name node_modules .venv \
   --exclude-path packages/web/dist
 
 # 按通配符排除名称中包含 .log 的文件或目录
@@ -485,7 +503,7 @@ JSON 仍遵循排除规则和扫描深度限制；`options.max_depth` 不为 `nu
 默认按名称忽略 `.DS_Store`、`.idea`、`.node_modules`、`node_modules`、`.venv`、
 `__pycache__`、`.mypy_cache`、`.pytest_cache`，
 可通过 `--no-default-excludes` 关闭。手动排除参数与内置规则合并，
-可重复传入，支持精确匹配、通配符和 `re:` 前缀的正则表达式：
+多个规则用空格分隔，支持精确匹配、通配符和 `re:` 前缀的正则表达式：
 
 - `--exclude-name` 按目录名或文件名匹配任意层级，例如 `node_modules`、
   `.venv`、`*.log*`。

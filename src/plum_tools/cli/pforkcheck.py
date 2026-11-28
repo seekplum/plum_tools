@@ -38,7 +38,7 @@ def build_parser() -> argparse.ArgumentParser:
         "示例：\n"
         "  pforkcheck --data ./repos.txt --target ~/projects\n"
         "  pforkcheck --pair alice/project upstream/project --target ~/projects\n"
-        "  pforkcheck --data ./repos.txt --target ~/projects/python --target ~/projects/web --status FORK_ONLY\n"
+        "  pforkcheck --data ./repos.txt --target ~/projects/python ~/projects/web --status FORK_ONLY PARENT_ONLY\n"
         "  pforkcheck --data ./repos.txt --target ~/projects --json\n\n"
         "文件每行格式：<fork owner/repo> <父仓库 owner/repo>。\n"
         "目录匹配：目标目录/owner/repo 或目标目录/repo；不递归扫描或校验 Git 元数据。\n\n"
@@ -55,15 +55,15 @@ def build_parser() -> argparse.ArgumentParser:
         help="指定 fork 和父仓库，均为 owner/repo；可重复指定，与 --data 二选一",
     )
     parser.add_argument(
-        "--target", required=True, action="append", metavar="PATH", help="本地目标目录，必填且可重复指定，无默认目录"
+        "--target", required=True, nargs="+", metavar="PATH", help="本地目标目录，多个目录用空格分隔，必填且无默认目录"
     )
     parser.add_argument(
         "--status",
-        action="append",
+        nargs="+",
         type=str.upper,
         choices=tuple(status.name for status in RepoStatus),
         metavar="STATUS",
-        help="按状态筛选，可重复指定、大小写不敏感；默认显示全部，可用值见下方说明",
+        help="按状态筛选，多个状态用空格分隔、大小写不敏感；默认显示全部，可用值见下方说明",
     )
     add_compact_argument(parser)
     parser.add_argument(

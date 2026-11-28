@@ -124,18 +124,30 @@ def _read_remotes(repo: Repository, names: list[str]) -> None:
 def _identify_repository(path: str) -> Repository:
     repo = Repository(path)
     try:
-        bare, common, git_dir = _git(
-            path, "rev-parse", "--is-bare-repository", "--git-common-dir", "--git-dir"
+        bare, common, git_dir, *superproject = _git(
+            path,
+            "rev-parse",
+            "--is-bare-repository",
+            "--git-common-dir",
+            "--git-dir",
+            "--show-superproject-working-tree",
         ).splitlines()
         repo.bare = bare == "true"
         repo.common_dir = str((Path(path) / common).resolve())
         repo.worktree = str((Path(path) / git_dir).resolve()) != repo.common_dir
+        repo.submodule = bool(superproject)
         remotes = _git(path, "remote").splitlines()
         if remotes:
             _read_remotes(repo, remotes)
         else:
             repo.issues.append(Status.NO_REMOTE.desc)
             repo.statuses.append(Status.NO_REMOTE)
+        if repo.worktree and not repo.submodule:
+            # 子模块的外部链接工作树需通过原始工作区确认父项目。
+            original = _git(path, "config", "--path", "--get", "core.worktree", allowed_codes=(0, 1)).strip()
+            if original:
+                original_path = str((Path(repo.common_dir) / original).resolve())
+                repo.submodule = bool(_git(original_path, "rev-parse", "--show-superproject-working-tree").strip())
     except GitScanError as exc:
         repo.errors.append(str(exc))
     except (OSError, RuntimeError, ValueError):

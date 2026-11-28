@@ -20,7 +20,7 @@ _PAIRS = (
 )
 
 
-def test_parser_accepts_repeated_pairs_targets_and_case_insensitive_statuses() -> None:
+def test_parser_accepts_repeated_pairs_multiple_targets_and_case_insensitive_statuses() -> None:
     args = build_parser().parse_args(
         [
             "--pair",
@@ -31,11 +31,9 @@ def test_parser_accepts_repeated_pairs_targets_and_case_insensitive_statuses() -
             "team/tool",
             "--target",
             "./python",
-            "--target",
             "./web",
             "--status",
             "fork_only",
-            "--status",
             "Parent_Only",
             "--json",
             "--compact",
@@ -89,7 +87,7 @@ def test_main_checks_all_statuses_with_both_input_sources(
         source = ["--data", str(path)]
     else:
         source = [value for fork, parent in _PAIRS for value in ("--pair", fork, parent)]
-    monkeypatch.setattr("sys.argv", ["pforkcheck", *source, "--target", str(first), "--target", str(second)])
+    monkeypatch.setattr("sys.argv", ["pforkcheck", *source, "--target", str(first), str(second)])
     monkeypatch.setenv("COLUMNS", "240")
 
     main()
@@ -126,7 +124,7 @@ def test_main_filters_multiple_statuses_but_keeps_full_summary(
     pairs = [value for fork, parent in _PAIRS for value in ("--pair", fork, parent)]
     monkeypatch.setattr(
         "sys.argv",
-        ["pforkcheck", *pairs, "--target", str(first), "--target", str(second), "--status", "both", "--status", "none"],
+        ["pforkcheck", *pairs, "--target", str(first), str(second), "--status", "both", "none"],
     )
     monkeypatch.setenv("COLUMNS", "240")
 
@@ -227,7 +225,6 @@ def test_main_compact_preserves_names_and_target_labels_without_borders(
             "upstream/base-none",
             "--target",
             str(first),
-            "--target",
             str(second),
             "--compact",
         ],
@@ -287,11 +284,11 @@ def test_main_json_contract_for_both_sources_filtering_and_compact(
         arguments = ["--data", "repos.txt"]
     else:
         arguments = [value for fork, parent in _PAIRS for value in ("--pair", fork, parent)]
-    arguments += ["--target", "python projects", "--target", "web", "--json"]
+    arguments += ["--target", "python projects", "web", "--json"]
     if compact:
         arguments.append("--compact")
     if filtered:
-        arguments += ["--status", "fork_only", "--status", "none", "--status", "fork_only"]
+        arguments += ["--status", "fork_only", "none", "fork_only"]
     monkeypatch.setattr("sys.argv", ["pforkcheck", *arguments])
 
     main()

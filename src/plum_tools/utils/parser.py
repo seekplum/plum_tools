@@ -72,6 +72,8 @@ class ChineseArgumentParser(argparse.ArgumentParser):
 
 
 class ExtraAction(argparse.Action):
+    """通过重复选项逐项收集 key=value 映射。"""
+
     def __call__(
         self,
         parser: argparse.ArgumentParser,
@@ -79,19 +81,14 @@ class ExtraAction(argparse.Action):
         values: t.Union[str, t.Sequence[t.Any], None],
         option_string: t.Optional[str] = None,
     ) -> None:
-        def _parser_error() -> None:
+        """校验单个映射并合并到已有解析结果。"""
+        if not isinstance(values, str) or values.count("=") != 1:
             parser.error(f"{option_string} 的格式无效：'{values}'，应为 'key=value'。")
-
-        if not isinstance(values, str):
-            _parser_error()
             return
-        split_values = values.split("=")
-        if len(split_values) != 2:
-            _parser_error()
-            return
-        origin_dest = getattr(namespace, self.dest) or {}
-        origin_dest[split_values[0]] = split_values[1]
-        setattr(namespace, self.dest, origin_dest)
+        mappings = dict(getattr(namespace, self.dest) or {})
+        key, mapped = values.split("=")
+        mappings[key] = mapped
+        setattr(namespace, self.dest, mappings)
 
 
 def get_base_parser() -> argparse.ArgumentParser:
@@ -118,7 +115,8 @@ def add_extra_argument(parser: argparse.ArgumentParser) -> None:
         default={},
         action=ExtraAction,
         required=False,
-        help="补充导入名到包名的映射，格式为 key=value；可重复传入，默认无额外映射",
+        metavar="key=value",
+        help="补充导入名到包名的映射，每次传入一个 key=value，通过重复选项指定多项；默认无额外映射",
     )
 
 

@@ -18,7 +18,7 @@ class SortField:
 
 
 class _SortAction(argparse.Action):
-    """解析重复选项与逗号分隔字段，并在扫描前校验。"""
+    """解析空格分隔的排序字段，并在扫描前校验。"""
 
     def __init__(self, *args: Any, fields: Mapping[str, str], **kwargs: Any) -> None:
         super().__init__(*args, **kwargs)
@@ -31,8 +31,8 @@ class _SortAction(argparse.Action):
         values: Any,
         option_string: str | None = None,
     ) -> None:
-        fields = list(getattr(namespace, self.dest) or [])
-        for value in values.split(","):
+        fields: list[SortField] = []
+        for value in values:
             name, separator, direction = value.strip().partition(":")
             if name not in self.fields or (separator and direction not in ("asc", "desc")):
                 parser.error(
@@ -50,10 +50,11 @@ def add_sort_argument(
     """注册字段及默认排序说明，返回参数中的 sort 为字段列表或 None。"""
     parser.add_argument(
         "--sort",
+        nargs="+",
         action=_SortAction,
         fields=fields,
-        metavar="字段[:方向],...",
-        help="按字段优先级排序，可重复传入；方向 asc 升序、desc 降序，省略方向默认 desc；"
+        metavar="字段[:方向]",
+        help="按字段优先级排序，多个字段用空格分隔；方向 asc 升序、desc 降序，省略方向默认 desc；"
         f"空值排最后，同值保留原顺序；默认{default_order}。可用字段为"
         + "、".join(f"{name}（{label}）" for name, label in fields.items()),
     )

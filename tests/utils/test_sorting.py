@@ -6,11 +6,11 @@ from plum_tools.utils.parser import get_base_parser
 from plum_tools.utils.sorting import SortField, add_sort_argument, sort_items
 
 
-def test_sort_defaults_to_descending_and_accepts_repeated_options() -> None:
-    """省略方向默认降序，重复选项按出现顺序追加优先级。"""
+def test_sort_defaults_to_descending_and_accepts_multiple_fields() -> None:
+    """省略方向默认降序，空格分隔字段按出现顺序确定优先级。"""
     parser = get_base_parser()
     add_sort_argument(parser, {"count": "次数", "name": "名称", "time": "时间"})
-    args = parser.parse_args(["--sort", "count,name:asc", "--sort", "time:desc"])
+    args = parser.parse_args(["--sort", "count", "name:asc", "time:desc"])
     assert args.sort == [SortField("count"), SortField("name", False), SortField("time")]
     assert parser.parse_args([]).sort is None
 
@@ -26,12 +26,12 @@ def test_sort_rejects_invalid_fields_and_directions(value: str, capsys: pytest.C
     assert "count" in capsys.readouterr().err
 
 
-def test_sort_rejects_duplicate_fields_across_options() -> None:
-    """重复参数不能重新定义同一字段的方向。"""
+def test_sort_rejects_duplicate_fields() -> None:
+    """重复字段不能重新定义同一字段的方向。"""
     parser = get_base_parser()
     add_sort_argument(parser, {"count": "次数"})
     with pytest.raises(SystemExit) as error:
-        parser.parse_args(["--sort", "count", "--sort", "count:asc"])
+        parser.parse_args(["--sort", "count", "count:asc"])
     assert error.value.code == 2
 
 

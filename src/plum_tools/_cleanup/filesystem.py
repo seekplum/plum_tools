@@ -201,13 +201,21 @@ class FileInspector:
         root_parts = root.parts
         if parts[: len(root_parts)] != root_parts:
             raise ValueError(f"路径不在扫描根目录内: {display(path)}")
-        relative = "/".join(parts[len(root_parts) :]) or "."
-        return any(
-            fnmatch.fnmatchcase(str(path), pattern)
-            or fnmatch.fnmatchcase(relative, pattern)
-            or fnmatch.fnmatchcase(path.name, pattern)
-            for pattern in self.state.args.exclude
-        )
+        # 根目录本身可能位于被排除的子树内，因此路径规则也检查扫描根以上的祖先。
+        ancestors = (path, *path.parents)
+        for value in self.state.args.exclude:
+            pattern = os.path.normpath(os.path.expanduser(value))
+            if "/" not in value and not value.startswith("~") and value not in {".", ".."}:
+                if any(
+                    fnmatch.fnmatchcase(parent.name, pattern)
+                    for parent in ancestors[: len(parts) - len(root_parts) + 1]
+                ):
+                    return True
+            else:
+                pattern = os.path.normpath(os.path.join(root, pattern))
+                if any(fnmatch.fnmatchcase(str(parent), pattern) for parent in ancestors):
+                    return True
+        return False
 
     @staticmethod
     def _package_marker(path: Path, checks: PackageChecks | None, *, follow_symlinks: bool = False) -> bool:

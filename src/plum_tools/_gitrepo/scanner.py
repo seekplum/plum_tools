@@ -28,11 +28,22 @@ from plum_tools.utils.sorting import SortField
 _MAX_WORKERS = 16
 
 
-def walk_directories(
+def walk_directories(  # noqa: C901
     paths: list[str], errors: list[DirectoryScanError], exclude: tuple[str, ...] = ()
 ) -> Generator[tuple[str, list[str], list[str]], None, None]:
-    """遍历 paths 中不重复的目录并剪枝；按目录名排除 exclude，错误追加至 errors。"""
+    """遍历 paths 中不重复的目录，按名称或路径排除子树，错误追加至 errors。"""
     visited: set[str] = set()
+    excluded_names: set[str] = set()
+    excluded_paths: set[Path] = set()
+    for value in exclude:
+        if Path(value).name == value and value not in {".", ".."} and not value.startswith("~"):
+            excluded_names.add(value)
+            continue
+        try:
+            excluded_paths.add(Path(value).expanduser().resolve())
+        except (OSError, RuntimeError) as exc:
+            errors.append(DirectoryScanError(value, f"无法解析排除路径：{exc}"))
+            return
 
     def record_error(exc: OSError) -> None:
         errors.append(DirectoryScanError(str(exc.filename or "未知目录"), exc.strerror or str(exc)))
@@ -44,6 +55,8 @@ def walk_directories(
             reason = (exc.strerror if isinstance(exc, OSError) else None) or str(exc)
             errors.append(DirectoryScanError(path, reason))
             continue
+        if any(base == excluded or excluded in base.parents for excluded in excluded_paths):
+            continue
         if not base.is_dir():
             errors.append(DirectoryScanError(str(base), "扫描路径不是目录"))
             continue
@@ -53,7 +66,11 @@ def walk_directories(
                 continue
             visited.add(root)
             yield root, dirs, files
-            dirs[:] = [name for name in dirs if name != ".git" and name not in exclude]
+            dirs[:] = [
+                name
+                for name in dirs
+                if name != ".git" and name not in excluded_names and Path(root, name) not in excluded_paths
+            ]
 
 
 def iter_repositories(
@@ -62,7 +79,7 @@ def iter_repositories(
     exclude: tuple[str, ...] = (),
     progress: RepositoryProgress | None = None,
 ) -> Generator[str, None, None]:
-    """遍历 paths，按目录名排除 exclude，逐个返回仓库路径。
+    """遍历 paths，按目录名或路径排除 exclude，逐个返回仓库路径。
     遍历错误追加至 errors，通过 progress 更新发现数量。
     """
     for root, dirs, files in walk_directories(paths, errors, exclude):

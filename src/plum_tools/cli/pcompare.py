@@ -36,7 +36,7 @@ def main() -> None:
         "  pcompare 'seekplum:~/Downloads' ~/Downloads\n"
         "  pcompare 'seekplum:~/Downloads' ~/Downloads --ignore-case\n"
         "  pcompare ./a.txt ./b.txt ./c.txt\n"
-        "  pcompare ./old ./new --exclude-name node_modules --exclude-name .venv\n"
+        "  pcompare ./old ./new --exclude-name node_modules .venv\n"
         "  pcompare ./old ./new --exclude-name '*.log*'\n"
         f"  pcompare ./old ./new --exclude-path packages/web/dist --show {ShowMode.ALL}\n"
         f"  pcompare ./old ./new --show {ShowMode.IDENTICAL}\n"
@@ -45,6 +45,7 @@ def main() -> None:
         "  pcompare ./old ./new --quick\n"
         "  pcompare ./old ./new -L 3 --no-default-excludes\n\n"
         "Git 仓库根目录另显示当前提交关系。\n"
+        "待比较路径放在 --exclude-name、--exclude-path 和 --sort 等列表型选项之前。\n"
         "目录递归比较，文件按内容比较，符号链接仅比较链接目标。\n"
         "远端路径使用 [user@]host:path，支持 SSH 别名；远端需要 Python 3.9+。\n"
         "退出码：" + "，".join(f"{code} {code.desc}" for code in CompareExitCode) + "。"
@@ -75,17 +76,17 @@ def main() -> None:
     )
     parser.add_argument(
         "--exclude-name",
-        action="append",
+        nargs="+",
         default=[],
         metavar="名称",
-        help="按名称排除任意层级的条目，支持通配符或 re: 正则完整匹配，可重复传入",
+        help="按名称排除任意层级的条目，支持通配符或 re: 正则完整匹配，多个规则用空格分隔",
     )
     parser.add_argument(
         "--exclude-path",
-        action="append",
+        nargs="+",
         default=[],
         metavar="相对路径",
-        help="按根目录内相对路径排除，支持通配符（** 跨层）或 re: 正则完整匹配，可重复传入",
+        help="按根目录内相对路径排除，支持通配符（** 跨层）或 re: 正则完整匹配，多个规则用空格分隔",
     )
     parser.add_argument(
         "--no-default-excludes",

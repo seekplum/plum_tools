@@ -49,10 +49,10 @@ def _repository_statuses(repo: Repository, duplicates: set[str]) -> set[str]:
 
 
 def duplicate_groups(repos: list[Repository]) -> list[list[Repository]]:
-    """返回含多个独立克隆的完整远程关联组，保留组内 worktree。"""
+    """返回含多个独立克隆的远程关联组，保留普通 worktree，排除子模块。"""
     return [
         group
-        for group in _remote_groups(repos)
+        for group in _remote_groups([repo for repo in repos if not repo.submodule])
         if any(repo.remote_urls for repo in group) and len({repo.common_dir for repo in group if repo.common_dir}) > 1
     ]
 

@@ -45,6 +45,7 @@ def add_scan_parser(parser: argparse.ArgumentParser) -> None:
             "  gitrepo scan -p . --host-regex '.*\\.xxx\\.net|github\\.com' --json\n\n"
             "远程分组依据全部远程地址的直接或间接关联。\n"
             "默认只与本地缓存的远程跟踪引用比较，可用 --fetch 更新引用。\n\n"
+            "子模块检查本地改动，重复仓库统计和提交对比仅包含独立克隆及其普通 worktree。\n\n"
             "状态（默认 all，多个值匹配任一）：\n" + "\n".join(f"  {status:<16} {status.desc}" for status in Status)
         ),
     )
@@ -71,7 +72,10 @@ def add_scan_parser(parser: argparse.ArgumentParser) -> None:
         "-p", "--path", nargs="+", default=[str(Path.home())], help="扫描目录，可指定多个；默认用户主目录"
     )
     scan.add_argument(
-        "--exclude", nargs="+", default=[], help="按目录名跳过子目录，例如 node_modules .venv；默认无额外排除目录"
+        "--exclude",
+        nargs="+",
+        default=[],
+        help="按目录名或具体路径排除整个子树，路径支持绝对路径、相对当前目录的路径及 ~；默认无额外排除",
     )
     scan.add_argument(
         "-d",
@@ -88,18 +92,16 @@ def add_scan_parser(parser: argparse.ArgumentParser) -> None:
     scan.add_argument(
         "--status",
         nargs="+",
-        action="extend",
         choices=tuple(Status),
         default=None,
         metavar="STATUS",
-        help="按状态筛选目录，多个值匹配任一，可重复指定；默认 all，可用值见下方状态说明",
+        help="按状态筛选目录，多个值用空格分隔，匹配任一；默认 all，可用值见下方状态说明",
     )
     scan.add_argument(
         "--ignore-status",
         nargs="+",
-        action="extend",
         choices=("submodule-pointer", "ahead", "behind", "detached"),
-        help="筛选前忽略指定状态，可重复指定。submodule-pointer 仅忽略子模块未暂存的提交指针变化",
+        help="筛选前忽略指定状态，多个值用空格分隔。submodule-pointer 仅忽略子模块未暂存的提交指针变化",
     )
     scan.add_argument("--fetch", action="store_true", help="先更新所有已配置远程的引用，再检查状态；默认不更新引用")
     hosts = scan.add_mutually_exclusive_group()

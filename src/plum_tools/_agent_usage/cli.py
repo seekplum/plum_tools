@@ -38,9 +38,9 @@ def main() -> int:
     )
     parser.add_argument(
         "--client",
-        action="append",
+        nargs="+",
         choices=tuple(Client),
-        help="统计客户端，可重复指定；默认 claude、codex",
+        help="统计客户端，多个客户端用空格分隔；默认 claude、codex",
     )
     parser.add_argument(
         "--format",

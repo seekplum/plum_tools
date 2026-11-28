@@ -86,7 +86,8 @@ def find_imports_by_file(file_path: str) -> GeneratorModuleDict:
 def _collect_python_files(
     project_path: Path, ignore_paths: list[str] | None, report: ImportScanReport, progress: Progress | None
 ) -> list[Path]:
-    ignore_path_set = {str(Path(path)) for path in ignore_paths or []}
+    project_path = Path(os.path.abspath(project_path.expanduser()))
+    ignored_paths = tuple(Path(os.path.abspath(project_path / Path(path).expanduser())) for path in ignore_paths or [])
     task = progress.add_task("发现文件", total=None, summary="文件 0 · 错误 0") if progress is not None else None
     files = []
     scan_file = Path(__file__).absolute()
@@ -94,14 +95,20 @@ def _collect_python_files(
     def record_error(exc: OSError) -> None:
         report.errors.append({"path": str(exc.filename or project_path), "reason": str(exc)})
 
+    def is_ignored(path: Path) -> bool:
+        return any(path.is_relative_to(ignored) for ignored in ignored_paths)
+
     for root, dirs, filenames in os.walk(project_path, onerror=record_error):
+        if is_ignored(Path(root)):
+            dirs.clear()
+            continue
         # 在遍历阶段剪枝，避免进入不参与解析的虚拟环境和缓存目录。
-        dirs[:] = [name for name in dirs if name not in (".venv", "__pycache__")]
+        dirs[:] = [name for name in dirs if name not in (".venv", "__pycache__") and not is_ignored(Path(root) / name)]
         for name in filenames:
             if not name.endswith(".py"):
                 continue
             file = Path(root) / name
-            if str(file) not in ignore_path_set and file.absolute() != scan_file:
+            if not is_ignored(file) and file.absolute() != scan_file:
                 files.append(file)
         if progress is not None and task is not None:
             progress.update(task, summary=f"文件 {len(files)} · 错误 {len(report.errors)}")
@@ -127,7 +134,7 @@ def find_imports(
     """
     report = report if report is not None else ImportScanReport()
     exists = set()
-    project_path = Path(project_dir)
+    project_path = Path(os.path.abspath(Path(project_dir).expanduser()))
     try:
         my_module_names = {path.name for path in project_path.iterdir()}
     except OSError as exc:

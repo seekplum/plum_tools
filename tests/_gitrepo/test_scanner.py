@@ -285,6 +285,7 @@ def test_scan_json_filtering_preserves_all_scan_totals(
         "branch": "main",
         "bare": False,
         "worktree": False,
+        "submodule": False,
         "issues": ["已储藏 2"],
         "errors": [],
         "remotes": {},
@@ -545,6 +546,7 @@ def test_identify_repository_marks_worktree() -> None:
         "origin\n",
         "git@github.com:team/project.git\n",
         "git@github.com:team/project.git\n",
+        "",
     ]
     with mock.patch("plum_tools._gitrepo.repository._git", side_effect=responses):
         repo = _identify_repository("/repo")

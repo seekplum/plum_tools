@@ -52,6 +52,7 @@ class Repository:  # pylint: disable=too-many-instance-attributes
     commit_time: int | None = None
     commit: str = ""
     commit_relations: list[RepositoryRelation] = field(default_factory=list)
+    submodule: bool = False
 
     @property
     def remote_urls(self) -> set[str]:

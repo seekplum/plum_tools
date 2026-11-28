@@ -30,7 +30,7 @@ def main() -> None:
         "示例：\n"
         "  pfind_imports -p ./src\n"
         "  pfind_imports -p . -m all --json\n"
-        "  pfind_imports -p . -i ./setup.py -e yaml=PyYAML\n\n"
+        "  pfind_imports -p . -i ./setup.py tests -e yaml=PyYAML -e PIL=pillow\n\n"
         "默认跳过 .venv、__pycache__ 目录和项目本地模块。"
     )
     parser.add_argument(
@@ -56,7 +56,7 @@ def main() -> None:
         action="store",
         dest="ignore_paths",
         nargs="+",
-        help="忽略指定 Python 文件路径，可指定多个；默认无额外忽略文件",
+        help="忽略文件或目录子树，支持绝对路径、~ 和相对项目目录的路径；多个路径用空格分隔，默认无额外忽略项",
     )
     parser.add_argument(
         "--json", dest="json_output", action="store_true", help="以 JSON 输出结果，默认使用表格；进度条写入标准错误"
@@ -91,7 +91,7 @@ def main() -> None:
         json.dump(
             {
                 "schema_version": 1,
-                "project_dir": str(Path(args.project_dir).absolute()),
+                "project_dir": str(Path(args.project_dir).expanduser().absolute()),
                 "mode": args.mode,
                 "summary": {
                     "file_count": report.file_count,
